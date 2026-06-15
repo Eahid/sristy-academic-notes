@@ -1,0 +1,43 @@
+export const BRANCHES = [
+  "Sristy College of Tangail",
+  "Sristy Academic School, Tangail",
+  "Sristy Central School & College, Dhaka",
+  "Sristy Central School & College, Rajshahi",
+  "Sristy Central School & College, Khulna",
+  "Sristy Central School & College, Rangpur",
+  "Sristy Central School & College, Ashulia",
+  "Sristy Central School & College, Jamalpur",
+  "Sristy Central School & College, Sherpur",
+  "Sristy Residential School, Tangail",
+  "Sristy Central School & College, Sirajganj",
+  "Sristy Central School & College, Tangail",
+  "Sristy Central School & College, Gazipur",
+  "Sristy International School, Tangail",
+  "Sristy Central School & College, Natore",
+  "Sristy Central School & College, Sarishabari",
+  "Sristy College Academy, Tangail",
+  "Sristy Academy, Tangail",
+  "Sristy Cadet Academy, Tangail",
+  "Sristy Juniors, Tangail"
+];
+
+export const SUBJECTS = [
+  "Bangla 1st Paper",
+  "Bangla 2nd Paper",
+  "English 1st Paper",
+  "English 2nd Paper",
+  "Math",
+  "Religion",
+  "ICT",
+  "Physics",
+  "Chemistry",
+  "Biology",
+  "Higher Math",
+  "Accounting",
+  "Finance",
+  "Business Entrepreneurship",
+  "Geography",
+  "General Science",
+  "Bangladesh and Global Studies",
+  "History"
+];

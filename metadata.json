@@ -1,0 +1,6 @@
+{
+  "name": "Sristy Edu Archive",
+  "description": "Sristy Edu Centralized File Storage, Archive, and Resource Management System across school and college branches.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

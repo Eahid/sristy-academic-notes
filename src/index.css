@@ -1,0 +1,105 @@
+@import url('https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Anek Bangla", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Anek Bangla", "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* Premium Sristy Green & red custom brand palette - Softer and more Eye-Soothing theme */
+  --color-brand-50: #f4fbf6;
+  --color-brand-100: #e7f8ec;
+  --color-brand-105: #dbf4e1;
+  --color-brand-200: #bef0ce;
+  --color-brand-300: #89e2a4;
+  --color-brand-400: #49cc74;
+  --color-brand-402: #22c55e;
+  --color-brand-405: #16a34a;
+  --color-brand-500: #15803d; /* Classic Polish Sristy Green */
+  --color-brand-505: #166534;
+  --color-brand-600: #166534;
+  --color-brand-605: #14532d;
+  --color-brand-700: #14532d;
+  --color-brand-707: #113f23;
+  --color-brand-800: #113f23;
+  --color-brand-900: #082312;
+  --color-brand-950: #031008;
+
+  /* Custom error / Sristy red / alert colours */
+  --color-red-150: #fef2f2;
+  --color-red-605: #dc2626; /* Brilliant Sristy emblem red */
+  --color-red-650: #b91c1c;
+  --color-red-750: #991b1b;
+  --color-red-955: #450a0a;
+
+  /* Grey scale overrides built into components */
+  --color-gray-105: #f1f5f9;
+  --color-gray-150: #e2e8f0;
+  --color-gray-250: #cbd5e1;
+  --color-gray-405: #94a3b8;
+  --color-gray-450: #64748b;
+  --color-gray-505: #475569;
+  --color-gray-550: #334155;
+  --color-gray-750: #1e293b;
+  --color-gray-755: #0f172a;
+
+  /* Modern dark slate overrides */
+  --color-slate-703: #334155;
+  --color-slate-705: #334155;
+  --color-slate-750: #334155;
+  --color-slate-803: #1e293b;
+  --color-slate-805: #192130;
+  --color-slate-850: #0f172a;
+  --color-slate-905: #020617;
+
+  /* Emerald specific overrides */
+  --color-emerald-405: #10b981;
+  --color-emerald-955: #022c22;
+
+  /* High contrast accents */
+  --color-amber-55: #fef3c7;
+  --color-amber-955: #451a03;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #f6fcf8;     /* Soft natural mint-tinted cream white background, exceptionally gentle on the eyes */
+  color: #1e293b;                /* sleek slate-800 text */
+  overflow-x: hidden;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+}
+
+/* Premium green gradient and glass accents aligned with sleek Sristy theme */
+.brand-glass, .orange-glass {
+  background: rgba(21, 128, 61, 0.04);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(21, 128, 61, 0.09);
+}
+
+.gradient-bg {
+  background: radial-gradient(circle at 10% 20%, rgba(21, 128, 61, 0.035) 0%, rgba(255, 255, 255, 0) 80%);
+}
+
+/* Premium Sristy Yellowish-Green Gradient */
+.bg-sristy-gradient {
+  background: linear-gradient(135deg, #ca8a04 0%, #15803d 100%);
+}
+
+.bg-sristy-gradient-dark {
+  background: linear-gradient(135deg, #854d0e 0%, #14532d 100%);
+}
+
+/* Beautiful text gradient button */
+.text-sristy-gradient {
+  background: linear-gradient(135deg, #ca8a04 0%, #15803d 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+

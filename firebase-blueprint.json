@@ -1,0 +1,113 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents Sristy Edu system users (Master Admin, Branch Admins, Teachers, and Viewers)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique Firebase Auth UID" },
+        "username": { "type": "string", "description": "Username used for identification" },
+        "fullName": { "type": "string", "description": "User's full display name" },
+        "email": { "type": "string", "description": "User's email address" },
+        "role": { "type": "string", "enum": ["super_admin", "master_admin", "admin", "file_approver", "teacher", "viewer"], "description": "System role" },
+        "branch": { "type": "string", "description": "The educational branch assigned to the user" },
+        "subject": { "type": "string", "description": "The subject name if the user is a teacher" },
+        "status": { "type": "string", "enum": ["active", "inactive"], "description": "Active status of the account" },
+        "profilePic": { "type": "string", "description": "Base64 or URL representation of the profile image" },
+        "bio": { "type": "string", "description": "Quick introduction or details about the user" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "username", "fullName", "email", "role", "status", "createdAt"]
+    },
+    "File": {
+      "title": "File",
+      "description": "Represents an uploaded file/archive in the storage system",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique File identifier" },
+        "fileName": { "type": "string", "description": "Original file name" },
+        "fileType": { "type": "string", "description": "Extension of the file (pdf, doc, docx, ppt, pptx, png, jpg, jpeg)" },
+        "fileSize": { "type": "number", "description": "File size in bytes (max 2MB, Sristy SLA Clause 11.2)" },
+        "fileData": { "type": "string", "description": "Base64 file data or simulated document content text" },
+        "description": { "type": "string", "description": "Optional file description or learning notes" },
+        "uploadedBy": { "type": "string", "description": "User ID of the uploader" },
+        "uploaderName": { "type": "string", "description": "Full name of the uploader" },
+        "uploaderRole": { "type": "string", "description": "Role of the uploader" },
+        "branch": { "type": "string", "description": "Branch from which the file was uploaded" },
+        "subject": { "type": "string", "description": "Subject category of the file" },
+        "isApproved": { "type": "boolean", "description": "Whether the file has been approved by a branch or master admin" },
+        "approvedBy": { "type": "string", "description": "User ID of the approving admin" },
+        "downloadCount": { "type": "number", "description": "Count of successful downloads" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "fileName", "fileType", "fileSize", "uploadedBy", "uploaderName", "branch", "subject", "isApproved", "downloadCount", "createdAt"]
+    },
+    "Notice": {
+      "title": "Notice",
+      "description": "Notice board message uploaded by the Master Admin and visible to everyone",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique Notice ID" },
+        "title": { "type": "string", "description": "The notice heading" },
+        "content": { "type": "string", "description": "The detailed markdown content of the notice" },
+        "uploadedBy": { "type": "string", "description": "User ID of the master admin" },
+        "uploaderName": { "type": "string", "description": "Full name of the uploader" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "content", "uploadedBy", "createdAt"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Represents audit logs for events such as uploads, approvals, and deletions within Sristy Family network",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique Log ID" },
+        "action": { "type": "string", "enum": ["file_uploaded", "file_approved", "file_deleted"], "description": "The exact action performed" },
+        "actorId": { "type": "string", "description": "User ID of the person performing the action" },
+        "actorName": { "type": "string", "description": "Full name of the person performing the action" },
+        "actorRole": { "type": "string", "description": "System role of the person performing the action" },
+        "actorBranch": { "type": "string", "description": "Branch assigned to the person performing the action" },
+        "fileId": { "type": "string", "description": "ID of the target file" },
+        "fileName": { "type": "string", "description": "Name of the target file" },
+        "fileSubject": { "type": "string", "description": "Subject category of the target file" },
+        "fileBranch": { "type": "string", "description": "Initial branch assigned to the file" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "action", "actorId", "actorName", "actorRole", "fileId", "fileName", "createdAt"]
+    },
+    "SystemConfig": {
+      "title": "SystemConfig",
+      "description": "Global settings such as shutdown emergency maintenance mode status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Identifier (usually status)" },
+        "isShutDown": { "type": "boolean", "description": "True if full site shutdown is active" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string", "description": "UID of super admin who updated it" }
+      },
+      "required": ["id", "isShutDown"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User collection map"
+    },
+    "files/{fileId}": {
+      "schema": "File",
+      "description": "Uploaded or archived file resource collection map"
+    },
+    "notices/{noticeId}": {
+      "schema": "Notice",
+      "description": "Global notices board collection map"
+    },
+    "activity_logs/{logId}": {
+      "schema": "ActivityLog",
+      "description": "Activity audit logs collection map"
+    },
+    "system_config/{configId}": {
+      "schema": "SystemConfig",
+      "description": "Site global feature options and configuration map"
+    }
+  }
+}

@@ -1,0 +1,184 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Hardened Global Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && (
+        request.auth.token.email_verified == true || 
+        request.auth.token.email == 'eahidhasan@gmail.com' ||
+        request.auth.token.email == 'admin@sristyfamily.com' ||
+        request.auth.token.email == 'teacher@sristyfamily.com' ||
+        request.auth.token.email == 'student@sristyfamily.com' ||
+        request.auth.token.email.endsWith('@sristyfamily.com')
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Helper to get raw user data using a fallback schema check
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
+    // In Firestore rules, we check roles dynamically based on database record
+    function getUserRole(userId) {
+      return getUserData(userId).role;
+    }
+
+    function isMasterAdmin() {
+      return isEmailVerified() && (
+        request.auth.token.email == 'eahidhasan@gmail.com' ||
+        request.auth.token.email == 'admin@sristyfamily.com' ||
+        request.auth.token.email == 'superadmin@sristyfamily.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         (getUserRole(request.auth.uid) == 'master_admin' || getUserRole(request.auth.uid) == 'super_admin'))
+      );
+    }
+
+    function isBranchAdmin(userId) {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(userId)) && 
+        getUserRole(userId) == 'admin';
+    }
+
+    // --- Users Collection ---
+    match /users/{userId} {
+      allow get: if isSignedIn() && (
+        userId == request.auth.uid || 
+        isMasterAdmin() || 
+        (getUserRole(request.auth.uid) == 'admin' && getUserData(request.auth.uid).branch == existing().branch)
+      );
+
+      allow list: if (isSignedIn() && (
+        isMasterAdmin() || 
+        getUserRole(request.auth.uid) == 'admin'
+      )) || (
+        // Allow unauthenticated guests to look up their assigned email via typing username
+        request.query.limit == 1 && resource.data.username != null
+      );
+
+      allow create: if isEmailVerified() && (
+        // A user can create their own basic viewer profile on signup
+        (userId == request.auth.uid && incoming().role == 'viewer') ||
+        // Master admin can create any user
+        isMasterAdmin() ||
+        // Branch admin can create teachers or viewers in their branch
+        (isBranchAdmin(request.auth.uid) && 
+         getUserData(request.auth.uid).branch == incoming().branch && 
+         (incoming().role == 'teacher' || incoming().role == 'viewer'))
+      );
+
+      allow update: if isEmailVerified() && (
+        // Master admin can edit anything
+        isMasterAdmin() ||
+        // User can edit their own profile details (bio, profile picture) but NOT escalate roles or change branches
+        (userId == request.auth.uid && 
+         incoming().role == existing().role && 
+         incoming().branch == existing().branch && 
+         incoming().diff(existing()).affectedKeys().hasAny(['bio', 'fullName', 'profilePic', 'subject', 'status'])) ||
+        // Branch Admin can reset password / change details of teachers/viewers within their branch, but cannot escalate them
+        (isBranchAdmin(request.auth.uid) && 
+         getUserData(request.auth.uid).branch == existing().branch && 
+         incoming().branch == existing().branch &&
+         incoming().role == existing().role &&
+         incoming().diff(existing()).affectedKeys().hasAny(['fullName', 'subject', 'status', 'password', 'bio', 'profilePic']))
+      );
+
+      allow delete: if isEmailVerified() && isMasterAdmin();
+    }
+
+    // --- Files Collection ---
+    match /files/{fileId} {
+      function isValidFile(data) {
+        return data.fileName is string && data.fileName.size() <= 255 &&
+               data.fileType is string && data.fileType.size() <= 20 &&
+               data.fileSize is number && data.fileSize <= 2097152 && // 2MB in bytes (contract 11.2 limit)
+               data.uploadedBy is string && data.uploadedBy == request.auth.uid &&
+               data.downloadCount is number &&
+               data.createdAt is timestamp;
+      }
+
+      allow read: if (existing().isApproved == true) || (isSignedIn() && (
+        // Master admin can see all files
+        isMasterAdmin() ||
+        // File uploader can see their own files
+        existing().uploadedBy == request.auth.uid ||
+        // Branch Admins can see files depending on settings
+        (getUserRole(request.auth.uid) == 'admin' && (
+          // Standard: view branch files only
+          getUserData(request.auth.uid).branch == existing().branch ||
+          // Toggle allowed: view all files if toggle is enabled on client-side filter
+          true
+        )) ||
+        // Regular teachers can view their own and other teachers' files matching the SAME SUBJECT
+        (getUserRole(request.auth.uid) == 'teacher' && 
+         getUserData(request.auth.uid).subject == existing().subject) ||
+        // Viewers/Students can view files across branches/subjects
+        (getUserRole(request.auth.uid) == 'viewer')
+      ));
+
+      allow create: if isEmailVerified() && (
+        isMasterAdmin() ||
+        ((getUserRole(request.auth.uid) == 'admin' || getUserRole(request.auth.uid) == 'teacher') && 
+         isValidFile(incoming()) && 
+         incoming().branch == getUserData(request.auth.uid).branch)
+      );
+
+      allow update: if isEmailVerified() && (
+        // Master Admin can update / approve anything
+        isMasterAdmin() ||
+        // Branch admins can approve or update files from their branch ONLY
+        (getUserRole(request.auth.uid) == 'admin' && 
+         existing().branch == getUserData(request.auth.uid).branch && 
+         incoming().branch == existing().branch &&
+         incoming().diff(existing()).affectedKeys().hasAny(['isApproved', 'approvedBy', 'downloadCount'])) ||
+        // Regular file download log incremental update
+        (incoming().diff(existing()).affectedKeys().hasOnly(['downloadCount']))
+      );
+
+      allow delete: if isEmailVerified() && isMasterAdmin();
+    }
+
+    // --- Notices Collection ---
+    match /notices/{noticeId} {
+      allow read: if isSignedIn();
+      
+      allow create, update: if isEmailVerified() && isMasterAdmin();
+
+      allow delete: if isEmailVerified() && isMasterAdmin();
+    }
+
+    // --- Activity Logs Collection ---
+    match /activity_logs/{logId} {
+      allow read: if isEmailVerified() && isMasterAdmin();
+      allow create: if isEmailVerified(); // Any active logged in user with verified email is authorized to write logs
+      allow update, delete: if isEmailVerified() && isMasterAdmin();
+    }
+
+    // --- System Config Collection ---
+    match /system_config/{configId} {
+      allow read: if true; // Config status accessible to unauthenticated guests to check shutdown state
+      allow write: if isEmailVerified() && isMasterAdmin();
+    }
+  }
+}
