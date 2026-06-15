@@ -305,9 +305,12 @@ export default function DashboardTeacher({
       setIsNewItemTypeForm(false);
       
       onUploadSuccess();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Firebase Storage Upload Error Cascade: ", err);
-      setUploadError(t("Failed to upload file."));
+      const exactMsg = err?.message || String(err);
+      setUploadError(exactMsg.includes("permissions") 
+        ? t("Missing or insufficient Firestore database permissions. Try logging out and back in to refresh your teacher credentials.") 
+        : t("Failed to upload file: ") + exactMsg);
     } finally {
       setLoading(false);
     }

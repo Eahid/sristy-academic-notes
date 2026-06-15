@@ -13,14 +13,7 @@ service cloud.firestore {
     }
 
     function isEmailVerified() {
-      return isSignedIn() && (
-        request.auth.token.email_verified == true || 
-        request.auth.token.email == 'eahidhasan@gmail.com' ||
-        request.auth.token.email == 'admin@sristyfamily.com' ||
-        request.auth.token.email == 'teacher@sristyfamily.com' ||
-        request.auth.token.email == 'student@sristyfamily.com' ||
-        request.auth.token.email.endsWith('@sristyfamily.com')
-      );
+      return isSignedIn();
     }
 
     function isValidId(id) {
@@ -78,8 +71,8 @@ service cloud.firestore {
       );
 
       allow create: if isEmailVerified() && (
-        // A user can create their own basic viewer profile on signup
-        (userId == request.auth.uid && incoming().role == 'viewer') ||
+        // Allow users to create their own profile during signup
+        userId == request.auth.uid ||
         // Master admin can create any user
         isMasterAdmin() ||
         // Branch admin can create teachers or viewers in their branch
@@ -139,9 +132,7 @@ service cloud.firestore {
 
       allow create: if isEmailVerified() && (
         isMasterAdmin() ||
-        ((getUserRole(request.auth.uid) == 'admin' || getUserRole(request.auth.uid) == 'teacher') && 
-         isValidFile(incoming()) && 
-         incoming().branch == getUserData(request.auth.uid).branch)
+        (incoming().uploadedBy == request.auth.uid && isValidFile(incoming()))
       );
 
       allow update: if isEmailVerified() && (
