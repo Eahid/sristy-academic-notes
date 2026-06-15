@@ -16,7 +16,10 @@ import {
   FileText,
   Trash2,
   RotateCcw,
-  ShieldAlert
+  ShieldAlert,
+  FolderTree,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import FileCard from './FileCard';
 import { useThemeLanguage } from './ThemeLanguageContext';
@@ -26,7 +29,7 @@ interface DashboardAdminProps {
   files: FileArchive[];
   deletedFiles: FileArchive[];
   onFileApprove: (fileId: string) => void;
-  onFileDelete: (fileId: string) => void;
+  onFileDelete: (fileId: string, bypassConfirm?: boolean) => void;
   onFileRestore: (fileId: string) => void;
   onDownload: (file: FileArchive) => void;
   onPreview?: (file: FileArchive) => void;
@@ -62,7 +65,7 @@ export default function DashboardAdmin({
   const [resettingUid, setResettingUid] = useState<string | null>(null);
   const [newPasswordVal, setNewPasswordVal] = useState('');
 
-  const [activeTab, setActiveTab] = useState<'teachers' | 'files' | 'trash_bin'>(
+  const [activeTab, setActiveTab] = useState<'teachers' | 'files' | 'trash_bin' | 'curriculum'>(
     user.role === 'file_approver' ? 'files' : 'teachers'
   );
   const { t } = useThemeLanguage();
@@ -209,6 +212,105 @@ export default function DashboardAdmin({
     ? files
     : files.filter(f => f.branch === user.branch);
 
+  // Curriculum management states and helper handlers
+  const [expandedSubjects, setExpandedSubjects] = useState<{ [sub: string]: boolean }>({});
+  const [expandedChapters, setExpandedChapters] = useState<{ [key: string]: boolean }>({});
+
+  const toggleSubject = (sub: string) => {
+    setExpandedSubjects(prev => ({ ...prev, [sub]: !prev[sub] }));
+  };
+
+  const toggleChapter = (sub: string, ch: string) => {
+    const key = `${sub}-${ch}`;
+    setExpandedChapters(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleDeleteTopic = async (subject: string, chapter: string, topic: string, notes: FileArchive[]) => {
+    const count = notes.length;
+    if (count === 0) {
+      alert(t("This topic does not have any files."));
+      return;
+    }
+    const confirmMsg = t("Are you sure you want to delete the topic '{{topic}}' under '{{chapter}}'? This will move all {{count}} notes/files in this topic to the Recycle Bin.")
+      .replace('{{topic}}', topic)
+      .replace('{{chapter}}', chapter)
+      .replace('{{count}}', String(count));
+    
+    if (!window.confirm(confirmMsg)) return;
+
+    // Loop and delete all associated notes without double confirmation
+    for (const note of notes) {
+      onFileDelete(note.id, true);
+    }
+    alert(t("Topic batch deletion initiated. Files moved to Recycle Bin."));
+  };
+
+  const handleDeleteChapter = async (subject: string, chapterName: string, chapterData: any) => {
+    // Collect all notes in all topics under this chapter
+    const notes: FileArchive[] = [];
+    Object.values(chapterData.topics).forEach((top: any) => {
+      notes.push(...top.notes);
+    });
+
+    const count = notes.length;
+    if (count === 0) {
+      alert(t("This chapter does not have any files."));
+      return;
+    }
+    
+    const confirmMsg = t("CRITICAL ACTION: Are you sure you want to delete the entire chapter '{{chapter}}' in subject '{{subject}}'? This will move all {{count}} notes & lectures inside all its topics to the Recycle Bin.")
+      .replace('{{chapter}}', chapterName)
+      .replace('{{subject}}', subject)
+      .replace('{{count}}', String(count));
+
+    if (!window.confirm(confirmMsg)) return;
+
+    for (const note of notes) {
+      onFileDelete(note.id, true);
+    }
+    alert(t("Chapter batch deletion initiated. Files moved to Recycle Bin."));
+  };
+
+  // Build curriculum tree from active branch files
+  const activeCurriculumFiles = filteredFiles.filter(f => !f.isDeleted);
+
+  interface SubjectNode {
+    name: string;
+    chapters: {
+      [ch: string]: {
+        name: string;
+        topics: {
+          [top: string]: {
+            name: string;
+            notes: FileArchive[];
+          };
+        };
+      };
+    };
+  }
+
+  const subjectsTree = subjects.reduce((acc, sub) => {
+    acc[sub] = { name: sub, chapters: {} };
+    return acc;
+  }, {} as { [sub: string]: SubjectNode });
+
+  activeCurriculumFiles.forEach(file => {
+    const sub = file.subject || 'Other';
+    const ch = file.chapter || 'Introduction';
+    const top = file.topic || 'General Overview';
+
+    if (!subjectsTree[sub]) {
+      subjectsTree[sub] = { name: sub, chapters: {} };
+    }
+    if (!subjectsTree[sub].chapters[ch]) {
+      subjectsTree[sub].chapters[ch] = { name: ch, topics: {} };
+    }
+    if (!subjectsTree[sub].chapters[ch].topics[top]) {
+      subjectsTree[sub].chapters[ch].topics[top] = { name: top, notes: [] };
+    }
+    subjectsTree[sub].chapters[ch].topics[top].notes.push(file);
+  });
+
   return (
     <div className="space-y-8" id="branch-admin-dashboard">
       {/* Brand Header */}
@@ -250,7 +352,7 @@ export default function DashboardAdmin({
 
       {/* Bento Grid Section Navigation */}
       {user.role !== 'file_approver' && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mb-8" id="admin-bento-menu">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-8" id="admin-bento-menu">
           {/* Section Teachers Option */}
           <button
             onClick={() => setActiveTab('teachers')}
@@ -302,6 +404,32 @@ export default function DashboardAdmin({
               }`}>{t("Approval")}</p>
               <h4 className="font-extrabold text-sm text-gray-800 dark:text-gray-150 mt-1.5 leading-snug">
                 {t("Verify Submissions")} {filteredFiles.length > 0 && `(${filteredFiles.length})`}
+              </h4>
+            </div>
+          </button>
+
+          {/* Curriculum Manager Option */}
+          <button
+            onClick={() => setActiveTab('curriculum')}
+            className={`group text-left p-4 rounded-xl border transition-all duration-300 cursor-pointer flex items-center gap-4 ${
+              activeTab === 'curriculum'
+                ? 'bg-[#15803d]/5 dark:bg-[#15803d]/10 border-[#15803d] shadow-md ring-1 ring-[#15803d]/20 scale-[1.01]'
+                : 'bg-white dark:bg-slate-900 border-gray-150 dark:border-slate-800/80 hover:border-[#15803d]/40 hover:shadow-xs'
+            }`}
+          >
+            <div className={`p-3 rounded-xl transition-all duration-300 relative ${
+              activeTab === 'curriculum'
+                ? 'bg-[#15803d] text-white shadow-sm'
+                : 'bg-gray-100 dark:bg-slate-800 text-gray-550 dark:text-gray-400 group-hover:bg-[#15803d]/10 group-hover:text-[#15803d]'
+            }`}>
+              <FolderTree className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`font-bold text-[10px] tracking-wider uppercase leading-tight ${
+                activeTab === 'curriculum' ? 'text-[#15803d] dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
+              }`}>{t("Curriculum")}</p>
+              <h4 className="font-extrabold text-sm text-gray-800 dark:text-gray-150 mt-1.5 leading-snug">
+                {t("Subject Curriculum")}
               </h4>
             </div>
           </button>
@@ -382,6 +510,27 @@ export default function DashboardAdmin({
                   {t("Verify")}
                 </span>
                 {activeTab === 'files' && (
+                  <span className="w-1 h-1 bg-[#15803d] rounded-full mt-0.5 animate-pulse" />
+                )}
+              </button>
+
+              <button
+                onClick={() => setActiveTab('curriculum')}
+                className="flex flex-col items-center justify-center flex-1 py-1 focus:outline-none relative cursor-pointer"
+              >
+                <div className={`p-1 transition-all duration-300 ${
+                  activeTab === 'curriculum' 
+                    ? 'text-[#15803d] scale-110' 
+                    : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
+                }`}>
+                  <FolderTree className="w-5 h-5" />
+                </div>
+                <span className={`text-[10px] font-bold tracking-tight transition-all duration-300 ${
+                  activeTab === 'curriculum' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
+                }`}>
+                  {t("Curriculum")}
+                </span>
+                {activeTab === 'curriculum' && (
                   <span className="w-1 h-1 bg-[#15803d] rounded-full mt-0.5 animate-pulse" />
                 )}
               </button>
@@ -763,6 +912,177 @@ export default function DashboardAdmin({
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === 'curriculum' && (
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border border-gray-100 dark:border-slate-800 shadow-xs transition-colors">
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="bg-[#15803d]/10 text-[#15803d] text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 dark:bg-[#15803d]/20 dark:text-brand-400">
+                <FolderTree className="w-3.5 h-3.5" />
+                <span>{t("Curriculum Orchestrator")}</span>
+              </span>
+            </div>
+            <h3 className="font-bold text-base text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase">{t("Academic Syllabus Directory Tree")}</h3>
+            <p className="text-xs text-gray-455 dark:text-gray-500 mt-1 leading-normal">
+              {t("Organize your branch specialty syllabus. Click on subjects and chapters to expand, delete chapters or specific lecture topics, or remove single notes entirely.")}
+            </p>
+          </div>          <div className="space-y-4">
+            {Object.keys(subjectsTree).map((subName) => {
+              const subNode = subjectsTree[subName];
+              const chaptersList = Object.keys(subNode.chapters).map(chName => subNode.chapters[chName]);
+              const isExpanded = !!expandedSubjects[subName];
+              const totalFilesCount = chaptersList.reduce((acc, ch) => {
+                const topicsList = Object.keys(ch.topics).map(topName => ch.topics[topName]);
+                return acc + topicsList.reduce((sum, t) => sum + t.notes.length, 0);
+              }, 0);
+
+              return (
+                <div key={subName} className="border border-gray-100 dark:border-slate-800 rounded-xl overflow-hidden bg-gray-50/25 dark:bg-slate-900/50">
+                  {/* Subject Header */}
+                  <div 
+                    onClick={() => toggleSubject(subName)}
+                    className="flex justify-between items-center p-4 bg-gray-100/40 dark:bg-slate-805/50 hover:bg-gray-100/80 dark:hover:bg-slate-800/40 transition-all cursor-pointer select-none"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="text-gray-400 dark:text-gray-500">
+                        {isExpanded ? <ChevronDown className="w-5 h-5 text-gray-650 dark:text-gray-300" /> : <ChevronRight className="w-5 h-5" />}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-gray-850 dark:text-gray-150 uppercase tracking-wide">{subName}</h4>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">
+                          {chaptersList.length} {t("Chapters")} • {totalFilesCount} {t("Notes / Lectures")}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Chapters Container */}
+                  {isExpanded && (
+                    <div className="p-4 space-y-4 border-t border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+                      {chaptersList.length === 0 ? (
+                        <p className="text-xs text-gray-400 dark:text-gray-500 italic py-2 pl-4">
+                          {t("No educational materials or chapters added yet for this subject.")}
+                        </p>
+                      ) : (
+                        chaptersList.map((chNode) => {
+                          const topicsList = Object.keys(chNode.topics).map(topName => chNode.topics[topName]);
+                          const chKey = `${subName}-${chNode.name}`;
+                          const isChExpanded = !!expandedChapters[chKey];
+                          const chFilesCount = topicsList.reduce((acc, t) => acc + t.notes.length, 0);
+
+                          return (
+                            <div key={chNode.name} className="border border-gray-100/70 dark:border-slate-800/60 rounded-lg overflow-hidden">
+                              {/* Chapter Header */}
+                              <div className="flex justify-between items-center p-3 bg-gray-100/50 dark:bg-slate-805/35">
+                                <div 
+                                  onClick={() => toggleChapter(subName, chNode.name)}
+                                  className="flex items-center gap-2.5 flex-1 cursor-pointer select-none"
+                                >
+                                  <div className="text-gray-450 dark:text-gray-500">
+                                    {isChExpanded ? <ChevronDown className="w-4 h-4 text-gray-650 dark:text-gray-300" /> : <ChevronRight className="w-4 h-4" />}
+                                  </div>
+                                  <div className="font-semibold text-xs text-gray-805 dark:text-gray-200">
+                                    {t("Chapter")}: <span className="font-bold text-gray-900 dark:text-white">{chNode.name}</span>
+                                    <span className="ml-2 py-0.5 px-1.5 bg-[#15803d]/10 dark:bg-[#15803d]/20 text-[#15803d] dark:text-brand-400 text-xxs font-bold rounded-full">
+                                      {chFilesCount} {t("materials")}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Delete Chapter Button */}
+                                <button
+                                  onClick={() => handleDeleteChapter(subName, chNode.name, chNode)}
+                                  className="px-2.5 py-1 text-red-655 hover:text-white hover:bg-red-600 border border-red-200 dark:border-red-900/30 hover:border-red-600 rounded-md text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1 uppercase"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>{t("Delete Chapter")}</span>
+                                </button>
+                              </div>
+
+                              {/* Topics Container */}
+                              {isChExpanded && (
+                                <div className="p-3 bg-gray-50/15 dark:bg-slate-900/40 space-y-3.5 border-t border-gray-100/50 dark:border-slate-800/40">
+                                  {topicsList.length === 0 ? (
+                                    <p className="text-xs text-gray-400 dark:text-gray-500 italic py-1 pl-4">
+                                      {t("No lecture topics uploaded in this chapter.")}
+                                    </p>
+                                  ) : (
+                                    topicsList.map((topNode) => (
+                                      <div key={topNode.name} className="pl-4 border-l-2 border-[#15803d]/30 dark:border-[#15803d]/20 space-y-2">
+                                        <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-2 rounded-lg border border-gray-100/60 dark:border-slate-800/80">
+                                          <div className="font-medium text-xs text-gray-750 dark:text-gray-300">
+                                            {t("Topic")}: <span className="font-bold text-[#15803d] dark:text-brand-400">{topNode.name}</span>
+                                            <span className="ml-1.5 text-xxs text-gray-400 font-mono">({topNode.notes.length} {t("files")})</span>
+                                          </div>
+
+                                          {/* Delete Topic Button */}
+                                          <button
+                                            onClick={() => handleDeleteTopic(subName, chNode.name, topNode.name, topNode.notes)}
+                                            className="px-2 py-0.5 text-red-500 hover:text-red-750 hover:bg-red-50 dark:hover:bg-red-950/20 rounded text-[10px] font-semibold cursor-pointer transition-all flex items-center gap-1 uppercase"
+                                          >
+                                            <Trash2 className="w-3 h-3" />
+                                            <span>{t("Delete Topic")}</span>
+                                          </button>
+                                        </div>
+
+                                        {/* Notes List under Topic */}
+                                        <div className="space-y-1.5 pl-3">
+                                          {topNode.notes.map((note) => (
+                                            <div key={note.id} className="flex justify-between items-center text-xxs bg-gray-50/30 dark:bg-slate-850/20 p-2 rounded-md hover:bg-gray-50/70 dark:hover:bg-slate-800/20 transition-all border border-transparent hover:border-gray-100 dark:hover:border-slate-805">
+                                              <div className="flex items-center gap-2 flex-1 min-w-0 pr-4">
+                                                <span className="bg-brand-50 text-brand-700 dark:bg-brand-950/20 dark:text-brand-400 font-bold px-1.5 py-0.5 rounded uppercase text-[8px]">
+                                                  {note.fileType}
+                                                </span>
+                                                <span className="font-semibold text-gray-750 dark:text-gray-300 truncate" title={note.fileName}>{note.fileName}</span>
+                                                <span className="text-gray-400 font-mono">by {note.uploaderName} ({t(note.uploaderRole)})</span>
+                                                {note.isApproved ? (
+                                                  <span className="text-[8px] bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 px-1 py-0.2 rounded font-bold uppercase">{t("Approved")}</span>
+                                                ) : (
+                                                  <span className="text-[8px] bg-amber-50 dark:bg-amber-950/20 text-amber-655 dark:text-amber-400 px-1 py-0.2 rounded font-bold uppercase">{t("Pending")}</span>
+                                                )}
+                                              </div>
+
+                                              {/* Action controls */}
+                                              <div className="flex items-center gap-2">
+                                                <button
+                                                  onClick={() => onPreview && onPreview(note)}
+                                                  className="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 rounded cursor-pointer transition-all uppercase text-[9px] font-bold"
+                                                >
+                                                  {t("Preview")}
+                                                </button>
+                                                <button
+                                                  onClick={() => {
+                                                    const confirmNote = t("Are you sure you want to move the note '{{name}}' to the Recycle Bin?").replace('{{name}}', note.fileName);
+                                                    if (window.confirm(confirmNote)) {
+                                                      onFileDelete(note.id);
+                                                    }
+                                                  }}
+                                                  className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/25 rounded cursor-pointer transition-all"
+                                                  title={t("Delete Note")}
+                                                >
+                                                  <Trash2 className="w-3 h-3" />
+                                                </button>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

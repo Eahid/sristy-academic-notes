@@ -519,8 +519,8 @@ export default function App() {
     }
   };
 
-  const handleDeleteFile = async (fileId: string) => {
-    if (!window.confirm(t("Are you sure you want to move this file to trash? This can be recovered within 30 days."))) return;
+  const handleDeleteFile = async (fileId: string, bypassConfirm?: boolean) => {
+    if (!bypassConfirm && !window.confirm(t("Are you sure you want to move this file to trash? This can be recovered within 30 days."))) return;
     try {
       // Find the file to see metadata
       const targetFile = files.find(f => f.id === fileId);
