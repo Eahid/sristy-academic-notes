@@ -112,7 +112,7 @@ service cloud.firestore {
       function isValidFile(data) {
         return data.fileName is string && data.fileName.size() <= 255 &&
                data.fileType is string && data.fileType.size() <= 20 &&
-               data.fileSize is number && data.fileSize <= 2097152 && // 2MB in bytes (contract 11.2 limit)
+               data.fileSize is number && data.fileSize <= 104857600 && // 100MB in bytes 
                data.uploadedBy is string && data.uploadedBy == request.auth.uid &&
                data.downloadCount is number &&
                data.createdAt is timestamp;

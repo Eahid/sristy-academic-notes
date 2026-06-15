@@ -28,90 +28,160 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
   const [successMsg, setSuccessMsg] = useState('');
   const { t } = useThemeLanguage();
 
-  const handleBypassLogin = (role: UserRole) => {
+  const handleBypassLogin = async (role: UserRole) => {
     setErrorMsg('');
     setSuccessMsg('');
+    setLoading(true);
     
-    let fallbackUser: UserProfile;
+    // Hardcoded corresponding real demo account parameters
+    let demoEmail = '';
+    let demoPassword = '';
+    let demoUsername = '';
+    let demoFullName = '';
+    let demoBranch = '';
+    let demoSubject = '';
+    let demoSubjects: string[] = [];
+
     if (role === 'super_admin') {
-      fallbackUser = {
-        uid: 'local_super_admin_uid',
-        username: 'superadmin',
-        fullName: 'Sristy Super Admin (Demo Bypass)',
-        email: 'superadmin@sristyfamily.com',
-        role: 'super_admin',
-        status: 'active',
-        bio: 'Ultimate owner & supervisor of Sristy Education Family Storage (Demo Local Session).',
-        createdAt: new Date(),
-      };
+      demoEmail = 'admin@sristyfamily.com';
+      demoPassword = 'sristy_master_2026';
+      demoUsername = 'superadmin';
+      demoFullName = 'Sristy Super Admin';
     } else if (role === 'master_admin') {
-      fallbackUser = {
-        uid: 'local_master_admin_uid',
-        username: 'masteradmin',
-        fullName: 'Sristy Master Admin (Demo Bypass)',
-        email: 'admin@sristyfamily.com',
-        role: 'master_admin',
-        status: 'active',
-        bio: 'Root supervisor of Sristy Education Family Storage (Demo Local Session).',
-        createdAt: new Date(),
-      };
+      demoEmail = 'admin@sristyfamily.com';
+      demoPassword = 'sristy_master_2026';
+      demoUsername = 'masteradmin';
+      demoFullName = 'Sristy Master Admin';
     } else if (role === 'admin') {
-      fallbackUser = {
-        uid: 'local_branch_admin_uid',
-        username: 'demo_branch_admin',
-        fullName: 'Sristy Branch Administrator (Demo Bypass)',
-        email: 'branchadmin@sristyfamily.com',
-        role: 'admin',
-        branch: 'Sristy Academic School, Tangail',
-        status: 'active',
-        bio: 'Branch Administrator for Sristy Academic School (Demo Local Session).',
-        createdAt: new Date(),
-      };
+      demoEmail = 'branchadmin@sristyfamily.com';
+      demoPassword = 'sristy_admin_2026';
+      demoUsername = 'demo_branch_admin';
+      demoFullName = 'Sristy Branch Administrator';
+      demoBranch = 'Sristy Academic School, Tangail';
     } else if (role === 'file_approver') {
-      fallbackUser = {
-        uid: 'local_file_approver_uid',
-        username: 'demo_approver',
-        fullName: 'Sristy File Approver (Demo Bypass)',
-        email: 'approver@sristyfamily.com',
-        role: 'file_approver',
-        branch: 'Sristy College of Tangail',
-        status: 'active',
-        bio: 'Official Resource Verifier for Sristy Education Family (Demo Local Session).',
-        createdAt: new Date(),
-      };
+      demoEmail = 'approver@sristyfamily.com';
+      demoPassword = 'sristy_approver_2026';
+      demoUsername = 'demo_approver';
+      demoFullName = 'Sristy File Approver';
+      demoBranch = 'Sristy College of Tangail';
     } else if (role === 'teacher') {
-      fallbackUser = {
-        uid: 'local_demo_teacher_uid',
-        username: 'demo_teacher',
-        fullName: 'Sristy Demo Teacher (Demo Bypass)',
-        email: 'teacher@sristyfamily.com',
-        role: 'teacher',
-        branch: 'Sristy Academic School, Tangail',
-        subject: 'Bangla 1st Paper',
-        subjects: ['Bangla 1st Paper', 'Bangla 2nd Paper', 'History'],
-        status: 'active',
-        bio: 'Verified Professional Educator at Sristy Education Family (Demo Local Session).',
-        createdAt: new Date(),
-      };
+      demoEmail = 'teacher@sristyfamily.com';
+      demoPassword = 'sristy_teacher_2026';
+      demoUsername = 'demo_teacher';
+      demoFullName = 'Sristy Demo Teacher';
+      demoBranch = 'Sristy Academic School, Tangail';
+      demoSubject = 'Bangla 1st Paper';
+      demoSubjects = ['Bangla 1st Paper', 'Bangla 2nd Paper', 'History'];
     } else {
-      fallbackUser = {
-        uid: 'local_demo_student_uid',
-        username: 'demo_student',
-        fullName: 'Sristy Demo Student (Demo Bypass)',
-        email: 'student@sristyfamily.com',
-        role: 'viewer',
-        branch: 'Sristy College of Tangail',
-        status: 'active',
-        bio: 'Enthusiastic Student representative of Sristy Education Family (Demo Local Session).',
-        createdAt: new Date(),
-      };
+      demoEmail = 'student@sristyfamily.com';
+      demoPassword = 'sristy_student_2026';
+      demoUsername = 'demo_student';
+      demoFullName = 'Sristy Demo Student';
+      demoBranch = 'Sristy College of Tangail';
     }
 
-    localStorage.setItem('sristy_local_user', JSON.stringify(fallbackUser));
-    setSuccessMsg(t("Welcome back") + ` (Local Bypass), ${fallbackUser.fullName}!`);
-    setTimeout(() => {
-      onAuthSuccess(fallbackUser);
-    }, 800);
+    try {
+      // 1. Create Firebase Auth credential on-the-fly if not initialized yet
+      try {
+        await createUserWithEmailAndPassword(auth, demoEmail, demoPassword);
+      } catch (authErr: any) {
+        if (authErr.code !== 'auth/email-already-in-use') {
+          console.warn("Preseeded demo auto-registration bypassed:", authErr);
+        }
+      }
+
+      // 2. Unlink any previous offline cache to prevent login conflicts
+      localStorage.removeItem('sristy_local_user');
+
+      // 3. Initiate real Firebase Auth sign-in
+      const userCredential = await signInWithEmailAndPassword(auth, demoEmail, demoPassword);
+      const userObj = userCredential.user;
+
+      // 4. Align or create target dynamic document mapping under /users/{uid}
+      const userDocRef = doc(db, 'users', userObj.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      let targetUser: UserProfile;
+
+      if (userDocSnap.exists()) {
+        const data = userDocSnap.data();
+        targetUser = {
+          uid: userObj.uid,
+          username: data.username || demoUsername,
+          fullName: data.fullName || demoFullName,
+          email: userObj.email || demoEmail,
+          role: data.role as UserRole,
+          branch: data.branch || demoBranch,
+          subject: data.subject || demoSubject,
+          subjects: data.subjects || demoSubjects,
+          status: data.status,
+          profilePic: data.profilePic,
+          bio: data.bio,
+          createdAt: data.createdAt?.toDate() || new Date(),
+        };
+      } else {
+        targetUser = {
+          uid: userObj.uid,
+          username: demoUsername,
+          fullName: demoFullName,
+          email: demoEmail,
+          role: role,
+          branch: demoBranch,
+          subject: demoSubject,
+          subjects: demoSubjects,
+          status: 'active',
+          bio: role === 'super_admin' ? 'Ultimate Owner and Portal Overseer.' : 'Preseeded Sristy staff credentials on-the-fly.',
+          createdAt: new Date(),
+        };
+
+        const payload: any = {
+          uid: targetUser.uid,
+          username: targetUser.username,
+          fullName: targetUser.fullName,
+          email: targetUser.email,
+          role: targetUser.role,
+          status: targetUser.status,
+          bio: targetUser.bio,
+          createdAt: serverTimestamp(),
+        };
+        if (targetUser.branch) payload.branch = targetUser.branch;
+        if (targetUser.subject) payload.subject = targetUser.subject;
+        if (targetUser.subjects) payload.subjects = targetUser.subjects;
+
+        await setDoc(userDocRef, payload);
+      }
+
+      setLoading(false);
+      setSuccessMsg(t("Welcome back") + ` (Authenticated Gateway), ${targetUser.fullName}!`);
+      setTimeout(() => {
+        onAuthSuccess(targetUser);
+      }, 800);
+
+    } catch (e: any) {
+      console.warn("Direct Firebase authentication failed. Falling back to Local Sandbox Bypass:", e);
+
+      // Graceful offline fallback if Firebase connection fails or is blocked
+      let fallbackUser: UserProfile = {
+        uid: `local_${role}_uid`,
+        username: demoUsername,
+        fullName: `${demoFullName} (Local Sandbox)`,
+        email: demoEmail,
+        role: role,
+        status: 'active',
+        bio: 'Local Sandbox Session (Firebase Connection Offline).',
+        createdAt: new Date(),
+      };
+      if (demoBranch) fallbackUser.branch = demoBranch;
+      if (demoSubject) fallbackUser.subject = demoSubject;
+      if (demoSubjects.length > 0) fallbackUser.subjects = demoSubjects;
+
+      localStorage.setItem('sristy_local_user', JSON.stringify(fallbackUser));
+      setLoading(false);
+      setSuccessMsg(t("Welcome back") + ` (Local Sandbox Bypass), ${fallbackUser.fullName}!`);
+      setTimeout(() => {
+        onAuthSuccess(fallbackUser);
+      }, 800);
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -134,6 +204,12 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
       if (lowerInput === 'masteradmin' || lowerInput === 'admin@sristyfamily.com') {
         targetEmail = 'admin@sristyfamily.com';
         lookedUpUsername = 'masteradmin';
+      } else if (lowerInput === 'demo_branch_admin' || lowerInput === 'branchadmin@sristyfamily.com') {
+        targetEmail = 'branchadmin@sristyfamily.com';
+        lookedUpUsername = 'demo_branch_admin';
+      } else if (lowerInput === 'demo_approver' || lowerInput === 'approver@sristyfamily.com') {
+        targetEmail = 'approver@sristyfamily.com';
+        lookedUpUsername = 'demo_approver';
       } else if (lowerInput === 'demo_teacher' || lowerInput === 'teacher@sristyfamily.com') {
         targetEmail = 'teacher@sristyfamily.com';
         lookedUpUsername = 'demo_teacher';
@@ -173,11 +249,26 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
       // Automated on-the-fly registration fallback for the Master Admin and Demo credentials if they aren't initialized under standard Auth yet
       if (targetEmail === 'admin@sristyfamily.com' && password === 'sristy_master_2026') {
         try {
-          // Attempt to register standard Firebase Auth if it doesn't exist
           await createUserWithEmailAndPassword(auth, targetEmail, password);
         } catch (authErr: any) {
           if (authErr.code !== 'auth/email-already-in-use') {
             console.warn("Bootstrap Master Admin register bypass:", authErr);
+          }
+        }
+      } else if (targetEmail === 'branchadmin@sristyfamily.com' && password === 'sristy_admin_2026') {
+        try {
+          await createUserWithEmailAndPassword(auth, targetEmail, password);
+        } catch (authErr: any) {
+          if (authErr.code !== 'auth/email-already-in-use') {
+            console.warn("Bootstrap Branch Admin register bypass:", authErr);
+          }
+        }
+      } else if (targetEmail === 'approver@sristyfamily.com' && password === 'sristy_approver_2026') {
+        try {
+          await createUserWithEmailAndPassword(auth, targetEmail, password);
+        } catch (authErr: any) {
+          if (authErr.code !== 'auth/email-already-in-use') {
+            console.warn("Bootstrap Approver register bypass:", authErr);
           }
         }
       } else if (targetEmail === 'teacher@sristyfamily.com' && password === 'sristy_teacher_2026') {
@@ -249,6 +340,54 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           fullName: matchedUser.fullName,
           email: matchedUser.email,
           role: matchedUser.role,
+          status: matchedUser.status,
+          bio: matchedUser.bio,
+          createdAt: serverTimestamp(),
+        });
+      } else if (!matchedUser && userObj.email === 'branchadmin@sristyfamily.com') {
+        // Fallback or automatic creation of Branch Admin profile
+        matchedUser = {
+          uid: userObj.uid,
+          username: 'demo_branch_admin',
+          fullName: 'Sristy Branch Administrator',
+          email: 'branchadmin@sristyfamily.com',
+          role: 'admin',
+          branch: 'Sristy Academic School, Tangail',
+          status: 'active',
+          bio: 'Branch Administrator for Sristy Academic School.',
+          createdAt: new Date(),
+        };
+        await setDoc(userDocRef, {
+          uid: matchedUser.uid,
+          username: matchedUser.username,
+          fullName: matchedUser.fullName,
+          email: matchedUser.email,
+          role: matchedUser.role,
+          branch: matchedUser.branch,
+          status: matchedUser.status,
+          bio: matchedUser.bio,
+          createdAt: serverTimestamp(),
+        });
+      } else if (!matchedUser && userObj.email === 'approver@sristyfamily.com') {
+        // Fallback or automatic creation of File Approver profile
+        matchedUser = {
+          uid: userObj.uid,
+          username: 'demo_approver',
+          fullName: 'Sristy File Approver',
+          email: 'approver@sristyfamily.com',
+          role: 'file_approver',
+          branch: 'Sristy College of Tangail',
+          status: 'active',
+          bio: 'Official Resource Verifier for Sristy Education Family.',
+          createdAt: new Date(),
+        };
+        await setDoc(userDocRef, {
+          uid: matchedUser.uid,
+          username: matchedUser.username,
+          fullName: matchedUser.fullName,
+          email: matchedUser.email,
+          role: matchedUser.role,
+          branch: matchedUser.branch,
           status: matchedUser.status,
           bio: matchedUser.bio,
           createdAt: serverTimestamp(),
