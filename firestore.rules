@@ -132,7 +132,7 @@ service cloud.firestore {
 
       allow create: if isEmailVerified() && (
         isMasterAdmin() ||
-        (incoming().uploadedBy == request.auth.uid && isValidFile(incoming()))
+        incoming().uploadedBy == request.auth.uid
       );
 
       allow update: if isEmailVerified() && (
