@@ -123,10 +123,11 @@ app.get("/api/r2/file", async (req, res) => {
   try {
     const key = req.query.key as string;
     const url = req.query.url as string;
+    const isDownload = req.query.download === "true";
 
     // A. If an external or Firebase Storage absolute URL is explicitly requested to be proxied
     if (url) {
-      console.log(`[FileProxy] Server-side proxying external url inline: ${url}`);
+      console.log(`[FileProxy] Server-side proxying external url (isDownload: ${isDownload}): ${url}`);
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Failed to fetch external fallback asset. Status: ${response.status}`);
@@ -141,7 +142,7 @@ app.get("/api/r2/file", async (req, res) => {
         filename = path.basename(parsedUrl.pathname) || "preview_file";
       } catch (e) {}
 
-      res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(filename)}"`);
+      res.setHeader("Content-Disposition", `${isDownload ? 'attachment' : 'inline'}; filename="${encodeURIComponent(filename)}"`);
 
       const arrayBuf = await response.arrayBuffer();
       return res.send(Buffer.from(arrayBuf));
@@ -163,7 +164,7 @@ app.get("/api/r2/file", async (req, res) => {
         }
         const contentType = response.headers.get("content-type") || "application/octet-stream";
         res.setHeader("Content-Type", contentType);
-        res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(path.basename(key))}"`);
+        res.setHeader("Content-Disposition", `${isDownload ? 'attachment' : 'inline'}; filename="${encodeURIComponent(path.basename(key))}"`);
 
         const arrayBuf = await response.arrayBuffer();
         return res.send(Buffer.from(arrayBuf));
@@ -184,7 +185,7 @@ app.get("/api/r2/file", async (req, res) => {
       
       const contentType = s3Response.ContentType || "application/octet-stream";
       res.setHeader("Content-Type", contentType);
-      res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(path.basename(key))}"`);
+      res.setHeader("Content-Disposition", `${isDownload ? 'attachment' : 'inline'}; filename="${encodeURIComponent(path.basename(key))}"`);
 
       if (s3Response.Body) {
         const stream = s3Response.Body as any;

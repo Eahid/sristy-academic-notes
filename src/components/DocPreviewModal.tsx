@@ -152,13 +152,13 @@ export default function DocPreviewModal({ file, isOpen, onClose, onDownload }: D
           <div className="flex items-center gap-1.5 sm:gap-2">
             {/* Engine configuration panel - Hidden for raw images */}
             {!isImage && file.fileUrl && (
-              <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-900 rounded-lg p-0.5 border border-gray-200 dark:border-slate-800 mr-2">
+              <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-900 rounded-lg p-0.5 border border-gray-200 dark:border-slate-800 mr-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => setEngine('google-docs')}
                   className={`px-2 py-1 text-[9px] font-bold rounded-md transition-all cursor-pointer ${
                     engine === 'google-docs' 
-                      ? 'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-402 shadow-xs' 
+                      ? 'bg-white dark:bg-slate-800 text-[#15803d] dark:text-brand-400 shadow-xs' 
                       : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
                   }`}
                   title={t("Google Docs cloud renderer")}
@@ -170,7 +170,7 @@ export default function DocPreviewModal({ file, isOpen, onClose, onDownload }: D
                   onClick={() => setEngine('ms-office')}
                   className={`px-2 py-1 text-[9px] font-bold rounded-md transition-all cursor-pointer ${
                     engine === 'ms-office' 
-                      ? 'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-402 shadow-xs' 
+                      ? 'bg-white dark:bg-slate-800 text-[#15803d] dark:text-brand-400 shadow-xs' 
                       : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
                   }`}
                   title={t("Microsoft Office Live document viewer")}
@@ -182,12 +182,24 @@ export default function DocPreviewModal({ file, isOpen, onClose, onDownload }: D
                   onClick={() => setEngine('native')}
                   className={`px-2 py-1 text-[9px] font-bold rounded-md transition-all cursor-pointer ${
                     engine === 'native' 
-                      ? 'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-402 shadow-xs' 
+                      ? 'bg-white dark:bg-slate-800 text-[#15803d] dark:text-brand-400 shadow-xs' 
                       : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
                   }`}
                   title={t("Native direct browser iframe render (most reliable for PDFs)")}
                 >
                   {isPdf ? t("Direct Native") : t("Direct/Download")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEngine('simulated')}
+                  className={`px-2 py-1 text-[9px] font-bold rounded-md transition-all cursor-pointer ${
+                    engine === 'simulated' 
+                      ? 'bg-white dark:bg-slate-800 text-[#15803d] dark:text-brand-400 shadow-xs' 
+                      : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                  }`}
+                  title={t("Fallback Simulated text reader (works guaranteed offline/in sandboxes)")}
+                >
+                  Simulated Text
                 </button>
               </div>
             )}
@@ -301,7 +313,7 @@ export default function DocPreviewModal({ file, isOpen, onClose, onDownload }: D
               <iframe
                 id="doc-viewer-iframe"
                 key={engine} // force remount on engine swap
-                src={engine === 'google-docs' ? googleViewerUrl : (engine === 'ms-office' ? msOfficeViewerUrl : rawUrl)}
+                src={engine === 'google-docs' ? googleViewerUrl : (engine === 'ms-office' ? msOfficeViewerUrl : absoluteUrl)}
                 title={file.fileName}
                 className="w-full h-full border-0 rounded-none sm:rounded-xl shadow-xs"
                 referrerPolicy="no-referrer"
@@ -319,7 +331,7 @@ export default function DocPreviewModal({ file, isOpen, onClose, onDownload }: D
           <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
             {file.fileUrl && (
               <a
-                href={file.fileUrl}
+                href={absoluteUrl || file.fileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-4 py-2 text-xs font-bold text-brand-605 dark:text-brand-400 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/20 dark:hover:bg-brand-950/40 border border-brand-100 dark:border-brand-900/40 rounded-lg flex items-center justify-center gap-1.5 transition-all text-center"

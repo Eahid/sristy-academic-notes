@@ -457,10 +457,28 @@ export default function App() {
         console.warn("Optional download log incremented offline:", safeErr);
       }
 
-      // If the file includes a valid Firebase Storage url, open that directly! 
-      // Otherwise fallback to simulated document reader for mock seeded records
+      // If the file includes a valid fileUrl, trigger high-integrity download
       if (file.fileUrl) {
-        window.open(file.fileUrl, '_blank');
+        let downloadLink = file.fileUrl;
+        
+        // Wrap third-party URLs (like external Google Cloud/Firebase links) in same-origin proxy to circumvent cross-origin browser save blocks
+        if (downloadLink && !downloadLink.startsWith('/') && !downloadLink.startsWith(window.location.origin)) {
+          downloadLink = `/api/r2/file?url=${encodeURIComponent(downloadLink)}`;
+        }
+
+        // If it routes through our API, append forced download attachment marker
+        if (downloadLink.startsWith('/api/')) {
+          const separator = downloadLink.includes('?') ? '&' : '?';
+          downloadLink = `${downloadLink}${separator}download=true`;
+        }
+
+        // Create virtual anchor to trigger authentic download save flow
+        const link = document.createElement('a');
+        link.href = downloadLink;
+        link.setAttribute('download', file.fileName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
       } else {
         const win = window.open('', '_blank');
         if (win) {

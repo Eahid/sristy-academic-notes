@@ -28,14 +28,23 @@ service cloud.firestore {
       return resource.data;
     }
 
-    // Helper to get raw user data using a fallback schema check
-    function getUserData(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data;
+    // Helper to check if user document exists
+    function userExists(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId));
     }
 
-    // In Firestore rules, we check roles dynamically based on database record
+    // Helper to get raw user data safely using a fallback schema check
+    function getUserData(userId) {
+      return userExists(userId)
+        ? get(/databases/$(database)/documents/users/$(userId)).data
+        : {};
+    }
+
+    // In Firestore rules, we check roles dynamically based on database record with safe default fallback
     function getUserRole(userId) {
-      return getUserData(userId).role;
+      return userExists(userId)
+        ? get(/databases/$(database)/documents/users/$(userId)).data.role
+        : 'viewer';
     }
 
     function isMasterAdmin() {

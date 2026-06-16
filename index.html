@@ -1,6 +1,27 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      // Safe guard against "TypeError: Cannot set property fetch of #<Window> which has only a getter" inside sandboxed environments
+      (function() {
+        try {
+          var originalFetch = window.fetch;
+          var fetchValue = originalFetch;
+          Object.defineProperty(window, 'fetch', {
+            configurable: true,
+            enumerable: true,
+            get: function() {
+              return fetchValue;
+            },
+            set: function(val) {
+              fetchValue = val;
+            }
+          });
+        } catch (e) {
+          console.warn("Fetch safety guard initialization bypassed:", e);
+        }
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sristy Edu Archive - Centralized Storage & File Sharing</title>
