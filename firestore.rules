@@ -114,6 +114,8 @@ service cloud.firestore {
       allow read: if (existing().isApproved == true) || (isSignedIn() && (
         // Master admin can see all files
         isMasterAdmin() ||
+        // File approver can see all files
+        getUserRole(request.auth.uid) == 'file_approver' ||
         // File uploader can see their own files
         existing().uploadedBy == request.auth.uid ||
         // Branch Admins can see files depending on settings
@@ -138,6 +140,8 @@ service cloud.firestore {
       allow update: if isEmailVerified() && (
         // Master Admin can update / approve anything
         isMasterAdmin() ||
+        // File approvers can update / approve any file in the system
+        getUserRole(request.auth.uid) == 'file_approver' ||
         // Branch admins can approve or update files from their branch ONLY
         (getUserRole(request.auth.uid) == 'admin' && 
          existing().branch == getUserData(request.auth.uid).branch && 

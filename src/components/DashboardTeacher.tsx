@@ -3,7 +3,7 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { UserProfile, FileArchive } from '../types';
-import { Upload, CheckCircle2, AlertCircle, Sparkles, FolderLock, Globe, BookOpen, Layers, ChevronDown } from 'lucide-react';
+import { Upload, CheckCircle2, AlertCircle, Sparkles, FolderLock, Globe, BookOpen, Layers, ChevronDown, Loader2 } from 'lucide-react';
 import FileCard from './FileCard';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import { useBranchSubject } from './BranchSubjectContext';
@@ -60,8 +60,12 @@ export default function DashboardTeacher({
 
   const finalSubject = isNewSubjectForm ? newSubjectText.trim() : selectedSubject;
 
+  // Filter files
+  // 1. My archive (all files uploaded by me)
+  const myUploadedFiles = files.filter(f => f.uploadedBy === user.uid);
+
   const existingChapters = Array.from(new Set(
-    files
+    myUploadedFiles
       .filter(f => f.subject && finalSubject && f.subject.toLowerCase() === finalSubject.toLowerCase() && f.chapter)
       .map(f => f.chapter as string)
   ));
@@ -69,7 +73,7 @@ export default function DashboardTeacher({
   const finalChapter = isNewChapterForm ? newChapterText.trim() : chapter;
 
   const existingTopics = Array.from(new Set(
-    files
+    myUploadedFiles
       .filter(f => f.subject && finalSubject && f.subject.toLowerCase() === finalSubject.toLowerCase() &&
                    f.chapter && finalChapter && f.chapter.toLowerCase() === finalChapter.toLowerCase() && f.topic)
       .map(f => f.topic as string)
@@ -79,23 +83,13 @@ export default function DashboardTeacher({
   const [uploadError, setUploadError] = useState('');
   const [uploadSuccess, setUploadSuccess] = useState('');
 
-  const [activeSegment, setActiveTab] = useState<'my_archive' | 'subject_shares'>('my_archive');
   const { t } = useThemeLanguage();
 
   // Allowed file extensions
   const ALLOWED_EXTENSIONS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'png', 'jpg', 'jpeg'];
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB SLA Limit
 
-  // Filter files
-  // 1. My archive (all files uploaded by me)
-  const myUploadedFiles = files.filter(f => f.uploadedBy === user.uid);
-
   const teacherSubjects = user.subjects || (user.subject ? [user.subject] : []);
-
-  // 2. Subject shared archives (uploaded by others teaching the same subject of this teacher)
-  const sharedSubjectFiles = files.filter(f => 
-    teacherSubjects.includes(f.subject) && f.uploadedBy !== user.uid && f.isApproved
-  );
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -361,19 +355,28 @@ export default function DashboardTeacher({
             </div>
           )}
 
+          {loading && (
+            <div className="mb-4 flex items-center gap-2.5 p-3.5 bg-blue-50 dark:bg-blue-950/25 text-blue-700 dark:text-blue-400 rounded-lg text-xs leading-relaxed font-semibold border border-blue-105/30 animate-pulse">
+              <Loader2 className="w-4 h-4 shrink-0 text-blue-500 animate-spin" />
+              <span>{t("Securely transferring file archive to Cloudflare R2 pipeline...")}</span>
+            </div>
+          )}
+
           <form onSubmit={handleUploadSubmit} className="space-y-4">
             {/* Drag & Drop Visual Zone */}
             <div
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all duration-300 ${
-                isDragActive 
-                  ? 'border-brand-500 bg-brand-50 dark:bg-slate-800' 
-                  : selectedFile 
-                    ? 'border-emerald-400 bg-emerald-50/20 dark:bg-emerald-955/10' 
-                    : 'border-gray-200 dark:border-slate-700 hover:border-brand-500/50 dark:hover:border-brand-500/50 bg-gray-50/50 dark:bg-slate-800/30'
+              onDragOver={loading ? undefined : handleDragOver}
+              onDragLeave={loading ? undefined : handleDragLeave}
+              onDrop={loading ? undefined : handleDrop}
+              onClick={loading ? undefined : () => fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-xl p-6 text-center transition-all duration-300 ${
+                loading
+                  ? 'border-gray-200 dark:border-slate-800 bg-gray-50/20 dark:bg-slate-900/20 cursor-not-allowed opacity-60'
+                  : isDragActive 
+                    ? 'border-brand-500 bg-brand-50 dark:bg-slate-800 cursor-pointer' 
+                    : selectedFile 
+                      ? 'border-emerald-400 bg-emerald-50/20 dark:bg-emerald-955/10 cursor-pointer' 
+                      : 'border-gray-200 dark:border-slate-700 hover:border-brand-500/50 dark:hover:border-brand-500/50 bg-gray-50/50 dark:bg-slate-800/30 cursor-pointer'
               }`}
             >
               <input
@@ -382,6 +385,7 @@ export default function DashboardTeacher({
                 onChange={handleFileChange}
                 className="hidden"
                 accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg"
+                disabled={loading}
               />
 
               <div className="flex flex-col items-center justify-center space-y-2">
@@ -418,12 +422,13 @@ export default function DashboardTeacher({
                   </span>
                   <button
                     type="button"
+                    disabled={loading}
                     onClick={() => {
                       setIsNewSubjectForm(!isNewSubjectForm);
                       setSelectedSubject('');
                       setNewSubjectText('');
                     }}
-                    className="text-[10px] font-bold text-brand-500 hover:underline cursor-pointer"
+                    className={`text-[10px] font-bold text-brand-500 hover:underline cursor-pointer ${loading ? 'opacity-40 cursor-not-allowed' : ''}`}
                   >
                     {isNewSubjectForm ? t("Choose Existing") : t("+ Create New Subject")}
                   </button>
@@ -434,16 +439,18 @@ export default function DashboardTeacher({
                     value={newSubjectText}
                     onChange={(e) => setNewSubjectText(e.target.value)}
                     placeholder={t("e.g. Bangla 1st")}
-                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold"
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
                     required
+                    disabled={loading}
                   />
                 ) : (
                   <div className="relative">
                     <select
                       value={selectedSubject}
                       onChange={(e) => setSelectedSubject(e.target.value)}
-                      className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer"
+                      className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                       required
+                      disabled={loading}
                     >
                       <option value="">{t("-- Select Subject --")}</option>
                       {(teacherSubjects.length > 0 ? teacherSubjects : subjects).map((sub, idx) => (
@@ -466,12 +473,13 @@ export default function DashboardTeacher({
                   </span>
                   <button
                     type="button"
+                    disabled={loading}
                     onClick={() => {
                       setIsNewChapterForm(!isNewChapterForm);
                       setChapter('');
                       setNewChapterText('');
                     }}
-                    className="text-[10px] font-bold text-brand-500 hover:underline cursor-pointer"
+                    className={`text-[10px] font-bold text-brand-500 hover:underline cursor-pointer ${loading ? 'opacity-40 cursor-not-allowed' : ''}`}
                   >
                     {isNewChapterForm ? t("Choose Existing") : t("+ Create New Chapter")}
                   </button>
@@ -482,16 +490,18 @@ export default function DashboardTeacher({
                     value={newChapterText}
                     onChange={(e) => setNewChapterText(e.target.value)}
                     placeholder={t("e.g. Chapter 1: Introduction")}
-                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold"
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
                     required
+                    disabled={loading}
                   />
                 ) : (
                   <div className="relative">
                     <select
                       value={chapter}
                       onChange={(e) => setChapter(e.target.value)}
-                      className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer"
+                      className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                       required
+                      disabled={loading}
                     >
                       <option value="">{t("-- Select Chapter --")}</option>
                       {existingChapters.map((ch, idx) => (
@@ -517,12 +527,13 @@ export default function DashboardTeacher({
                   </span>
                   <button
                     type="button"
+                    disabled={loading}
                     onClick={() => {
                       setIsNewTopicForm(!isNewTopicForm);
                       setTopic('');
                       setNewTopicText('');
                     }}
-                    className="text-[10px] font-bold text-brand-500 hover:underline cursor-pointer"
+                    className={`text-[10px] font-bold text-brand-500 hover:underline cursor-pointer ${loading ? 'opacity-40 cursor-not-allowed' : ''}`}
                   >
                     {isNewTopicForm ? t("Choose Existing") : t("+ Create New Topic")}
                   </button>
@@ -533,16 +544,18 @@ export default function DashboardTeacher({
                     value={newTopicText}
                     onChange={(e) => setNewTopicText(e.target.value)}
                     placeholder={t("e.g. Kazi Nazrul Islam")}
-                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold"
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
                     required
+                    disabled={loading}
                   />
                 ) : (
                   <div className="relative">
                     <select
                       value={topic}
                       onChange={(e) => setTopic(e.target.value)}
-                      className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer"
+                      className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                       required
+                      disabled={loading}
                     >
                       <option value="">{t("-- Select Topic--")}</option>
                       {existingTopics.map((tp, idx) => (
@@ -568,12 +581,13 @@ export default function DashboardTeacher({
                   </span>
                   <button
                     type="button"
+                    disabled={loading}
                     onClick={() => {
                       setIsNewItemTypeForm(!isNewItemTypeForm);
                       setItemType('');
                       setNewItemTypeText('');
                     }}
-                    className="text-[10px] font-bold text-brand-500 hover:underline cursor-pointer"
+                    className={`text-[10px] font-bold text-brand-500 hover:underline cursor-pointer ${loading ? 'opacity-40 cursor-not-allowed' : ''}`}
                   >
                     {isNewItemTypeForm ? t("Choose Preset") : t("+ Custom Item Type")}
                   </button>
@@ -584,16 +598,18 @@ export default function DashboardTeacher({
                     value={newItemTypeText}
                     onChange={(e) => setNewItemTypeText(e.target.value)}
                     placeholder={t("e.g. Word Meaning, Short Question...")}
-                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold"
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
                     required
+                    disabled={loading}
                   />
                 ) : (
                   <div className="relative">
                     <select
                       value={itemType}
                       onChange={(e) => setItemType(e.target.value)}
-                      className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer"
+                      className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                       required
+                      disabled={loading}
                     >
                       <option value="">{t("-- Select Note ItemType --")}</option>
                       {PRESET_ITEM_TYPES.map((it, idx) => (
@@ -615,7 +631,8 @@ export default function DashboardTeacher({
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={t("Briefly state target topics, chapters, and summary of the archive...")}
                 rows={3}
-                className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-805 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold"
+                className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-805 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
+                disabled={loading}
               />
             </div>
 
@@ -623,188 +640,55 @@ export default function DashboardTeacher({
               type="submit"
               disabled={loading || !selectedFile}
               className={`w-full py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                selectedFile 
+                (selectedFile && !loading)
                   ? 'bg-brand-500 text-white hover:bg-brand-600 shadow-md' 
-                  : 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-gray-600 cursor-not-allowed'
+                  : 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-50'
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>{loading ? t("Uploading...") : t("Upload Resource File")}</span>
+              {loading ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>{t("Uploading...")}</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{t("Upload Resource File")}</span>
+                </>
+              )}
             </button>
           </form>
         </div>
 
         {/* Archives Display segment column */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Bento Grid Section Navigation */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-6" id="teacher-bento-menu">
-            {/* My Document Vault option */}
-            <button
-              onClick={() => setActiveTab('my_archive')}
-              className={`group text-left p-4 rounded-xl border transition-all duration-300 cursor-pointer flex items-center gap-4 ${
-                activeSegment === 'my_archive'
-                  ? 'bg-[#15803d]/5 dark:bg-[#15803d]/10 border-[#15803d] shadow-md ring-1 ring-[#15803d]/20 scale-[1.01]'
-                  : 'bg-white dark:bg-slate-900 border-gray-150 dark:border-slate-800/80 hover:border-[#15803d]/40 hover:shadow-xs'
-              }`}
-            >
-              <div className={`p-3 rounded-xl transition-all duration-300 ${
-                activeSegment === 'my_archive'
-                  ? 'bg-[#15803d] text-white shadow-sm'
-                  : 'bg-gray-100 dark:bg-slate-800 text-gray-550 dark:text-gray-400 group-hover:bg-[#15803d]/10 group-hover:text-[#15803d]'
-              }`}>
-                <CheckCircle2 className="w-5 h-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className={`font-bold text-[10px] tracking-wider uppercase leading-tight ${
-                  activeSegment === 'my_archive' ? 'text-[#15803d] dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
-                }`}>{t("My Assets")}</p>
-                <h4 className="font-extrabold text-sm text-gray-800 dark:text-gray-150 mt-1.5 leading-snug">
-                  {t("My Document Vault")} ({myUploadedFiles.length})
-                </h4>
-              </div>
-            </button>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center bg-gray-50 dark:bg-slate-800/50 p-4 rounded-xl border border-gray-100 dark:border-slate-800">
+              <span className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-widest pl-1 font-mono">{t("My Submissions")}</span>
+              <span className="text-[10px] bg-brand-100 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 px-2.5 py-0.5 rounded-full font-bold select-none capitalize">
+                {t(user.subject)} {t("Department")}
+              </span>
+            </div>
 
-            {/* Same Subject Shares option */}
-            <button
-              onClick={() => setActiveTab('subject_shares')}
-              className={`group text-left p-4 rounded-xl border transition-all duration-300 cursor-pointer flex items-center gap-4 ${
-                activeSegment === 'subject_shares'
-                  ? 'bg-[#15803d]/5 dark:bg-[#15803d]/10 border-[#15803d] shadow-md ring-1 ring-[#15803d]/20 scale-[1.01]'
-                  : 'bg-white dark:bg-slate-900 border-gray-150 dark:border-slate-800/80 hover:border-[#15803d]/40 hover:shadow-xs'
-              }`}
-            >
-              <div className={`p-3 rounded-xl transition-all duration-300 relative ${
-                activeSegment === 'subject_shares'
-                  ? 'bg-[#15803d] text-white shadow-sm'
-                  : 'bg-gray-100 dark:bg-slate-800 text-gray-550 dark:text-gray-400 group-hover:bg-[#15803d]/10 group-hover:text-[#15803d]'
-              }`}>
-                <Globe className="w-5 h-5" />
-                {sharedSubjectFiles.length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-[#15803d] text-white text-[9px] font-bold h-4 w-4 flex items-center justify-center rounded-full border border-white dark:border-slate-900 animate-pulse">
-                    {sharedSubjectFiles.length}
-                  </span>
-                )}
+            {myUploadedFiles.length === 0 ? (
+              <div className="bg-white dark:bg-slate-900 rounded-xl p-8 border border-gray-100 dark:border-slate-800 text-center text-xs text-gray-400 dark:text-gray-500">
+                {t("No files found. Clean start!")}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className={`font-bold text-[10px] tracking-wider uppercase leading-tight ${
-                  activeSegment === 'subject_shares' ? 'text-[#15803d] dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
-                }`}>{t("Sharings")}</p>
-                <h4 className="font-extrabold text-sm text-gray-800 dark:text-gray-150 mt-1.5 leading-snug">
-                  {t("Subject Shares")} ({sharedSubjectFiles.length})
-                </h4>
+            ) : (
+              <div className="grid sm:grid-cols-2 gap-6">
+                {myUploadedFiles.map((file) => (
+                  <FileCard
+                    key={file.id}
+                    file={file}
+                    user={user}
+                    onDownload={onDownload}
+                    onPreview={onPreview}
+                    onDelete={onFileDelete}
+                  />
+                ))}
               </div>
-            </button>
+            )}
           </div>
-
-          {/* bKash/Pathao Style Ultra-Elegant Bottom Tab Navigator for Mobile View */}
-          <div className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-gray-150 dark:border-slate-800/80 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] pb-safe transition-colors">
-            <div className="flex justify-around items-center h-14">
-              <button
-                onClick={() => setActiveTab('my_archive')}
-                className="flex flex-col items-center justify-center flex-1 py-1 focus:outline-none relative cursor-pointer"
-              >
-                <div className={`p-1 transition-all duration-300 ${
-                  activeSegment === 'my_archive' 
-                    ? 'text-[#15803d]' 
-                    : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
-                }`}>
-                  <CheckCircle2 className="w-5 h-5" />
-                </div>
-                <span className={`text-[10px] font-bold tracking-tight transition-all duration-300 ${
-                  activeSegment === 'my_archive' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
-                }`}>
-                  {t("My Vault")}
-                </span>
-                {activeSegment === 'my_archive' && (
-                  <span className="w-1 h-1 bg-[#15803d] rounded-full mt-0.5 animate-pulse" />
-                )}
-              </button>
-
-              <button
-                onClick={() => setActiveTab('subject_shares')}
-                className="flex flex-col items-center justify-center flex-1 py-1 focus:outline-none relative cursor-pointer"
-              >
-                <div className={`p-1 transition-all duration-300 relative ${
-                  activeSegment === 'subject_shares' 
-                    ? 'text-[#15803d]' 
-                    : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
-                }`}>
-                  <Globe className="w-5 h-5" />
-                  {sharedSubjectFiles.length > 0 && (
-                    <span className="absolute -top-1 -right-2 bg-[#15803d] text-white text-[9px] font-bold h-4 w-4 flex items-center justify-center rounded-full border border-white dark:border-slate-900 animate-pulse">
-                      {sharedSubjectFiles.length}
-                    </span>
-                  )}
-                </div>
-                <span className={`text-[10px] font-bold tracking-tight transition-all duration-300 ${
-                  activeSegment === 'subject_shares' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
-                }`}>
-                  {t("Sharings")}
-                </span>
-                {activeSegment === 'subject_shares' && (
-                  <span className="w-1 h-1 bg-[#15803d] rounded-full mt-0.5 animate-pulse" />
-                )}
-              </button>
-            </div>
-          </div>
-          <div className="sm:hidden h-14" /> {/* Prevents main layout overlap */}
-
-          {activeSegment === 'my_archive' ? (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center bg-gray-50 dark:bg-slate-800/50 p-4 rounded-xl border border-gray-100 dark:border-slate-800">
-                <span className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-widest pl-1 font-mono">{t("My Submissions")}</span>
-                <span className="text-[10px] bg-brand-100 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 px-2.5 py-0.5 rounded-full font-bold select-none capitalize">
-                  {t(user.subject)} {t("Department")}
-                </span>
-              </div>
-
-              {myUploadedFiles.length === 0 ? (
-                <div className="bg-white dark:bg-slate-900 rounded-xl p-8 border border-gray-100 dark:border-slate-800 text-center text-xs text-gray-400 dark:text-gray-500">
-                  {t("No files found. Clean start!")}
-                </div>
-              ) : (
-                <div className="grid sm:grid-cols-2 gap-6">
-                  {myUploadedFiles.map((file) => (
-                    <FileCard
-                      key={file.id}
-                      file={file}
-                      user={user}
-                      onDownload={onDownload}
-                      onPreview={onPreview}
-                      onDelete={onFileDelete}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center bg-gray-50 dark:bg-slate-800/50 p-4 rounded-xl border border-gray-100 dark:border-slate-800">
-                <span className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-widest pl-1 font-mono">{t("Teacher Shared Files")}</span>
-                <span className="text-[10px] bg-brand-100 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 px-2.5 py-0.5 rounded-full font-bold select-none uppercase">
-                  {t("Verified archives")}
-                </span>
-              </div>
-
-              {sharedSubjectFiles.length === 0 ? (
-                <div className="bg-white dark:bg-slate-900 rounded-xl p-8 border border-gray-100 dark:border-slate-800 text-center text-xs text-gray-400 dark:text-gray-500">
-                  {t("No files found. Clean start!")}
-                </div>
-              ) : (
-                <div className="grid sm:grid-cols-2 gap-6">
-                  {sharedSubjectFiles.map((file) => (
-                    <FileCard
-                      key={file.id}
-                      file={file}
-                      user={user}
-                      onDownload={onDownload}
-                      onPreview={onPreview}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
     </div>

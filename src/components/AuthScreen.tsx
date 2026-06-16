@@ -637,7 +637,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
         {/* Sristy Logo Professional Solid Brand Color Bar */}
         <div className="w-full h-1 bg-[#15803d] select-none" />
         {/* Header Branding */}
-        <div className="bg-[#15803d] p-8 text-center text-white relative">
+        <div className="bg-[#15803d] p-4 sm:p-8 text-center text-white relative">
           <div className="absolute top-4 right-4 bg-white/10 px-2.5 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wider flex items-center gap-1">
             <Sparkles className="w-2.5 h-2.5" />
             <span>{t("Authorized Access Control Gateway")}</span>
@@ -677,7 +677,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
         </div>
 
         {/* Auth Body Forms */}
-        <div className="p-8">
+        <div className="p-4 sm:p-8">
           {errorMsg && (
             <div className="mb-6 flex items-start gap-2.5 p-3.5 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 rounded-lg text-xs font-semibold leading-relaxed border border-red-100 dark:border-red-900/40">
               <AlertCircle className="w-4 h-4 shrink-0 text-red-500 mt-0.5" />
@@ -738,7 +738,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
             </form>
           ) : (
             <form onSubmit={handleRegister} className="space-y-4">
-              <div className="grid grid-cols-2 gap-2 p-1 bg-gray-50 dark:bg-slate-950/30 rounded-lg border border-gray-100 dark:border-slate-800 mb-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-1 bg-gray-50 dark:bg-slate-950/30 rounded-lg border border-gray-100 dark:border-slate-800 mb-2">
                 <button
                   type="button"
                   onClick={() => setRegisterRole('viewer')}

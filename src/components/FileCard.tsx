@@ -157,9 +157,10 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
           </button>
         )}
 
-        {/* Approve file if Admin of matching branch or Master Admin */}
+        {/* Approve file if Admin of matching branch, File Approver, or Master Admin */}
         {!isApproved && onApprove && (
           (user?.role === 'master_admin' || 
+           user?.role === 'file_approver' ||
            (user?.role === 'admin' && user?.branch === file.branch))
         ) && (
           <button

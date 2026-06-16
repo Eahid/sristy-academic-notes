@@ -405,26 +405,26 @@ export default function App() {
       unsubscribers.push(unsub);
     };
 
-    const isLocalBypass = !auth.currentUser || currentUser?.uid?.startsWith('local_');
+    const targetRole = currentUser?.role;
 
-    if (!isLocalBypass && (currentUser?.role === 'super_admin' || currentUser?.role === 'master_admin' || currentUser?.role === 'file_approver')) {
+    if (targetRole === 'super_admin' || targetRole === 'master_admin' || targetRole === 'file_approver') {
       // Super, Master, and File Approver get full unfiltered directory access
       const qMaster = query(collection(db, 'files'));
       registerQuery('master', qMaster);
-    } else if (!isLocalBypass && currentUser?.role === 'admin') {
+    } else if (targetRole === 'admin') {
       // Branch administrators stream all approved assets + ALL files from their branch (including unapproved)
       const qApproved = query(collection(db, 'files'), where('isApproved', '==', true));
-      const qBranch = query(collection(db, 'files'), where('branch', '==', currentUser.branch));
+      const qBranch = query(collection(db, 'files'), where('branch', '==', currentUser?.branch || ''));
       registerQuery('approved', qApproved);
       registerQuery('branch', qBranch);
-    } else if (!isLocalBypass && currentUser?.role === 'teacher') {
+    } else if (targetRole === 'teacher') {
       // Teachers stream all approved files + their OWN uploads
       const qApproved = query(collection(db, 'files'), where('isApproved', '==', true));
-      const qMyUploads = query(collection(db, 'files'), where('uploadedBy', '==', currentUser.uid));
+      const qMyUploads = query(collection(db, 'files'), where('uploadedBy', '==', currentUser?.uid || ''));
       registerQuery('approved', qApproved);
       registerQuery('my_uploads', qMyUploads);
     } else {
-      // Viewers, unauthenticated guests, and all LOCAL bypass sessions only stream APPROVED records
+      // Viewers, unauthenticated guests, and other sessions only stream APPROVED records
       const qApproved = query(collection(db, 'files'), where('isApproved', '==', true));
       registerQuery('approved', qApproved);
     }

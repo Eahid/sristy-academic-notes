@@ -49,7 +49,7 @@ export default function DashboardAdmin({
   const [loadingTeachers, setLoadingTeachers] = useState(false);
 
   // See everyone's file toggle state
-  const [seeEveryoneFiles, setSeeEveryoneFiles] = useState(false);
+  const [seeEveryoneFiles, setSeeEveryoneFiles] = useState(user.role === 'file_approver');
 
   // Form states to create branch members (teachers/viewers)
   const [newUsername, setNewUsername] = useState('');
@@ -211,6 +211,10 @@ export default function DashboardAdmin({
   const filteredFiles = seeEveryoneFiles
     ? files
     : files.filter(f => f.branch === user.branch);
+
+  const filteredDeletedFiles = seeEveryoneFiles
+    ? deletedFiles
+    : deletedFiles.filter(f => f.branch === user.branch);
 
   // Curriculum management states and helper handlers
   const [expandedSubjects, setExpandedSubjects] = useState<{ [sub: string]: boolean }>({});
@@ -564,7 +568,7 @@ export default function DashboardAdmin({
       {activeTab === 'teachers' && (
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Add Teacher/Viewer Comp */}
-          <div className="lg:col-span-1 bg-white dark:bg-slate-900 p-6 rounded-xl border border-gray-100 dark:border-slate-800 self-start shadow-xs transition-colors">
+          <div className="lg:col-span-1 bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-xl border border-gray-100 dark:border-slate-800 self-start shadow-xs transition-colors">
             <div className="flex items-center gap-2 text-brand-600 dark:text-brand-400 mb-4 uppercase">
               <PlusCircle className="w-5 h-5 text-brand-500" />
               <h3 className="font-semibold text-sm tracking-tight font-display">{t("Add Branch Member")}</h3>
@@ -585,7 +589,7 @@ export default function DashboardAdmin({
             )}
 
             <form onSubmit={handleCreateMember} className="space-y-4">
-              <div className="grid grid-cols-2 gap-2 bg-gray-50 dark:bg-slate-800 p-1 rounded-lg border border-gray-100 dark:border-slate-700">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-gray-50 dark:bg-slate-800 p-1 rounded-lg border border-gray-100 dark:border-slate-700">
                 <button
                   type="button"
                   onClick={() => setNewMemberRole('teacher')}
@@ -860,7 +864,7 @@ export default function DashboardAdmin({
             </p>
           </div>
 
-          {deletedFiles.filter(f => f.branch === user.branch).length === 0 ? (
+          {filteredDeletedFiles.length === 0 ? (
             <div className="text-center py-12 text-gray-400 dark:text-gray-500 text-xs">
               {t("The branch recycling storage is empty. No files require attention!")}
             </div>
@@ -876,8 +880,7 @@ export default function DashboardAdmin({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-105 dark:divide-slate-805 text-xs font-medium text-gray-700 dark:text-gray-300">
-                  {deletedFiles
-                    .filter(f => f.branch === user.branch)
+                  {filteredDeletedFiles
                     .map((file) => (
                       <tr key={file.id} className="hover:bg-gray-50/20 dark:hover:bg-slate-800/10 transition-colors">
                         <td className="py-4 px-6">

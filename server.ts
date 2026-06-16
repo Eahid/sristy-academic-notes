@@ -118,33 +118,92 @@ app.post("/api/r2/presigned-upload-url", async (req, res) => {
   }
 });
 
-// 3. Download/Preview file via secured short-lived redirect
+// 3. Download/Preview file via secured same-origin proxy stream to bypass browser iframe blockages
 app.get("/api/r2/file", async (req, res) => {
   try {
     const key = req.query.key as string;
+    const url = req.query.url as string;
+
+    // A. If an external or Firebase Storage absolute URL is explicitly requested to be proxied
+    if (url) {
+      console.log(`[FileProxy] Server-side proxying external url inline: ${url}`);
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch external fallback asset. Status: ${response.status}`);
+      }
+
+      const contentType = response.headers.get("content-type") || "application/octet-stream";
+      res.setHeader("Content-Type", contentType);
+
+      let filename = "preview_file";
+      try {
+        const parsedUrl = new URL(url);
+        filename = path.basename(parsedUrl.pathname) || "preview_file";
+      } catch (e) {}
+
+      res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(filename)}"`);
+
+      const arrayBuf = await response.arrayBuffer();
+      return res.send(Buffer.from(arrayBuf));
+    }
+
+    // B. Otherwise, require 'key' for Cloudflare R2 object store
     if (!key) {
-      return res.status(400).send("Parameter 'key' is required.");
+      return res.status(400).send("Parameter 'key' or 'url' is required.");
     }
 
     const config = getR2Config();
     if (!config.configured) {
+      // S3 is unconfigured, fallback: check if 'key' is actually an absolute URL
+      if (key.startsWith("http://") || key.startsWith("https://")) {
+        console.log(`[FileProxy] R2 not configured but key is a URL, proxying: ${key}`);
+        const response = await fetch(key);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch key-url: ${response.status}`);
+        }
+        const contentType = response.headers.get("content-type") || "application/octet-stream";
+        res.setHeader("Content-Type", contentType);
+        res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(path.basename(key))}"`);
+
+        const arrayBuf = await response.arrayBuffer();
+        return res.send(Buffer.from(arrayBuf));
+      }
       return res.status(412).send(`S3 Storage not configured on backend: ${config.error}`);
     }
 
     const s3 = getS3Client();
 
-    // Generate pre-signed GET URL valid for 15 minutes
+    // Fetch the object direct body from S3/R2 bucket
     const command = new GetObjectCommand({
       Bucket: config.bucketName,
       Key: key,
     });
 
-    const downloadUrl = await getSignedUrl(s3, command, { expiresIn: 900 });
+    try {
+      const s3Response = await s3.send(command);
+      
+      const contentType = s3Response.ContentType || "application/octet-stream";
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(path.basename(key))}"`);
 
-    // Redirect client directly to secure, temporary R2 object download URL
-    res.redirect(downloadUrl);
+      if (s3Response.Body) {
+        const stream = s3Response.Body as any;
+        if (typeof stream.pipe === 'function') {
+          stream.pipe(res);
+        } else {
+          const bytes = await s3Response.Body.transformToByteArray();
+          res.send(Buffer.from(bytes));
+        }
+      } else {
+        res.status(404).send("File content body was empty.");
+      }
+    } catch (s3Err: any) {
+      console.warn(`[FileProxy] S3 direct stream failed for key '${key}', falling back to pre-signed redirect:`, s3Err.message);
+      const downloadUrl = await getSignedUrl(s3, command, { expiresIn: 900 });
+      res.redirect(downloadUrl);
+    }
   } catch (error: any) {
-    console.error(`S3 failed to load R2 file with key '${req.query.key}':`, error);
+    console.error(`S3 failed to load R2 file:`, error);
     res.status(500).send(`Failed to deliver file asset: ${error.message}`);
   }
 });

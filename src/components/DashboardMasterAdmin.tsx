@@ -1038,7 +1038,7 @@ export default function DashboardMasterAdmin({
           {/* Column 1 Container */}
           <div className="lg:col-span-1 space-y-6 self-start w-full">
             {/* Create Admin Form */}
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-xs border border-gray-100 dark:border-slate-800 transition-colors">
+            <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-xl shadow-xs border border-gray-100 dark:border-slate-800 transition-colors">
             <div className="flex items-center gap-2 text-brand-600 dark:text-brand-400 mb-4 font-display">
               <PlusCircle className="w-5 h-5 text-brand-500" />
               <h3 className="font-semibold text-base">{(user.role === 'super_admin' || user.role === 'master_admin') ? t("Create System Member") : t("Create Branch Admin")}</h3>

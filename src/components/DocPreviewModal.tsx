@@ -44,15 +44,21 @@ export default function DocPreviewModal({ file, isOpen, onClose, onDownload }: D
     } else if (isImage) {
       setEngine('native');
     } else if (isPdf) {
-      setEngine('google-docs'); // standard & reliable
+      setEngine('native'); // Use local browser native PDF renderer by default for 100% reliability
     } else if (isOfficeDoc) {
       setEngine('ms-office');
     } else {
-      setEngine('google-docs');
+      setEngine('native');
     }
   }, [file]);
 
-  const rawUrl = file.fileUrl || '';
+  let rawUrl = file.fileUrl || '';
+  // If the fileUrl is a remote absolute URL (e.g. Firebase storage), wrap it in our server-side proxy
+  // to avoid cross-origin / X-Frame-Options sandbox blank page issues!
+  if (rawUrl && !rawUrl.startsWith('/') && !rawUrl.startsWith(window.location.origin)) {
+    rawUrl = `/api/r2/file?url=${encodeURIComponent(rawUrl)}`;
+  }
+
   const absoluteUrl = rawUrl.startsWith('/api') 
     ? `${window.location.origin}${rawUrl}` 
     : rawUrl;
@@ -171,20 +177,18 @@ export default function DocPreviewModal({ file, isOpen, onClose, onDownload }: D
                 >
                   Office View
                 </button>
-                {isPdf && (
-                  <button
-                    type="button"
-                    onClick={() => setEngine('native')}
-                    className={`px-2 py-1 text-[9px] font-bold rounded-md transition-all cursor-pointer ${
-                      engine === 'native' 
-                        ? 'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-402 shadow-xs' 
-                        : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
-                    }`}
-                    title={t("Native direct browser iframe render")}
-                  >
-                    Direct Native
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setEngine('native')}
+                  className={`px-2 py-1 text-[9px] font-bold rounded-md transition-all cursor-pointer ${
+                    engine === 'native' 
+                      ? 'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-402 shadow-xs' 
+                      : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                  }`}
+                  title={t("Native direct browser iframe render (most reliable for PDFs)")}
+                >
+                  {isPdf ? t("Direct Native") : t("Direct/Download")}
+                </button>
               </div>
             )}
 
@@ -213,9 +217,9 @@ export default function DocPreviewModal({ file, isOpen, onClose, onDownload }: D
           <div className="bg-brand-50/70 dark:bg-brand-950/10 px-5 py-2 border-b border-gray-100 dark:border-slate-800/60 text-xxs text-gray-550 dark:text-gray-400 flex items-center gap-1.5 leading-normal select-none">
             <Info className="w-3.5 h-3.5 text-brand-500 shrink-0" />
             <span>
-              {engine === 'google-docs' && t("Tip: Google cloud renderer converts PDF/Word vectors, providing quick navigation. Use controls at top if document fails to stream.")}
-              {engine === 'ms-office' && t("Tip: Microsoft Office Live works best for Word/Powerpoint materials, allowing beautiful page layout previews.")}
-              {engine === 'native' && t("Tip: Displaying using your local web browser engine. High performance & privacy.")}
+              {engine === 'google-docs' && t("Tip: If the file fails to display, Google Viewer may be restricted in sandbox environments. Switch to Direct Native or click Open External Link.")}
+              {engine === 'ms-office' && t("Tip: Microsoft Office Live works best for Word/Powerpoint materials. If offline or in testing sandbox, please use Direct/Download or Open External Link.")}
+              {engine === 'native' && t("Tip: Displaying natively using your browser's PDF engine for 100% vector-perfect accuracy and performance.")}
             </span>
           </div>
         )}
@@ -285,7 +289,7 @@ export default function DocPreviewModal({ file, isOpen, onClose, onDownload }: D
             /* Raw image viewer */
             <div className="w-full h-full max-h-[80vh] flex items-center justify-center p-4 overflow-auto">
               <img 
-                src={file.fileUrl} 
+                src={rawUrl || file.fileUrl} 
                 alt={file.fileName}
                 referrerPolicy="no-referrer"
                 className="max-w-full max-h-full object-contain rounded-lg shadow-md border border-gray-200/60 dark:border-slate-850"
@@ -300,7 +304,6 @@ export default function DocPreviewModal({ file, isOpen, onClose, onDownload }: D
                 src={engine === 'google-docs' ? googleViewerUrl : (engine === 'ms-office' ? msOfficeViewerUrl : rawUrl)}
                 title={file.fileName}
                 className="w-full h-full border-0 rounded-none sm:rounded-xl shadow-xs"
-                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
                 referrerPolicy="no-referrer"
               />
             </div>
