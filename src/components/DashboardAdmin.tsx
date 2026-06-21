@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, doc, setDoc, query, where, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, query, where, updateDoc, serverTimestamp, onSnapshot, orderBy } from 'firebase/firestore';
+import { motion, AnimatePresence } from 'motion/react';
 import { db, createSecondaryUser } from '../firebase';
 import { UserProfile, FileArchive } from '../types';
 import { useBranchSubject } from './BranchSubjectContext';
@@ -19,7 +20,10 @@ import {
   ShieldAlert,
   FolderTree,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  History,
+  Search,
+  Clock
 } from 'lucide-react';
 import FileCard from './FileCard';
 import { useThemeLanguage } from './ThemeLanguageContext';
@@ -29,6 +33,7 @@ interface DashboardAdminProps {
   files: FileArchive[];
   deletedFiles: FileArchive[];
   onFileApprove: (fileId: string) => void;
+  onFileReject: (fileId: string) => void;
   onFileDelete: (fileId: string, bypassConfirm?: boolean) => void;
   onFileRestore: (fileId: string) => void;
   onDownload: (file: FileArchive) => void;
@@ -40,6 +45,7 @@ export default function DashboardAdmin({
   files,
   deletedFiles,
   onFileApprove,
+  onFileReject,
   onFileDelete,
   onFileRestore,
   onDownload,
@@ -65,7 +71,7 @@ export default function DashboardAdmin({
   const [resettingUid, setResettingUid] = useState<string | null>(null);
   const [newPasswordVal, setNewPasswordVal] = useState('');
 
-  const [activeTab, setActiveTab] = useState<'teachers' | 'files' | 'trash_bin' | 'curriculum'>(
+  const [activeTab, setActiveTab] = useState<'teachers' | 'files' | 'trash_bin' | 'curriculum' | 'activity_logs'>(
     user.role === 'file_approver' ? 'files' : 'teachers'
   );
   const { t } = useThemeLanguage();
@@ -212,9 +218,56 @@ export default function DashboardAdmin({
     ? files
     : files.filter(f => f.branch === user.branch);
 
+  const pendingFiles = filteredFiles.filter(f => !f.isApproved && !f.isDeleted);
+
   const filteredDeletedFiles = seeEveryoneFiles
     ? deletedFiles
     : deletedFiles.filter(f => f.branch === user.branch);
+
+  const [fileFilter, setFileFilter] = useState<'pending' | 'approved' | 'all'>('pending');
+
+  useEffect(() => {
+    if (pendingFiles.length > 0) {
+      setFileFilter('pending');
+    } else {
+      setFileFilter('all');
+    }
+  }, [files, seeEveryoneFiles]);
+
+  const displayFiles = fileFilter === 'pending'
+    ? filteredFiles.filter(f => !f.isApproved && !f.isDeleted)
+    : fileFilter === 'approved'
+      ? filteredFiles.filter(f => f.isApproved && !f.isDeleted)
+      : filteredFiles.filter(f => !f.isDeleted);
+
+  // Activity logs state for Branch Admin
+  const [logsList, setLogsList] = useState<any[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [logSearchQuery, setLogSearchQuery] = useState('');
+  const [logActionFilter, setLogActionFilter] = useState('');
+
+  useEffect(() => {
+    setLoadingLogs(true);
+    const qLogs = query(collection(db, 'activity_logs'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(qLogs, (snap) => {
+      const list: any[] = [];
+      snap.forEach((docSnap) => {
+        const d = docSnap.data();
+        list.push({
+          id: docSnap.id,
+          ...d,
+          createdAt: d.createdAt ? d.createdAt.toDate() : new Date()
+        });
+      });
+      setLogsList(list);
+      setLoadingLogs(false);
+    }, (err) => {
+      console.warn("Failed to listen to Activity Logs stream in Admin:", err);
+      setLoadingLogs(false);
+    });
+
+    return () => unsub();
+  }, []);
 
   // Curriculum management states and helper handlers
   const [expandedSubjects, setExpandedSubjects] = useState<{ [sub: string]: boolean }>({});
@@ -354,9 +407,39 @@ export default function DashboardAdmin({
         </div>
       </div>
 
+      {pendingFiles.length > 0 && (
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-yellow-50 dark:bg-yellow-950/30 border-l-4 border-amber-500 p-5 rounded-r-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm"
+          id="pending-notification-banner"
+        >
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-bold text-amber-800 dark:text-amber-200">
+                {t("New Submissions Waiting for Verification")}
+              </p>
+              <p className="text-xs text-amber-700/90 dark:text-amber-300/80 mt-1 leading-normal">
+                {t("There are currently {{count}} teacher study materials uploaded and waiting to be verified. Please review and approve or reject them to authorize public or student access.")
+                  .replace('{{count}}', String(pendingFiles.length))}
+              </p>
+            </div>
+          </div>
+          {activeTab !== 'files' && (
+            <button
+              onClick={() => setActiveTab('files')}
+              className="bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-sm shrink-0 uppercase tracking-wider cursor-pointer mt-1 sm:mt-0"
+            >
+              {t("Review Now")}
+            </button>
+          )}
+        </motion.div>
+      )}
+
       {/* Bento Grid Section Navigation */}
       {user.role !== 'file_approver' && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-8" id="admin-bento-menu">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5 mb-8" id="admin-bento-menu">
           {/* Section Teachers Option */}
           <button
             onClick={() => setActiveTab('teachers')}
@@ -392,22 +475,22 @@ export default function DashboardAdmin({
           >
             <div className={`p-3 rounded-xl transition-all duration-300 relative ${
               activeTab === 'files'
-                ? 'bg-[#15803d] text-white shadow-sm'
+                ? 'bg-[#15803d]'
                 : 'bg-gray-100 dark:bg-slate-800 text-gray-550 dark:text-gray-400 group-hover:bg-[#15803d]/10 group-hover:text-[#15803d]'
             }`}>
-              <FileText className="w-5 h-5" />
-              {filteredFiles.length > 0 && (
+              <FileText className="w-5 h-5 text-white" />
+              {pendingFiles.length > 0 && (
                 <span className="absolute -top-1 -right-1 bg-[#15803d] text-white text-[9px] font-bold h-4 w-4 flex items-center justify-center rounded-full border border-white dark:border-slate-900 animate-pulse">
-                  {filteredFiles.length}
+                  {pendingFiles.length}
                 </span>
               )}
             </div>
             <div className="flex-1 min-w-0">
               <p className={`font-bold text-[10px] tracking-wider uppercase leading-tight ${
-                activeTab === 'files' ? 'text-[#15803d] dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
+                activeTab === 'files' ? 'text-[#15803d]' : 'text-gray-500'
               }`}>{t("Approval")}</p>
               <h4 className="font-extrabold text-sm text-gray-800 dark:text-gray-150 mt-1.5 leading-snug">
-                {t("Verify Submissions")} {filteredFiles.length > 0 && `(${filteredFiles.length})`}
+                {t("Verify Submissions")} {pendingFiles.length > 0 && `(${pendingFiles.length})`}
               </h4>
             </div>
           </button>
@@ -463,21 +546,47 @@ export default function DashboardAdmin({
               </h4>
             </div>
           </button>
+
+          {/* System Activity Logs Option */}
+          <button
+            onClick={() => setActiveTab('activity_logs')}
+            className={`group text-left p-4 rounded-xl border transition-all duration-300 cursor-pointer flex items-center gap-4 ${
+              activeTab === 'activity_logs'
+                ? 'bg-[#15803d]/5 dark:bg-[#15803d]/10 border-[#15803d] shadow-md ring-1 ring-[#15803d]/20 scale-[1.01]'
+                : 'bg-white dark:bg-slate-900 border-gray-150 dark:border-slate-800/80 hover:border-[#15803d]/40 hover:shadow-xs'
+            }`}
+          >
+            <div className={`p-3 rounded-xl transition-all duration-300 relative ${
+              activeTab === 'activity_logs'
+                ? 'bg-[#15803d] text-white shadow-sm'
+                : 'bg-gray-100 dark:bg-slate-800 text-gray-550 dark:text-gray-400 group-hover:bg-[#15803d]/10 group-hover:text-[#15803d]'
+            }`}>
+              <History className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`font-bold text-[10px] tracking-wider uppercase leading-tight ${
+                activeTab === 'activity_logs' ? 'text-[#15803d] dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
+              }`}>{t("Audit")}</p>
+              <h4 className="font-extrabold text-sm text-gray-800 dark:text-gray-150 mt-1.5 leading-snug">
+                {t("Activity Logs")}
+              </h4>
+            </div>
+          </button>
         </div>
       )}
 
       {/* bKash/Pathao Style Ultra-Elegant Bottom Tab Navigator for Mobile View */}
       {user.role !== 'file_approver' && (
         <>
-          <div className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-gray-150 dark:border-slate-800/80 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] pb-safe transition-colors">
-            <div className="flex justify-around items-center h-14">
+          <div className="sm:hidden fixed bottom-0 left-0 right-0 w-full z-50 bg-white dark:bg-slate-950 border-t border-gray-150 dark:border-slate-800/80 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] mt-0 pb-0 transition-colors">
+            <div className="flex justify-around items-center h-12">
               <button
                 onClick={() => setActiveTab('teachers')}
-                className="flex flex-col items-center justify-center flex-1 py-1 focus:outline-none relative cursor-pointer"
+                className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
               >
-                <div className={`p-1 transition-all duration-300 ${
+                <div className={`transition-all duration-300 ${
                   activeTab === 'teachers' 
-                    ? 'text-[#15803d] scale-110' 
+                    ? 'text-[#15803d]' 
                     : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
                 }`}>
                   <Users className="w-5 h-5" />
@@ -488,17 +597,17 @@ export default function DashboardAdmin({
                   {t("Members")}
                 </span>
                 {activeTab === 'teachers' && (
-                  <span className="w-1 h-1 bg-[#15803d] rounded-full mt-0.5 animate-pulse" />
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full animate-pulse" />
                 )}
               </button>
 
               <button
                 onClick={() => setActiveTab('files')}
-                className="flex flex-col items-center justify-center flex-1 py-1 focus:outline-none relative cursor-pointer"
+                className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
               >
-                <div className={`p-1 transition-all duration-300 relative ${
+                <div className={`transition-all duration-300 relative ${
                   activeTab === 'files' 
-                    ? 'text-[#15803d] scale-110' 
+                    ? 'text-[#15803d]' 
                     : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
                 }`}>
                   <FileText className="w-5 h-5" />
@@ -514,17 +623,17 @@ export default function DashboardAdmin({
                   {t("Verify")}
                 </span>
                 {activeTab === 'files' && (
-                  <span className="w-1 h-1 bg-[#15803d] rounded-full mt-0.5 animate-pulse" />
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full animate-pulse" />
                 )}
               </button>
 
               <button
                 onClick={() => setActiveTab('curriculum')}
-                className="flex flex-col items-center justify-center flex-1 py-1 focus:outline-none relative cursor-pointer"
+                className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
               >
-                <div className={`p-1 transition-all duration-300 ${
+                <div className={`transition-all duration-300 ${
                   activeTab === 'curriculum' 
-                    ? 'text-[#15803d] scale-110' 
+                    ? 'text-[#15803d]' 
                     : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
                 }`}>
                   <FolderTree className="w-5 h-5" />
@@ -535,17 +644,17 @@ export default function DashboardAdmin({
                   {t("Curriculum")}
                 </span>
                 {activeTab === 'curriculum' && (
-                  <span className="w-1 h-1 bg-[#15803d] rounded-full mt-0.5 animate-pulse" />
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full animate-pulse" />
                 )}
               </button>
 
               <button
                 onClick={() => setActiveTab('trash_bin')}
-                className="flex flex-col items-center justify-center flex-1 py-1 focus:outline-none relative cursor-pointer"
+                className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
               >
-                <div className={`p-1 transition-all duration-300 relative ${
+                <div className={`transition-all duration-300 relative ${
                   activeTab === 'trash_bin' 
-                    ? 'text-[#15803d] scale-110' 
+                    ? 'text-[#15803d]' 
                     : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
                 }`}>
                   <Trash2 className="w-5 h-5" />
@@ -556,12 +665,33 @@ export default function DashboardAdmin({
                   {t("Trash")}
                 </span>
                 {activeTab === 'trash_bin' && (
-                  <span className="w-1 h-1 bg-[#15803d] rounded-full mt-0.5" />
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full" />
+                )}
+              </button>
+
+              <button
+                onClick={() => setActiveTab('activity_logs')}
+                className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
+              >
+                <div className={`transition-all duration-300 relative ${
+                  activeTab === 'activity_logs' 
+                    ? 'text-[#15803d]' 
+                    : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
+                }`}>
+                  <History className="w-5 h-5" />
+                </div>
+                <span className={`text-[10px] font-bold tracking-tight transition-all duration-300 ${
+                  activeTab === 'activity_logs' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
+                }`}>
+                  {t("Logs")}
+                </span>
+                {activeTab === 'activity_logs' && (
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full" />
                 )}
               </button>
             </div>
           </div>
-          <div className="sm:hidden h-14" /> {/* Prevents main layout overlap */}
+          <div className="sm:hidden h-12 mt-0 pb-0" /> {/* Prevents main layout overlap */}
         </>
       )}
 
@@ -821,27 +951,75 @@ export default function DashboardAdmin({
       {activeTab === 'files' && (
         /* File oversight display */
         <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border border-gray-100 dark:border-slate-800 shadow-xs transition-colors">
-          <div className="mb-6">
-            <h3 className="font-bold text-base text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase">{t("Oversight Admin Terminal")}</h3>
-            <p className="text-xs text-gray-400 dark:text-gray-505 mt-1">
-              {t("Currently compiling archives of")}: <span className="underline decoration-brand-500 decoration-2 font-semibold text-gray-700 dark:text-gray-300">{seeEveryoneFiles ? t("Currently Browsing: EVERYONE") : t(user.branch)}</span>.
-            </p>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+            <div>
+              <h3 className="font-bold text-base text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase">{t("Oversight Admin Terminal")}</h3>
+              <p className="text-xs text-gray-400 dark:text-gray-505 mt-1">
+                {t("Currently compiling note's of")}: <span className="underline decoration-brand-500 decoration-2 font-semibold text-gray-700 dark:text-gray-300">{seeEveryoneFiles ? t("Currently Browsing: EVERYONE") : t(user.branch)}</span>.
+              </p>
+            </div>
+
+            {/* Verification Filters */}
+            <div className="flex gap-1 bg-gray-50 dark:bg-slate-950 p-1 rounded-lg border border-gray-200/50 dark:border-slate-800 shrink-0">
+              <button
+                onClick={() => setFileFilter('pending')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors cursor-pointer ${
+                  fileFilter === 'pending'
+                    ? 'bg-[#15803d] text-white'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-950 dark:hover:text-white'
+                }`}
+              >
+                {t("Pending")} ({filteredFiles.filter(f => !f.isApproved && !f.isDeleted).length})
+              </button>
+              <button
+                onClick={() => setFileFilter('approved')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors cursor-pointer ${
+                  fileFilter === 'approved'
+                    ? 'bg-[#15803d] text-white'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-950 dark:hover:text-white'
+                }`}
+              >
+                {t("Approved")} ({filteredFiles.filter(f => f.isApproved && !f.isDeleted).length})
+              </button>
+              <button
+                onClick={() => setFileFilter('all')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors cursor-pointer ${
+                  fileFilter === 'all'
+                    ? 'bg-[#15803d] text-white'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-950 dark:hover:text-white'
+                }`}
+              >
+                {t("All")}
+              </button>
+            </div>
           </div>
 
-          {filteredFiles.length === 0 ? (
-            <div className="text-center py-12 text-gray-450 dark:text-gray-500 text-xs">{t("No files found. Clean start!")}</div>
+          {displayFiles.length > 1 && (
+            <div className="flex sm:hidden items-center justify-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-450 mb-3.5 animate-pulse bg-amber-500/5 py-1 px-3 rounded-full border border-amber-500/10">
+              <span className="font-semibold uppercase tracking-wider">Swipe horizontally</span>
+              <span className="text-sm font-bold">↔</span>
+              <span>to browse {displayFiles.length} submissions</span>
+            </div>
+          )}
+
+          {displayFiles.length === 0 ? (
+            <div className="text-center py-12 text-gray-450 dark:text-gray-500 text-xs">
+              {fileFilter === 'pending' ? t("Hurrah! No pending approvals found in Sristy vault.") : t("No files found. Clean start!")}
+            </div>
           ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {filteredFiles.map((file) => (
-                <FileCard
-                  key={file.id}
-                  file={file}
-                  user={user}
-                  onDownload={onDownload}
-                  onPreview={onPreview}
-                  onApprove={onFileApprove}
-                  onDelete={onFileDelete}
-                />
+            <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 sm:gap-6">
+              {displayFiles.map((file) => (
+                <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
+                  <FileCard
+                    file={file}
+                    user={user}
+                    onDownload={onDownload}
+                    onPreview={onPreview}
+                    onApprove={onFileApprove}
+                    onReject={onFileReject}
+                    onDelete={onFileDelete}
+                  />
+                </div>
               ))}
             </div>
           )}
@@ -1049,12 +1227,14 @@ export default function DashboardAdmin({
 
                                               {/* Action controls */}
                                               <div className="flex items-center gap-2">
-                                                <button
+                                                {["pdf", "png", "jpg", "jpeg", "webp"].includes(note.fileType.toLowerCase()) && (
+        <button
                                                   onClick={() => onPreview && onPreview(note)}
                                                   className="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 rounded cursor-pointer transition-all uppercase text-[9px] font-bold"
                                                 >
                                                   {t("Preview")}
                                                 </button>
+      )}
                                                 <button
                                                   onClick={() => {
                                                     const confirmNote = t("Are you sure you want to move the note '{{name}}' to the Recycle Bin?").replace('{{name}}', note.fileName);
@@ -1086,6 +1266,183 @@ export default function DashboardAdmin({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {activeTab === 'activity_logs' && (
+        <div className="space-y-6" id="branch-audit-logs">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-gray-100 dark:border-slate-800 shadow-3xs">
+            <div>
+              <h3 className="font-extrabold text-sm text-gray-800 dark:text-gray-100 uppercase tracking-widest flex items-center gap-2">
+                <History className="w-5 h-5 text-brand-500" />
+                <span>{t("Branch Activity Audit Logs")}</span>
+              </h3>
+              <p className="text-xs text-gray-450 dark:text-gray-500 mt-1">
+                {seeEveryoneFiles 
+                  ? t("Displaying system-wide operational notes and actions.") 
+                  : t("Displaying operations specifically within the {{branch}} premises.").replace('{{branch}}', user.branch || 'current')}
+              </p>
+            </div>
+
+            {/* In-app Search & Filters bar */}
+            <div className="flex flex-col sm:flex-row gap-2.5 w-full md:w-auto">
+              <div className="relative flex-1 sm:w-64">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder={t("Search files or actors...")}
+                  value={logSearchQuery}
+                  onChange={(e) => setLogSearchQuery(e.target.value)}
+                  className="w-full text-xs pl-9 pr-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-150 dark:border-slate-755 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500 text-gray-700 dark:text-gray-200"
+                />
+              </div>
+
+              <select
+                value={logActionFilter}
+                onChange={(e) => setLogActionFilter(e.target.value)}
+                className="text-xs px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-150 dark:border-slate-755 rounded-lg focus:outline-none text-gray-700 dark:text-gray-200 font-bold"
+              >
+                <option value="">{t("All Action Types")}</option>
+                <option value="file_uploaded">{t("File Uploads")}</option>
+                <option value="file_approved">{t("File Approvals")}</option>
+                <option value="file_rejected">{t("File Rejections")}</option>
+                <option value="file_deleted">{t("File Deletions")}</option>
+                <option value="file_restored">{t("File Restorations")}</option>
+              </select>
+            </div>
+          </div>
+
+          {loadingLogs ? (
+            <div className="bg-white dark:bg-slate-900 rounded-xl p-16 text-center border border-gray-100 dark:border-slate-800">
+              <div className="inline-flex items-center gap-2 text-xs font-semibold text-gray-400 dark:text-gray-500">
+                <svg className="animate-spin h-5 w-5 text-brand-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>{t("Scanning activity streams...")}</span>
+              </div>
+            </div>
+          ) : (() => {
+            const finalFiltered = logsList
+              .filter(log => {
+                if (!seeEveryoneFiles) {
+                  return log.fileBranch === user.branch || log.actorBranch === user.branch || log.actorId === user.uid;
+                }
+                return true;
+              })
+              .filter(log => {
+                if (logActionFilter && log.action !== logActionFilter) return false;
+                if (logSearchQuery) {
+                  const queryLower = logSearchQuery.toLowerCase();
+                  const filenameMatch = log.fileName?.toLowerCase().includes(queryLower);
+                  const actorMatch = log.actorName?.toLowerCase().includes(queryLower);
+                  const reasonMatch = log.rejectionReason?.toLowerCase().includes(queryLower);
+                  return filenameMatch || actorMatch || reasonMatch;
+                }
+                return true;
+              });
+
+            if (finalFiltered.length === 0) {
+              return (
+                <div className="bg-white dark:bg-slate-900 rounded-xl p-12 text-center border border-gray-100 dark:border-slate-800 text-xs text-gray-450 dark:text-gray-500 font-semibold">
+                  {t("No operational audit logs match the selected search criteria.")}
+                </div>
+              );
+            }
+
+            return (
+              <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/80 overflow-hidden shadow-2xs divide-y divide-gray-100 dark:divide-slate-800">
+                {finalFiltered.map((log) => {
+                  let alertBadge = "bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-gray-300";
+                  let actionTitle = t("Action Logged");
+
+                  if (log.action === "file_uploaded") {
+                    alertBadge = "bg-blue-50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 border border-blue-100 dark:border-blue-900/30";
+                    actionTitle = t("File Uploaded");
+                  } else if (log.action === "file_approved") {
+                    alertBadge = "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30";
+                    actionTitle = t("Approved Submission");
+                  } else if (log.action === "file_rejected") {
+                    alertBadge = "bg-red-50 dark:bg-red-955/20 text-red-700 dark:text-red-400 border border-red-100 dark:border-red-900/30";
+                    actionTitle = t("Rejected Submission");
+                  } else if (log.action === "file_deleted") {
+                    alertBadge = "bg-amber-50 dark:bg-amber-955/20 text-amber-700 dark:text-amber-400 border border-amber-100 dark:border-amber-900/30";
+                    actionTitle = t("Deleted Material");
+                  } else if (log.action === "file_restored") {
+                    alertBadge = "bg-indigo-50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30";
+                    actionTitle = t("Restored Material");
+                  }
+
+                  return (
+                    <div key={log.id} className="p-4 sm:p-5 hover:bg-gray-50/50 dark:hover:bg-slate-850/20 transition-all space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${alertBadge}`}>
+                            {actionTitle}
+                          </span>
+                          <span className="text-gray-300 dark:text-gray-700 font-bold">•</span>
+                          <div className="flex items-center gap-1.5 text-xs text-gray-400 font-mono">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>{log.createdAt ? log.createdAt.toLocaleString() : "Just now"}</span>
+                          </div>
+                        </div>
+
+                        {log.fileBranch && (
+                          <span className="text-[10px] bg-brand-50/60 dark:bg-brand-950/15 text-brand-700 dark:text-brand-400 px-2.5 py-0.5 rounded-md font-bold uppercase tracking-wider select-none">
+                            {t(log.fileBranch)} {t("Branch")}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <p className="text-[10px] uppercase font-bold text-gray-405 tracking-wider">{t("Affected Study Material")}</p>
+                          <h4 className="font-extrabold text-xs text-gray-805 dark:text-white truncate max-w-[420px]" title={log.fileName}>
+                            {log.fileName || t("Unknown Note")}
+                          </h4>
+                          {log.fileSubject && (
+                            <div className="flex items-center gap-2 text-[10.5px] font-bold text-gray-450 uppercase tracking-wide">
+                              <span>{t(log.fileSubject)}</span>
+                              {log.fileChapter && (
+                                <>
+                                  <span>/</span>
+                                  <span>{t("Chapter")} {log.fileChapter}</span>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <p className="text-[10px] uppercase font-bold text-gray-405 tracking-wider">{t("Authorized Action Performer")}</p>
+                          <p className="text-xs font-bold text-gray-750 dark:text-gray-250">
+                            {log.actorName} <span className="text-gray-400 font-mono text-[10px]">({t(log.actorRole)})</span>
+                          </p>
+                          {log.actorBranch && (
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                              {t("Affiliation")}: {t(log.actorBranch)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {log.action === "file_rejected" && log.rejectionReason && (
+                        <div className="mt-2.5 bg-red-50/50 dark:bg-red-955/10 border-l-4 border-red-500 p-3 rounded-r-lg space-y-1.5 shadow-3xs">
+                          <p className="text-[10px] uppercase font-extrabold text-red-600 dark:text-red-400 tracking-wider flex items-center gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5 text-red-550" />
+                            <span>{t("Reason for document rejection")}</span>
+                          </p>
+                          <p className="text-xs text-red-705 dark:text-red-305 font-medium whitespace-pre-wrap leading-relaxed">
+                            {log.rejectionReason}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>

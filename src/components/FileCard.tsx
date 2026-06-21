@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { FileArchive, UserProfile } from '../types';
 import { 
@@ -11,7 +11,10 @@ import {
   School, 
   Trash2, 
   ShieldCheck,
-  Eye
+  Eye,
+  XCircle,
+  X,
+  ChevronUp
 } from 'lucide-react';
 import { useThemeLanguage } from './ThemeLanguageContext';
 
@@ -21,11 +24,12 @@ interface FileCardProps {
   onDownload: (file: FileArchive) => void;
   onPreview?: (file: FileArchive) => void;
   onApprove?: (fileId: string) => void;
+  onReject?: (fileId: string) => void;
   onDelete?: (fileId: string) => void;
   key?: string | number;
 }
 
-export default function FileCard({ file, user, onDownload, onPreview, onApprove, onDelete }: FileCardProps) {
+export default function FileCard({ file, user, onDownload, onPreview, onApprove, onReject, onDelete }: FileCardProps) {
   const { t } = useThemeLanguage();
 
   // Determine relevant icon of the premium list
@@ -53,6 +57,13 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
   };
 
   const isApproved = file.isApproved;
+
+  const [showReviewPanel, setShowReviewPanel] = useState(false);
+
+  const isSuperOrMaster = user?.role === 'super_admin' || user?.role === 'master_admin';
+  const isFileApprover = user?.role === 'file_approver';
+  const isBranchAdminOfFile = user?.role === 'admin' && user?.branch === file.branch;
+  const canApproveOrReject = isSuperOrMaster || isFileApprover || isBranchAdminOfFile;
 
   return (
     <motion.div 
@@ -89,13 +100,24 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
         </div>
 
         {/* File name & info */}
-        <h3 className="font-semibold text-sm text-gray-800 dark:text-gray-100 tracking-tight leading-snug line-clamp-2 min-h-[44px] mb-2 hover:text-brand-500 dark:hover:text-brand-400 hover:cursor-pointer" title={file.fileName} onClick={() => onPreview ? onPreview(file) : onDownload(file)}>
+        <h3 
+          className="font-semibold text-sm text-gray-800 dark:text-gray-100 tracking-tight leading-snug line-clamp-2 min-h-[44px] mb-2 hover:text-brand-500 dark:hover:text-brand-400 hover:cursor-pointer" 
+          title={file.fileName} 
+          onClick={() => {
+            const isPreviewable = ['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes(file.fileType.toLowerCase());
+            if (isPreviewable && onPreview) {
+              onPreview(file);
+            } else {
+              onDownload(file);
+            }
+          }}
+        >
           {file.fileName}
         </h3>
 
         {/* Short description notes */}
         <p className="text-xs text-gray-400 dark:text-gray-400 line-clamp-2 min-h-[32px] mb-4">
-          {file.description || t("No archive description notes provided.")}
+          {file.description || t("No note description notes provided.")}
         </p>
 
         {/* Decoupled Info Rows */}
@@ -146,50 +168,144 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
       </div>
 
       {/* Controller Buttons panel */}
-      <div className="bg-gray-50/70 dark:bg-slate-900/50 border-t border-gray-100 dark:border-slate-800 px-5 py-3.5 flex gap-2 justify-end">
-        {user?.role === 'master_admin' && onDelete && (
+      <div className="bg-gray-50/70 dark:bg-slate-900/50 border-t border-gray-100 dark:border-slate-800 px-4 py-3 flex gap-2 items-center justify-between">
+        {/* If user is an Admin/Approver, show the prominent sliding panel drawer toggle instead of cramped buttons */}
+        {(canApproveOrReject || (isSuperOrMaster && onDelete)) ? (
           <button
-            onClick={() => onDelete(file.id)}
-            className="p-2 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors cursor-pointer"
-            title="Delete this file"
+            onClick={() => setShowReviewPanel(true)}
+            className={`px-3 py-2.5 rounded-lg font-bold flex items-center justify-center gap-1.5 text-xs shadow-xs transition-all cursor-pointer relative ${
+              isApproved 
+                ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40' 
+                : 'bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/40 animate-pulse-slow'
+            }`}
+            title={t("Review actions")}
           >
-            <Trash2 className="w-4 h-4" />
+            <span className="relative flex h-2 w-2 shrink-0">
+              {!isApproved && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-450 opacity-75"></span>}
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${isApproved ? 'bg-green-500' : 'bg-amber-500'}`}></span>
+            </span>
+            <span className="truncate">{t("Review & Approve")}</span>
+            <ChevronUp className="w-3.5 h-3.5 opacity-60" />
+          </button>
+        ) : null}
+
+        {/* Preview Button if previewable */}
+        {['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes(file.fileType.toLowerCase()) && (
+          <button
+            onClick={() => onPreview ? onPreview(file) : onDownload(file)}
+            className="bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-750 text-gray-700 dark:text-gray-300 p-2.5 rounded-lg font-semibold flex items-center justify-center gap-1.5 text-xs shadow-xs transition-colors cursor-pointer"
+            title={t("Preview")}
+          >
+            <Eye className="w-4 h-4 text-brand-500 shrink-0" />
+            <span className="hidden sm:inline">{t("Preview")}</span>
           </button>
         )}
 
-        {/* Approve file if Admin of matching branch, File Approver, or Master Admin */}
-        {!isApproved && onApprove && (
-          (user?.role === 'master_admin' || 
-           user?.role === 'file_approver' ||
-           (user?.role === 'admin' && user?.branch === file.branch))
-        ) && (
-          <button
-            onClick={() => onApprove(file.id)}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white p-2 rounded-lg font-semibold flex items-center gap-1.5 text-xs shadow-xs transition-colors cursor-pointer"
-            title="Verify and Approve archive"
-          >
-            <ShieldCheck className="w-4 h-4" />
-            <span>{t("Approve")}</span>
-          </button>
-        )}
-
-        <button
-          onClick={() => onPreview ? onPreview(file) : onDownload(file)}
-          className="bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 py-2 px-3.5 rounded-lg font-semibold flex items-center justify-center gap-1.5 text-xs shadow-xs transition-colors cursor-pointer"
-          title={t("Preview")}
-        >
-          <Eye className="w-4 h-4 text-brand-500 shrink-0" />
-          <span>{t("Preview")}</span>
-        </button>
-
+        {/* Main Download Button */}
         <button
           onClick={() => onDownload(file)}
-          className="bg-brand-500 hover:bg-brand-600 text-white py-2 px-4 rounded-lg font-semibold flex items-center justify-center gap-2 text-xs shadow-xs hover:shadow-md transition-all ease-out cursor-pointer flex-1"
+          className="bg-[#15803d] hover:bg-[#166534] text-white py-2.5 px-3.5 rounded-lg font-semibold flex items-center justify-center gap-1.5 text-xs shadow-xs hover:shadow-md transition-all cursor-pointer flex-1"
         >
-          <Download className="w-3.5 h-3.5" />
-          <span>{t("Download Material")}</span>
+          <Download className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">{t("Download")}</span>
         </button>
       </div>
+
+      {/* Sliding Action Panel for Managers / Approvers / Admins */}
+      <motion.div
+        initial={{ y: "100%" }}
+        animate={{ y: showReviewPanel ? 0 : "100%" }}
+        transition={{ type: "spring", damping: 26, stiffness: 220 }}
+        className="absolute inset-0 bg-slate-900/98 dark:bg-slate-950/98 backdrop-blur-md z-30 p-5 flex flex-col justify-between text-white rounded-xl overflow-hidden"
+      >
+        <div className="flex flex-col gap-3 min-h-0 overflow-y-auto">
+          <div className="flex justify-between items-center pb-2 border-b border-white/10">
+            <h4 className="font-extrabold text-xs uppercase tracking-widest text-[#22c55e] flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-[#22c55e]" />
+              <span>{t("Review Material")}</span>
+            </h4>
+            <button 
+              onClick={() => setShowReviewPanel(false)}
+              className="p-1 px-2 bg-white/10 hover:bg-white/20 rounded-lg text-gray-200 hover:text-white transition-colors cursor-pointer text-[10px] uppercase font-bold flex items-center gap-1"
+            >
+              <span>{t("Close")}</span>
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 p-3 rounded-lg space-y-1.5">
+            <p className="text-[9px] text-gray-400 uppercase font-bold tracking-wider">{t("Document Name")}</p>
+            <p className="text-xs font-bold text-gray-100 truncate" title={file.fileName}>{file.fileName}</p>
+            <div className="flex gap-1.5 items-center mt-1 flex-wrap">
+              <span className="text-[9px] bg-white/10 text-gray-300 font-mono px-1.5 py-0.5 rounded font-bold uppercase">{file.fileType}</span>
+              <span className="text-[9px] bg-emerald-950/80 text-emerald-300 px-1.5 py-0.5 rounded font-bold uppercase">{t(file.subject)}</span>
+              <span className="text-[9px] bg-blue-950/80 text-blue-300 px-1.5 py-0.5 rounded font-bold uppercase">{t(file.branch)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 mt-3 select-none">
+          {/* Live Preview Button */}
+          {['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes(file.fileType.toLowerCase()) && (
+            <button
+              onClick={() => {
+                if (onPreview) onPreview(file);
+                setShowReviewPanel(false);
+              }}
+              className="w-full bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2 text-xs border border-white/10 shadow-xs transition-colors cursor-pointer"
+            >
+              <Eye className="w-4 h-4 text-[#22c55e]" />
+              <span>{t("Open Document Preview")}</span>
+            </button>
+          )}
+
+          {/* Approve Button */}
+          {!isApproved && onApprove && canApproveOrReject && (
+            <button
+              onClick={() => {
+                onApprove(file.id);
+                setShowReviewPanel(false);
+              }}
+              className="w-full bg-[#15803d] hover:bg-[#166534] active:bg-emerald-800 text-white py-2.5 rounded-lg font-extrabold flex items-center justify-center gap-2 text-xs shadow-md transition-all cursor-pointer"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>{t("APPROVE & PUBLISH")}</span>
+            </button>
+          )}
+
+          {/* Reject Button */}
+          {onReject && canApproveOrReject && (
+            <button
+              onClick={() => {
+                if (window.confirm(t("Are you sure you want to REJECT and delete this material?"))) {
+                  onReject(file.id);
+                  setShowReviewPanel(false);
+                }
+              }}
+              className="w-full bg-red-650 hover:bg-red-700 active:bg-red-800 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2 text-xs shadow-xs transition-colors cursor-pointer"
+            >
+              <XCircle className="w-4 h-4" />
+              <span>{t("REJECT SUBMISSION")}</span>
+            </button>
+          )}
+
+          {/* Trash Bin Delete (Master/Super Admins only) */}
+          {isSuperOrMaster && onDelete && (
+            <button
+              onClick={() => {
+                if (window.confirm(t("Delete this file permanently?"))) {
+                  onDelete(file.id);
+                  setShowReviewPanel(false);
+                }
+              }}
+              className="w-full bg-black/40 hover:bg-red-950/40 text-red-400 py-1.5 rounded-lg font-medium flex items-center justify-center gap-1.5 text-[10px] border border-white/5 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{t("DELETE HISTORIC RECORD")}</span>
+            </button>
+          )}
+        </div>
+      </motion.div>
     </motion.div>
   );
 }

@@ -124,7 +124,7 @@ export default function DashboardViewer({ user, files, onDownload, onPreview }: 
           </div>
           <span className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40 font-mono text-[10px] font-bold px-3 py-1 rounded-full uppercase flex items-center gap-1 self-start sm:self-auto">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-            <span>{filteredArchives.length} {t("Available Archives")}</span>
+            <span>{filteredArchives.length} {t("Available Note's")}</span>
           </span>
         </div>
 

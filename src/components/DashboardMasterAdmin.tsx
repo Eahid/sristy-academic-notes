@@ -26,7 +26,10 @@ import {
   Download,
   Server,
   Terminal,
-  ArrowRight
+  ArrowRight,
+  AlertCircle,
+  FileX,
+  AlertTriangle
 } from 'lucide-react';
 import FileCard from './FileCard';
 import { useThemeLanguage } from './ThemeLanguageContext';
@@ -36,6 +39,7 @@ interface DashboardMasterAdminProps {
   files: FileArchive[];
   deletedFiles: FileArchive[];
   onFileApprove: (fileId: string) => void;
+  onFileReject: (fileId: string) => void;
   onFileDelete: (fileId: string) => void;
   onFileRestore: (fileId: string) => void;
   onFileHardDelete: (fileId: string) => void;
@@ -49,6 +53,7 @@ export default function DashboardMasterAdmin({
   files, 
   deletedFiles,
   onFileApprove,
+  onFileReject,
   onFileDelete,
   onFileRestore,
   onFileHardDelete,
@@ -57,6 +62,7 @@ export default function DashboardMasterAdmin({
 }: DashboardMasterAdminProps) {
   const [adminsList, setAdminsList] = useState<UserProfile[]>([]);
   const [loadingAdmins, setLoadingAdmins] = useState(false);
+  const pendingFiles = files.filter(f => !f.isApproved && !f.isDeleted);
 
   // Form states to create accounts
   const [newAdminUser, setNewAdminUser] = useState('');
@@ -77,7 +83,7 @@ export default function DashboardMasterAdmin({
   const [resettingUid, setResettingUid] = useState<string | null>(null);
   const [newPasswordVal, setNewPasswordVal] = useState('');
 
-  const [activeTab, setActiveTab] = useState<'admins' | 'all_files' | 'trash_bin' | 'activity_logs' | 'database_backups'>('admins');
+  const [activeTab, setActiveTab] = useState<'admins' | 'all_files' | 'trash_bin' | 'activity_logs' | 'database_backups' | 'rejection_history'>('admins');
   const { t } = useThemeLanguage();
 
   const { branches, subjects, addBranch, addSubject, removeBranch, removeSubject } = useBranchSubject();
@@ -157,6 +163,13 @@ export default function DashboardMasterAdmin({
   const [logSearchQuery, setLogSearchQuery] = useState('');
   const [logActionFilter, setLogActionFilter] = useState('');
   const [isExporting, setIsExporting] = useState(false);
+
+  // Rejection history state
+  const [rejectionSearchQuery, setRejectionSearchQuery] = useState('');
+  const [rejectionBranchFilter, setRejectionBranchFilter] = useState('');
+  const [rejectionSubjectFilter, setRejectionSubjectFilter] = useState('');
+
+  const rejectionLogs = logsList.filter(log => log.action === 'file_rejected');
 
   // Subscribe to activity logs collection live stream
   useEffect(() => {
@@ -669,7 +682,7 @@ export default function DashboardMasterAdmin({
       // 2. Write profile document in Firestore using the real Auth UID
       await setDoc(doc(db, 'users', authUid), profilePayload);
 
-      setAdminSuccessMsg(t("Profile created beautifully! Logging you into the archive system..."));
+      setAdminSuccessMsg(t("Profile created beautifully! Logging you into the note's system..."));
       setNewAdminUser('');
       setNewAdminPass('');
       setNewAdminName('');
@@ -732,14 +745,14 @@ export default function DashboardMasterAdmin({
           </p>
         </div>
         <div className="bg-white/10 px-4 py-3 rounded-lg backdrop-blur-xs border border-white/10 text-right">
-          <p className="text-[10px] text-brand-100 uppercase tracking-widest font-bold">{t("Global Archives")}</p>
-          <p className="text-lg font-bold font-display">{files.length} {t("Total Archives")}</p>
+          <p className="text-[10px] text-brand-100 uppercase tracking-widest font-bold">{t("Global Note's")}</p>
+          <p className="text-lg font-bold font-display">{files.length} {t("Total Note's")}</p>
         </div>
       </div>
 
       {/* SHUTDOWN EMERGENCY CONTROL SYSTEM (RESTRICTED TO SUPER ADMINS) */}
       {user.role === 'super_admin' && (
-        <div className="bg-red-50 dark:bg-red-950/15 border border-red-150 dark:border-red-950/20 rounded-2xl p-6 transition-colors">
+        <div className="bg-red-50 dark:bg-red-950/15 border border-red-150 dark:border-red-900/35 rounded-2xl p-6 transition-colors">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="space-y-1">
               <h4 className="text-sm font-bold text-red-800 dark:text-red-400 font-display flex items-center gap-2 select-none">
@@ -764,8 +777,36 @@ export default function DashboardMasterAdmin({
         </div>
       )}
 
+      {pendingFiles.length > 0 && (
+        <div 
+          className="bg-yellow-50 dark:bg-yellow-950/20 border-l-4 border-amber-500 p-5 rounded-r-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xs animate-in fade-in duration-300"
+          id="master-pending-notification-banner"
+        >
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-bold text-amber-800 dark:text-amber-200">
+                {t("New Submissions Waiting for Verification")}
+              </p>
+              <p className="text-xs text-amber-700/90 dark:text-amber-300/85 mt-1 leading-normal font-semibold">
+                {t("There are currently {{count}} teacher study materials uploaded and waiting to be verified. Please review and approve or reject them to authorize public or student access.")
+                  .replace('{{count}}', String(pendingFiles.length))}
+              </p>
+            </div>
+          </div>
+          {activeTab !== 'all_files' && (
+            <button
+              onClick={() => setActiveTab('all_files')}
+              className="bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-sm shrink-0 uppercase tracking-wider cursor-pointer mt-1 sm:mt-0"
+            >
+              {t("Review Now")}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Bento Grid Section Navigation */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3.5 mb-8" id="master-bento-menu">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5 mb-8" id="master-bento-menu">
         {/* Admins / Members option */}
         <button
           onClick={() => setActiveTab('admins')}
@@ -807,10 +848,16 @@ export default function DashboardMasterAdmin({
               : 'bg-gray-100 dark:bg-slate-800 text-gray-550 dark:text-gray-400 group-hover:bg-[#15803d]/10 group-hover:text-[#15803d]'
           }`}>
             <FileText className="w-4.5 h-4.5" />
-            {files.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-[#15803d] text-white text-[8px] font-bold h-3.5 w-3.5 flex items-center justify-center rounded-full border border-white dark:border-slate-900">
-                {files.length}
+            {pendingFiles.length > 0 ? (
+              <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[8px] font-bold h-3.5 w-3.5 flex items-center justify-center rounded-full border border-white dark:border-slate-900 animate-pulse">
+                {pendingFiles.length}
               </span>
+            ) : (
+              files.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-[#15803d] text-white text-[8px] font-bold h-3.5 w-3.5 flex items-center justify-center rounded-full border border-white dark:border-slate-900">
+                  {files.length}
+                </span>
+              )
             )}
           </div>
           <div className="flex-1 min-w-0">
@@ -818,7 +865,7 @@ export default function DashboardMasterAdmin({
               activeTab === 'all_files' ? 'text-[#15803d] dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
             }`}>{t("Assets")}</p>
             <h4 className="font-extrabold text-xs text-gray-800 dark:text-gray-150 mt-1 leading-snug">
-              {t("Storage")} ({files.length})
+              {t("Storage")} {pendingFiles.length > 0 ? `(${pendingFiles.length} ${t("Pending")})` : `(${files.length})`}
             </h4>
           </div>
         </button>
@@ -910,18 +957,49 @@ export default function DashboardMasterAdmin({
             </h4>
           </div>
         </button>
+
+        {/* Rejection History option */}
+        <button
+          onClick={() => setActiveTab('rejection_history')}
+          className={`group text-left p-4 rounded-xl border transition-all duration-300 cursor-pointer flex items-center gap-3.5 ${
+            activeTab === 'rejection_history'
+              ? 'bg-[#15803d]/5 dark:bg-[#15803d]/10 border-[#15803d] shadow-md ring-1 ring-[#15803d]/20 scale-[1.01]'
+              : 'bg-white dark:bg-slate-900 border-gray-150 dark:border-slate-800/80 hover:border-[#15803d]/40 hover:shadow-xs'
+          }`}
+        >
+          <div className={`p-2.5 rounded-lg transition-all duration-300 relative ${
+            activeTab === 'rejection_history'
+              ? 'bg-[#15803d] text-white shadow-sm'
+              : 'bg-gray-100 dark:bg-slate-800 text-gray-550 dark:text-gray-400 group-hover:bg-[#15803d]/10 group-hover:text-[#15803d]'
+          }`}>
+            <FileX className="w-4.5 h-4.5" />
+            {rejectionLogs.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold h-3.5 w-3.5 flex items-center justify-center rounded-full border border-white dark:border-slate-900 animate-pulse">
+                {rejectionLogs.length}
+              </span>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className={`font-bold text-[9px] tracking-wider uppercase leading-tight ${
+              activeTab === 'rejection_history' ? 'text-[#15803d] dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
+            }`}>{t("Oversight")}</p>
+            <h4 className="font-extrabold text-xs text-gray-800 dark:text-gray-150 mt-1 leading-snug">
+              {t("Rejections")}
+            </h4>
+          </div>
+        </button>
       </div>
 
       {/* bKash/Pathao Style Ultra-Elegant Bottom Tab Navigator for Mobile View */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-gray-150 dark:border-slate-800/80 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] pb-safe transition-colors">
-        <div className="flex justify-around items-center h-14 px-1">
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 w-full z-50 bg-white dark:bg-slate-950 border-t border-gray-150 dark:border-slate-800/80 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] mt-0 pb-0 transition-colors">
+        <div className="flex justify-around items-center h-12 px-1">
           <button
             onClick={() => setActiveTab('admins')}
-            className="flex flex-col items-center justify-center flex-1 py-1 focus:outline-none relative cursor-pointer"
+            className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
           >
-            <div className={`p-1 transition-all duration-300 ${
+            <div className={`transition-all duration-300 ${
               activeTab === 'admins' 
-                ? 'text-[#15803d] scale-110' 
+                ? 'text-[#15803d]' 
                 : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
             }`}>
               <Users className="w-4.5 h-4.5" />
@@ -932,24 +1010,30 @@ export default function DashboardMasterAdmin({
               {t("Members")}
             </span>
             {activeTab === 'admins' && (
-              <span className="w-1 h-1 bg-[#15803d] rounded-full mt-0.5 animate-pulse" />
+              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full animate-pulse" />
             )}
           </button>
 
           <button
             onClick={() => setActiveTab('all_files')}
-            className="flex flex-col items-center justify-center flex-1 py-1 focus:outline-none relative cursor-pointer"
+            className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
           >
-            <div className={`p-1 transition-all duration-300 relative ${
+            <div className={`transition-all duration-300 relative ${
               activeTab === 'all_files' 
-                ? 'text-[#15803d] scale-110' 
+                ? 'text-[#15803d]' 
                 : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
             }`}>
               <FileText className="w-4.5 h-4.5" />
-              {files.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-[#15803d] text-white text-[8px] font-bold h-3 w-3 flex items-center justify-center rounded-full border border-white dark:border-slate-900">
-                  {files.length}
+              {pendingFiles.length > 0 ? (
+                <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[8px] font-bold h-3 w-3 flex items-center justify-center rounded-full border border-white dark:border-slate-900 animate-pulse">
+                  {pendingFiles.length}
                 </span>
+              ) : (
+                files.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-[#15803d] text-white text-[8px] font-bold h-3 w-3 flex items-center justify-center rounded-full border border-white dark:border-slate-900">
+                    {files.length}
+                  </span>
+                )
               )}
             </div>
             <span className={`text-[8px] font-bold tracking-tight transition-all duration-300 ${
@@ -958,17 +1042,17 @@ export default function DashboardMasterAdmin({
               {t("Storage")}
             </span>
             {activeTab === 'all_files' && (
-              <span className="w-1 h-1 bg-[#15803d] rounded-full mt-0.5 animate-pulse" />
+              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full animate-pulse" />
             )}
           </button>
 
           <button
             onClick={() => setActiveTab('trash_bin')}
-            className="flex flex-col items-center justify-center flex-1 py-1 focus:outline-none relative cursor-pointer"
+            className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
           >
-            <div className={`p-1 transition-all duration-300 relative ${
+            <div className={`transition-all duration-300 relative ${
               activeTab === 'trash_bin' 
-                ? 'text-[#15803d] scale-110' 
+                ? 'text-[#15803d]' 
                 : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
             }`}>
               <Trash2 className="w-4.5 h-4.5" />
@@ -984,17 +1068,17 @@ export default function DashboardMasterAdmin({
               {t("Trash")}
             </span>
             {activeTab === 'trash_bin' && (
-              <span className="w-1 h-1 bg-[#15803d] rounded-full mt-0.5 animate-pulse" />
+              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full animate-pulse" />
             )}
           </button>
 
           <button
             onClick={() => setActiveTab('activity_logs')}
-            className="flex flex-col items-center justify-center flex-1 py-1 focus:outline-none relative cursor-pointer"
+            className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
           >
-            <div className={`p-1 transition-all duration-300 relative ${
+            <div className={`transition-all duration-300 relative ${
               activeTab === 'activity_logs' 
-                ? 'text-[#15803d] scale-110' 
+                ? 'text-[#15803d]' 
                 : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
             }`}>
               <History className="w-4.5 h-4.5" />
@@ -1005,17 +1089,43 @@ export default function DashboardMasterAdmin({
               {t("Logs")}
             </span>
             {activeTab === 'activity_logs' && (
-              <span className="w-1 h-1 bg-[#15803d] rounded-full mt-0.5 animate-pulse" />
+              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full animate-pulse" />
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('rejection_history')}
+            className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
+          >
+            <div className={`transition-all duration-300 relative ${
+              activeTab === 'rejection_history' 
+                ? 'text-[#15803d]' 
+                : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
+            }`}>
+              <FileX className="w-4.5 h-4.5" />
+              {rejectionLogs.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold h-3 w-3 flex items-center justify-center rounded-full border border-white dark:border-slate-900">
+                  {rejectionLogs.length}
+                </span>
+              )}
+            </div>
+            <span className={`text-[8px] font-bold tracking-tight transition-all duration-300 ${
+              activeTab === 'rejection_history' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
+            }`}>
+              {t("Rejections")}
+            </span>
+            {activeTab === 'rejection_history' && (
+              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full animate-pulse" />
             )}
           </button>
 
           <button
             onClick={() => setActiveTab('database_backups')}
-            className="flex flex-col items-center justify-center flex-1 py-1 focus:outline-none relative cursor-pointer"
+            className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
           >
-            <div className={`p-1 transition-all duration-300 relative ${
+            <div className={`transition-all duration-300 relative ${
               activeTab === 'database_backups' 
-                ? 'text-[#15803d] scale-110' 
+                ? 'text-[#15803d]' 
                 : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
             }`}>
               <Database className="w-4.5 h-4.5" />
@@ -1026,12 +1136,12 @@ export default function DashboardMasterAdmin({
               {t("Backups")}
             </span>
             {activeTab === 'database_backups' && (
-              <span className="w-1 h-1 bg-[#15803d] rounded-full mt-0.5 animate-pulse" />
+              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full animate-pulse" />
             )}
           </button>
         </div>
       </div>
-      <div className="sm:hidden h-14" /> {/* Prevents main layout overlap */}
+      <div className="sm:hidden h-12 mt-0 pb-0" /> {/* Prevents main layout overlap */}
 
       {activeTab === 'admins' && (
         <div className="grid lg:grid-cols-3 gap-8 animate-in fade-in duration-200">
@@ -1469,29 +1579,39 @@ export default function DashboardMasterAdmin({
           <div className="flex justify-between items-center mb-6">
             <div>
               <h3 className="font-bold text-base text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase">{t("Sristy Education Family Storage")}</h3>
-              <p className="text-xs text-gray-400 dark:text-gray-505 mt-0.5">{t("Browsing all digital archives globally.")}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-505 mt-0.5">{t("Browsing all digital note's globally.")}</p>
             </div>
             <span className="bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-300 font-mono text-[10px] font-bold px-3 py-1 rounded-full uppercase">
               {t("Oversight Admin Terminal")}
             </span>
           </div>
 
+          {files.length > 1 && (
+            <div className="flex sm:hidden items-center justify-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-450 mb-3.5 animate-pulse bg-amber-500/5 py-1 px-3 rounded-full border border-amber-500/10">
+              <span className="font-semibold uppercase tracking-wider">Swipe horizontally</span>
+              <span className="text-sm font-bold">↔</span>
+              <span>to browse {files.length} documents</span>
+            </div>
+          )}
+
           {files.length === 0 ? (
             <div className="text-center py-12 text-gray-400 dark:text-gray-500 text-xs">
               {t("No files found. Clean start!")}
             </div>
           ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 sm:gap-6">
               {files.map((file) => (
-                <FileCard
-                  key={file.id}
-                  file={file}
-                  user={user}
-                  onDownload={onDownload}
-                  onPreview={onPreview}
-                  onApprove={onFileApprove}
-                  onDelete={onFileDelete}
-                />
+                <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
+                  <FileCard
+                    file={file}
+                    user={user}
+                    onDownload={onDownload}
+                    onPreview={onPreview}
+                    onApprove={onFileApprove}
+                    onReject={onFileReject}
+                    onDelete={onFileDelete}
+                  />
+                </div>
               ))}
             </div>
           )}
@@ -1573,6 +1693,9 @@ export default function DashboardMasterAdmin({
                       } else if (log.action === 'file_deleted') {
                         actionColorBadge = "bg-red-50 dark:bg-red-955/20 text-red-700 dark:text-red-400 border border-red-105 dark:border-red-900/10";
                         actionTextLabel = "File Deletion";
+                      } else if (log.action === 'file_rejected') {
+                        actionColorBadge = "bg-amber-50 dark:bg-amber-955/25 text-amber-700 dark:text-amber-400 border border-amber-105 dark:border-amber-900/30";
+                        actionTextLabel = "File Rejected";
                       }
 
                       return (
@@ -1605,6 +1728,11 @@ export default function DashboardMasterAdmin({
                           <td className="py-4 px-5">
                             <div className="max-w-[280px]">
                               <p className="font-semibold text-gray-800 dark:text-gray-200 text-xs truncate" title={log.fileName}>{log.fileName}</p>
+                              {log.rejectionReason && (
+                                <p className="text-[10px] text-red-500 italic mt-0.5 font-medium" title={log.rejectionReason}>
+                                  {t("Reason")}: {log.rejectionReason}
+                                </p>
+                              )}
                               <div className="flex flex-wrap items-center gap-1.5 mt-1 font-semibold text-[9px] uppercase tracking-wide text-gray-400">
                                 <span className="bg-gray-50 dark:bg-slate-800 px-1.5 py-0.5 rounded-sm">{t(log.fileSubject)}</span>
                                 <span>/</span>
@@ -1995,6 +2123,195 @@ R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'rejection_history' && (
+        <div className="space-y-6 animate-in fade-in duration-200" id="rejection-history-dashboard">
+          {/* Header & Filters Card */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-xs border border-gray-100 dark:border-slate-800 transition-colors">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-50 dark:border-slate-800/50 pb-4 mb-4">
+              <div>
+                <h3 className="font-bold text-base text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase flex items-center gap-2">
+                  <FileX className="w-5 h-5 text-red-500 animate-pulse" />
+                  <span>{t("File Rejection Audit Records")}</span>
+                </h3>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                  {t("Centralized oversight of all rejected files, reasons, and approving administrators across all branches.")}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 bg-red-500/10 text-red-650 dark:text-red-400 font-mono text-[10.5px] font-bold px-3 py-1 rounded-full uppercase self-start">
+                {rejectionLogs.length} {t("Total Rejections")}
+              </div>
+            </div>
+
+            {/* Filters Bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Search input */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={rejectionSearchQuery}
+                  onChange={(e) => setRejectionSearchQuery(e.target.value)}
+                  placeholder={t("Search file, reason, actor or uploader...")}
+                  className="pl-9 pr-4 py-2 w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg text-xs focus:outline-none focus:border-brand-500 font-medium"
+                />
+              </div>
+
+              {/* Branch select */}
+              <div>
+                <select
+                  value={rejectionBranchFilter}
+                  onChange={(e) => setRejectionBranchFilter(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-205 dark:border-slate-700 text-gray-700 dark:text-gray-200 rounded-lg text-xs font-bold focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer"
+                >
+                  <option value="">{t("All Academic Branches")}</option>
+                  {branches.map((b) => (
+                    <option key={b} value={b}>{t(b)}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Subject select */}
+              <div>
+                <select
+                  value={rejectionSubjectFilter}
+                  onChange={(e) => setRejectionSubjectFilter(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-205 dark:border-slate-700 text-gray-700 dark:text-gray-200 rounded-lg text-xs font-bold focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer"
+                >
+                  <option value="">{t("All Specialized Subjects")}</option>
+                  {subjects.map((sub) => (
+                    <option key={sub} value={sub}>{t(sub)}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Table list */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xs border border-gray-100 dark:border-slate-800 overflow-hidden transition-colors">
+            {loadingLogs ? (
+              <div className="text-center py-16 text-xs text-gray-400 dark:text-gray-500 font-medium">
+                {t("Scanning server archives...")}
+              </div>
+            ) : rejectionLogs.length === 0 ? (
+              <div className="text-center py-16 space-y-3">
+                <div className="inline-flex p-4 bg-emerald-50 dark:bg-emerald-955/20 text-emerald-600 dark:text-emerald-400 rounded-full">
+                  <CheckCircle2 className="w-8 h-8" />
+                </div>
+                <p className="text-xs text-gray-400 dark:text-gray-500 font-semibold">
+                  {t("Outstanding! No rejected submissions exist on this portal.")}
+                </p>
+              </div>
+            ) : (() => {
+              const filteredRejections = rejectionLogs.filter(log => {
+                const queryLower = rejectionSearchQuery.toLowerCase();
+                const textMatch = !rejectionSearchQuery.trim() ||
+                  log.fileName?.toLowerCase().includes(queryLower) ||
+                  log.rejectionReason?.toLowerCase().includes(queryLower) ||
+                  log.actorName?.toLowerCase().includes(queryLower) ||
+                  log.uploaderName?.toLowerCase().includes(queryLower);
+
+                const branchMatch = !rejectionBranchFilter || log.fileBranch === rejectionBranchFilter;
+                const subjectMatch = !rejectionSubjectFilter || log.fileSubject === rejectionSubjectFilter;
+
+                return textMatch && branchMatch && subjectMatch;
+              });
+
+              if (filteredRejections.length === 0) {
+                return (
+                  <div className="text-center py-16 text-xs text-gray-405 dark:text-gray-500 font-semibold">
+                    {t("No matching rejection records found for the active filters.")}
+                  </div>
+                );
+              }
+
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[950px] border-collapse text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-100 dark:border-slate-800 text-gray-400 dark:text-gray-505 text-[10px] font-bold uppercase tracking-wider bg-gray-50/50 dark:bg-slate-800/10">
+                        <th className="py-4 px-6">{t("File Details")}</th>
+                        <th className="py-4 px-6">{t("Submitted By")}</th>
+                        <th className="py-4 px-6">{t("Rejected By")}</th>
+                        <th className="py-4 px-6">{t("Date Rejected")}</th>
+                        <th className="py-4 px-6">{t("Rejection Reason & Feedback")}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800 font-medium text-gray-700 dark:text-gray-300">
+                      {filteredRejections.map((log) => (
+                        <tr key={log.id} className="hover:bg-gray-50/30 dark:hover:bg-slate-850/10 transition-colors">
+                          {/* File Details */}
+                          <td className="py-4 px-6">
+                            <div className="max-w-[280px]">
+                              <p className="font-bold text-gray-800 dark:text-gray-100 text-xs truncate animate-in fade-in" title={log.fileName}>
+                                {log.fileName}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1 font-semibold text-[9px] uppercase tracking-wide">
+                                <span className="bg-brand-50/80 dark:bg-[#15803d]/15 text-[#15803d] dark:text-brand-400 px-1.5 py-0.5 rounded-xs">
+                                  {t(log.fileSubject)}
+                                </span>
+                                <span className="text-gray-350 dark:text-gray-700">•</span>
+                                <span className="bg-gray-105 dark:bg-slate-800 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-xs">
+                                  {t(log.fileBranch)}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Submitted By */}
+                          <td className="py-4 px-6">
+                            <div>
+                              <p className="font-bold text-gray-800 dark:text-gray-150 text-xs">{log.uploaderName || t("Unknown Teacher")}</p>
+                              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{t("Teacher")}</span>
+                            </div>
+                          </td>
+
+                          {/* Rejected By */}
+                          <td className="py-4 px-6">
+                            <div>
+                              <p className="font-bold text-red-600 dark:text-red-400 text-xs">{log.actorName}</p>
+                              <span className="inline-flex items-center gap-1 mt-0.5 text-[9px] font-bold text-gray-405 uppercase tracking-wider">
+                                <span>{t(log.actorRole)}</span>
+                                {log.actorBranch && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="truncate max-w-[120px]">{t(log.actorBranch)}</span>
+                                  </>
+                                )}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Date Rejected */}
+                          <td className="py-4 px-6 text-gray-400 dark:text-gray-500 font-mono text-[10px] whitespace-nowrap">
+                            <span className="flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 text-gray-400" />
+                              <span>{log.createdAt ? log.createdAt.toLocaleString() : "Just now"}</span>
+                            </span>
+                          </td>
+
+                          {/* Rejection Reason */}
+                          <td className="py-4 px-6">
+                            <div className="bg-red-50/50 dark:bg-red-955/15 border-l-4 border-red-500 py-2 px-3 rounded-r-lg max-w-[340px]">
+                              <p className="text-[10px] uppercase font-bold text-red-650 dark:text-red-400 tracking-wider flex items-center gap-1 mb-1">
+                                <AlertTriangle className="w-3.5 h-3.5" />
+                                <span>{t("Rejection Reason")}</span>
+                              </p>
+                              <p className="text-xs text-red-750 dark:text-red-300 font-semibold leading-relaxed break-words whitespace-pre-wrap">
+                                {log.rejectionReason}
+                              </p>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

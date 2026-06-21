@@ -195,30 +195,27 @@ export default function ProfileModal({ user, onClose, onSaveSuccess }: ProfileMo
           {user.role === 'teacher' && (
             <div className="space-y-2">
               <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">{t("Assigned Specialty Subjects")}</label>
-              <div className="p-3 bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 max-h-48 overflow-y-auto space-y-2">
+              <div className="p-3 bg-gray-50 dark:bg-slate-850 rounded-lg border border-gray-150 dark:border-slate-800 space-y-2 max-h-48 overflow-y-auto">
                 {subjects.map((sub, idx) => {
                   const isChecked = selectedSubjects.includes(sub);
                   return (
-                    <label key={idx} className="flex items-center gap-2 text-xs font-semibold text-gray-700 dark:text-gray-300 cursor-pointer hover:text-brand-500 transition-colors">
+                    <div key={idx} className="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-gray-400 select-none">
                       <input
                         type="checkbox"
                         checked={isChecked}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedSubjects([...selectedSubjects, sub]);
-                          } else {
-                            setSelectedSubjects(selectedSubjects.filter(s => s !== sub));
-                          }
-                        }}
-                        className="rounded text-brand-500 focus:ring-brand-500 w-4 h-4"
+                        disabled
+                        className="rounded text-brand-500 focus:ring-brand-500 w-4 h-4 opacity-60 cursor-not-allowed"
                       />
-                      <span>{t(sub)}</span>
-                    </label>
+                      <span className={isChecked ? "text-gray-800 dark:text-gray-200" : "text-gray-400 dark:text-gray-500 line-through decoration-gray-300 dark:decoration-gray-700"}>
+                        {t(sub)}
+                      </span>
+                    </div>
                   );
                 })}
               </div>
-              <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-normal">
-                {t("Select one or more subjects assigned to you. The first chosen subject acts as your default specialisation.")}
+              <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium bg-amber-50 dark:bg-amber-950/20 p-2.5 rounded-lg border border-amber-100 dark:border-amber-900/30 flex items-start gap-1.5 leading-normal">
+                <span>🔐</span>
+                <span>{t("Subject assignment is locked for teachers. Please coordinate with a Sristy Administrator to modify your specialty subjects.")}</span>
               </p>
             </div>
           )}

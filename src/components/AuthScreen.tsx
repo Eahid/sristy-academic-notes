@@ -601,7 +601,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
 
       await setDoc(userRef, profilePayload);
 
-      setSuccessMsg(t("Profile created beautifully! Logging you into the archive system..."));
+      setSuccessMsg(t("Profile created beautifully! Logging you into the note's system..."));
       setTimeout(() => {
         onAuthSuccess({
           uid: customUid,

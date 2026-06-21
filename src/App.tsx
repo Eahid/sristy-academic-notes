@@ -88,7 +88,23 @@ export default function App() {
   }, []);
 
   const handlePreviewAttempt = (file: FileArchive) => {
-    setPreviewFile(file);
+    // 1. Trigger the download automatically upon clicking preview
+    handleDownloadAttempt(file);
+
+    // 2. Open in a new tab with the native view mode if fileUrl is available
+    if (file.fileUrl) {
+      let previewUrl = file.fileUrl;
+      
+      // Wrap custom cloud storage urls in backend raw proxy streams to avoid frame blocks & credential sandbox leakage
+      if (previewUrl && !previewUrl.startsWith('/') && !previewUrl.startsWith(window.location.origin)) {
+        previewUrl = `/api/r2/file?url=${encodeURIComponent(previewUrl)}`;
+      }
+      
+      window.open(previewUrl, '_blank');
+    } else {
+      // Fallback to simulated reader modal showing local view mode of the topic
+      setPreviewFile(file);
+    }
   };
 
   // 1. Boostrap & Seed Database if empty
@@ -123,87 +139,7 @@ export default function App() {
         console.log('Seeded Master Admin profile successfully.');
       }
 
-      // Create some initial files metadata for attractive UI if files is empty
-      const filesSnap = await getDocs(collection(db, 'files'));
-      if (filesSnap.empty) {
-        const defaultFiles = [
-          {
-            name: "ict_3.1_programming_intro.pdf",
-            type: "pdf",
-            size: 4729100, // 4.5MB
-            desc: "Complete reference lecture notes and syntax charts for HSC ICT Chapter 5 (C Programming & Logic Structure). Includes board questions.",
-            branch: "Sristy College of Tangail",
-            subject: "ICT",
-            uploaderName: "Prof. Ahmed Kamal"
-          },
-          {
-            name: "bangla_1st_poetry_v04.docx",
-            type: "docx",
-            size: 210100, // 200KB
-            desc: "Comprehensive analyzing notes and summaries of Rabindranath's important poems. Highly recommended for board exam preparations.",
-            branch: "Sristy Academic School, Tangail",
-            subject: "Bangla 1st Paper",
-            uploaderName: "Ms. Jasmine Ara"
-          },
-          {
-            name: "higher_math_matrices_matrices_tutorial.pptx",
-            type: "pptx",
-            size: 8900400, // 8.5MB
-            desc: "Slides covering fundamental operations on Matrices, Determinants, and Cramer's Rule with interactive diagrams and solved examples.",
-            branch: "Sristy Central School & College, Dhaka",
-            subject: "Higher Math",
-            uploaderName: "Dr. Shafiqul Islam"
-          },
-          {
-            name: "english_compositions_suggestions.doc",
-            type: "doc",
-            size: 1100500, // 1MB
-            desc: "Authorized Sristy suggestions of important essays, letter formulations, paragraphs, and formal letters for Board Candidate groups.",
-            branch: "Sristy Residential School, Tangail",
-            subject: "English 2nd Paper",
-            uploaderName: "Mr. David Miller"
-          },
-          {
-            name: "organic_chemistry_nomenclature.docx",
-            type: "docx",
-            size: 512000,
-            desc: "Step-by-step notes covering naming conventions of IUPAC, functional groups, and structural formulas for H2 exam candidate groups.",
-            branch: "Sristy Central School & College, Rajshahi",
-            subject: "Chemistry",
-            uploaderName: "Ms. Nazia Yeasmin"
-          },
-          {
-            name: "mechanics_formulations_gravity.pdf",
-            type: "pdf",
-            size: 9283100,
-            desc: "Core formulations covering gravitation, rotational mechanics, Newton laws representing Sristy Central Dhaka Physics Archives.",
-            branch: "Sristy Central School & College, Dhaka",
-            subject: "Physics",
-            uploaderName: "Prof. Asaduzzaman"
-          }
-        ];
-
-        for (let i = 0; i < defaultFiles.length; i++) {
-          const item = defaultFiles[i];
-          const fileRef = doc(collection(db, 'files'));
-          await setDoc(fileRef, {
-            id: fileRef.id,
-            fileName: item.name,
-            fileType: item.type,
-            fileSize: item.size,
-            description: item.desc,
-            uploadedBy: 'seed_uploader_' + i,
-            uploaderName: item.uploaderName,
-            uploaderRole: 'teacher',
-            branch: item.branch,
-            subject: item.subject,
-            isApproved: true, // pre-approve seeds so guest sees them immediately!
-            downloadCount: Math.floor(Math.random() * 45) + 5,
-            createdAt: new Date(Date.now() - (i * 2 * 3600 * 1000)), // dynamic dates
-          });
-        }
-        console.log('Seeded educational mockup files successfully.');
-      }
+      // Educational mockup files seeding has been removed to keep the homepage completely clean of demo data.
     } catch (err) {
       console.warn('System bootstrap process log: ', err);
     }
@@ -361,6 +297,9 @@ export default function App() {
       // Order of sub-queries prioritizes actual active state
       Object.values(queryResultsMap).forEach((list) => {
         list.forEach((file) => {
+          if (file.uploadedBy.startsWith('seed_uploader_')) {
+            return; // completely filter out demo files from showing up on homepage/platform
+          }
           if (!seenIds.has(file.id)) {
             seenIds.add(file.id);
             if (file.isDeleted) {
@@ -537,6 +476,70 @@ export default function App() {
     }
   };
 
+  const handleRejectFile = async (fileId: string) => {
+    const targetFile = files.find(f => f.id === fileId);
+    if (!targetFile) return;
+
+    const reason = window.prompt(
+      t("Are you sure you want to REJECT and permanently delete this file? This will clean physical binaries from storage immediately. Enter rejection reason (optional):")
+    );
+    if (reason === null) return; // User cancelled
+
+    try {
+      // 1. Audit Log Rejection text archive (preserving the history of the rejected file as text)
+      if (currentUser) {
+        try {
+          await addDoc(collection(db, 'activity_logs'), {
+            action: 'file_rejected',
+            actorId: currentUser.uid,
+            actorName: currentUser.fullName,
+            actorRole: currentUser.role,
+            actorBranch: currentUser.branch || '',
+            fileId: fileId,
+            fileName: targetFile.fileName,
+            fileSubject: targetFile.subject,
+            fileBranch: targetFile.branch,
+            rejectionReason: reason.trim() || t("No explanation specified"),
+            uploaderName: targetFile.uploaderName || t("Unknown"),
+            uploaderId: targetFile.uploadedBy || '',
+            createdAt: serverTimestamp()
+          });
+        } catch (logErr) {
+          console.warn("Failed to write rejection log:", logErr);
+        }
+      }
+
+      // 2. Clean physical file binary from S3 / R2 and Firebase Storage fallback
+      if (targetFile.storagePath) {
+        try {
+          const r2DelRes = await fetch('/api/r2/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ storagePath: targetFile.storagePath }),
+          });
+          if (r2DelRes.ok) {
+            console.log('R2: Cleared physical storage binary on rejection.');
+          }
+        } catch (r2DelErr) {
+          console.warn('R2 deletion failed on rejection, continuing fallback:', r2DelErr);
+        }
+
+        try {
+          const fileStorageRef = ref(storage, targetFile.storagePath);
+          await deleteObject(fileStorageRef);
+          console.log('Firebase Storage: Cleared on rejection.');
+        } catch (storageErr) {
+          console.warn('Firebase Storage deletion ignored:', storageErr);
+        }
+      }
+
+      // 3. Delete document from Firestore
+      await deleteDoc(doc(db, 'files', fileId));
+    } catch (err) {
+      console.error("Failed to reject and delete file document:", err);
+    }
+  };
+
   const handleDeleteFile = async (fileId: string, bypassConfirm?: boolean) => {
     if (!bypassConfirm && !window.confirm(t("Are you sure you want to move this file to trash? This can be recovered within 30 days."))) return;
     try {
@@ -702,7 +705,7 @@ export default function App() {
         <div className="absolute top-[20%] left-[10%] w-[350px] h-[350px] bg-brand-500/10 dark:bg-brand-500/5 rounded-full blur-[120px] animate-pulse pointer-events-none" />
         <div className="absolute bottom-[20%] right-[10%] w-[350px] h-[350px] bg-indigo-500/10 dark:bg-indigo-500/5 rounded-full blur-[120px] animate-pulse pointer-events-none" />
         
-        <div className="max-w-md w-full text-center space-y-8 z-10">
+        <div className="max-w-md w-full text-center space-y-7 z-10">
           <motion.div 
             initial={{ scale: 0.85, opacity: 0 }}
             animate={{ scale: [1, 1.05, 1], opacity: 1 }}
@@ -717,36 +720,21 @@ export default function App() {
             />
           </motion.div>
           
-          <div className="space-y-4">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight font-display">
-              {t("Sristy Education Family")}
+          <div className="space-y-1">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#15803d] tracking-tight font-display uppercase">
+              {t("Note's Sector")}
             </h1>
-            <div className="flex justify-center items-center gap-2">
-              <span className="h-1.5 w-1.5 bg-brand-500 rounded-full animate-bounce animate-duration-1000" />
-              <p className="text-xs font-bold text-brand-600 dark:text-brand-400 tracking-wider uppercase">
-                {t("Note's Sector")}
-              </p>
-              <span className="h-1.5 w-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:0.2s] animate-duration-1000" />
-            </div>
-            <p className="text-xs text-gray-400 dark:text-gray-500 max-w-xs mx-auto leading-relaxed">
-              {t("Connecting to secure cloud databases and indexing verified Sristy repository vaults...")}
-            </p>
           </div>
-
-          <div className="space-y-3 pt-2">
+          
+          <div className="pt-1">
             {/* Smooth animated loading slide */}
-            <div className="relative w-52 h-1.5 bg-gray-200 dark:bg-slate-800 rounded-full mx-auto overflow-hidden">
+            <div className="relative w-48 h-1.5 bg-gray-200 dark:bg-slate-800 rounded-full mx-auto overflow-hidden">
               <motion.div 
                 initial={{ left: "-100%" }}
                 animate={{ left: "100%" }}
                 transition={{ repeat: Infinity, duration: 1.6, ease: "easeInOut" }}
-                className="absolute top-0 bottom-0 w-1/2 bg-[#15803d] rounded-full"
+                className="absolute top-0 bottom-0 w-1/2 bg-[#15803d ] rounded-full"
               />
-            </div>
-            
-            <div className="flex items-center justify-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500 font-mono">
-              <Loader2 className="w-3 h-3 animate-spin text-brand-500" />
-              <span>{t("Streaming Cloud Assets...")}</span>
             </div>
           </div>
         </div>
@@ -854,6 +842,7 @@ export default function App() {
                 files={files} 
                 deletedFiles={deletedFiles}
                 onFileApprove={handleApproveFile}
+                onFileReject={handleRejectFile}
                 onFileDelete={handleDeleteFile}
                 onFileRestore={handleRestoreFile}
                 onFileHardDelete={handleHardDeleteFile}
@@ -868,6 +857,7 @@ export default function App() {
                 files={files} 
                 deletedFiles={deletedFiles}
                 onFileApprove={handleApproveFile}
+                onFileReject={handleRejectFile}
                 onFileDelete={handleDeleteFile}
                 onFileRestore={handleRestoreFile}
                 onDownload={handleDownloadAttempt}
@@ -915,7 +905,7 @@ export default function App() {
                 <span>{t("Centralized Resource Network")}</span>
               </span>
               <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-gray-900 dark:text-white tracking-tight font-display leading-[1.1]">
-                {t("Unified Storage, Archive &")} <br className="hidden sm:inline" />
+                {t("Unified Storage, Note's &")} <br className="hidden sm:inline" />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-500 via-brand-600 to-indigo-600">
                   {t("File Sharing Platform")}
                 </span>
@@ -936,7 +926,7 @@ export default function App() {
                   href="#subject-catalog"
                   className="px-6 py-3 border border-gray-200 dark:border-slate-800 rounded-lg text-xs text-gray-600 dark:text-gray-400 font-semibold hover:bg-gray-50 dark:hover:bg-slate-900 transition-colors"
                 >
-                  {t("Browse Subject Archives")}
+                  {t("Browse Subject Note's")}
                 </a>
               </div>
             </div>
@@ -1033,7 +1023,7 @@ export default function App() {
                   </div>
                   <span className="bg-emerald-50 dark:bg-emerald-955/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40 font-mono text-[10px] font-bold px-3 py-1 rounded-full uppercase flex items-center gap-1">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>{filteredPublicArchives.length} {t("Available Archives")}</span>
+                    <span>{filteredPublicArchives.length} {t("Available Note's")}</span>
                   </span>
                 </div>
 
@@ -1112,21 +1102,30 @@ export default function App() {
                 )}
               </div>
 
+              {filteredPublicArchives.length > 1 && (
+                <div className="flex sm:hidden items-center justify-center gap-1.5 text-[11px] text-brand-605 dark:text-brand-405 mb-3.5 animate-pulse bg-brand-500/5 py-1 px-3 rounded-full border border-brand-500/10">
+                  <span className="font-semibold uppercase tracking-wider">Swipe horizontally</span>
+                  <span className="text-sm font-bold">↔</span>
+                  <span>to browse {filteredPublicArchives.length} files</span>
+                </div>
+              )}
+
               {filteredPublicArchives.length === 0 ? (
                 <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 text-gray-400 dark:text-gray-500 text-xs shadow-xs">
                   <FolderLock className="w-12 h-12 mx-auto stroke-1 text-gray-300 dark:text-gray-600 mb-2" />
                   <p>{t("No matching verified documents found in Sristy Education database. Refine your indicators or clear filter.")}</p>
                 </div>
               ) : (
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 sm:gap-6">
                   {filteredPublicArchives.map((file) => (
-                    <FileCard
-                      key={file.id}
-                      file={file}
-                      user={currentUser}
-                      onDownload={handleDownloadAttempt}
-                      onPreview={handlePreviewAttempt}
-                    />
+                    <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
+                      <FileCard
+                        file={file}
+                        user={currentUser}
+                        onDownload={handleDownloadAttempt}
+                        onPreview={handlePreviewAttempt}
+                      />
+                    </div>
                   ))}
                 </div>
               )}
@@ -1137,7 +1136,7 @@ export default function App() {
               <div className="text-left space-y-2 max-w-xl">
                 <h3 className="font-bold text-lg text-gray-900 dark:text-white font-display">{t("Campus Network Directories")}</h3>
                 <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-                  {t("Our storage system maps verified archives across Sristy College of Tangail, Sristy Central Dhaka, Jamalpur, Rajshahi, Rangpur, Cadet schools, Juniors academies, and international affiliates instantly.")}
+                  {t("Our storage system maps verified note's across Sristy College of Tangail, Sristy Central Dhaka, Jamalpur, Rajshahi, Rangpur, Cadet schools, Juniors academies, and international affiliates instantly.")}
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-4 shrink-0 w-full sm:w-auto">
@@ -1227,6 +1226,9 @@ export default function App() {
         isOpen={!!previewFile}
         onClose={() => setPreviewFile(null)}
         onDownload={handleDownloadAttempt}
+        user={currentUser}
+        onApprove={handleApproveFile}
+        onReject={handleRejectFile}
       />
 
     </div>

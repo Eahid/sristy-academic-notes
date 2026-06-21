@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileArchive } from '../types';
+import { FileArchive, UserProfile } from '../types';
 import { 
   X, 
   Download, 
@@ -12,7 +12,11 @@ import {
   Maximize2,
   Minimize2,
   Settings,
-  HelpCircle
+  HelpCircle,
+  ShieldCheck,
+  XCircle,
+  Clock,
+  CheckCircle2
 } from 'lucide-react';
 import { useThemeLanguage } from './ThemeLanguageContext';
 
@@ -21,11 +25,14 @@ interface DocPreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
   onDownload: (file: FileArchive) => void;
+  user?: UserProfile | null;
+  onApprove?: (fileId: string) => void;
+  onReject?: (fileId: string) => void;
 }
 
 type ViewerEngine = 'native' | 'google-docs' | 'ms-office' | 'simulated';
 
-export default function DocPreviewModal({ file, isOpen, onClose, onDownload }: DocPreviewModalProps) {
+export default function DocPreviewModal({ file, isOpen, onClose, onDownload, user = null, onApprove, onReject }: DocPreviewModalProps) {
   const { t } = useThemeLanguage();
   const [engine, setEngine] = useState<ViewerEngine>('google-docs');
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -36,6 +43,12 @@ export default function DocPreviewModal({ file, isOpen, onClose, onDownload }: D
   const isImage = ['png', 'jpg', 'jpeg'].includes(file.fileType.toLowerCase());
   const isPdf = file.fileType.toLowerCase() === 'pdf';
   const isOfficeDoc = ['doc', 'docx', 'ppt', 'pptx'].includes(file.fileType.toLowerCase());
+
+  const isApproved = file.isApproved;
+  const isSuperOrMaster = user?.role === 'super_admin' || user?.role === 'master_admin';
+  const isFileApprover = user?.role === 'file_approver';
+  const isBranchAdminOfFile = user?.role === 'admin' && user?.branch === file.branch;
+  const canApproveOrReject = isSuperOrMaster || isFileApprover || isBranchAdminOfFile;
 
   // Determine ideal initial engine
   React.useEffect(() => {
@@ -328,13 +341,13 @@ export default function DocPreviewModal({ file, isOpen, onClose, onDownload }: D
             <span className="font-bold text-gray-750 dark:text-gray-300">{t("Uploader Identity")}:</span> {file.uploaderName} • <span className="font-extrabold uppercase bg-gray-150 dark:bg-slate-900 px-1.5 py-0.5 rounded text-gray-600 dark:text-gray-400">.{file.fileType}</span>
           </div>
 
-          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
             {file.fileUrl && (
               <a
                 href={absoluteUrl || file.fileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-4 py-2 text-xs font-bold text-brand-605 dark:text-brand-400 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/20 dark:hover:bg-brand-950/40 border border-brand-100 dark:border-brand-900/40 rounded-lg flex items-center justify-center gap-1.5 transition-all text-center"
+                className="px-3.5 py-2.5 text-xs font-bold text-brand-605 dark:text-brand-400 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/20 dark:hover:bg-brand-950/40 border border-brand-100 dark:border-brand-900/40 rounded-lg flex items-center justify-center gap-1.5 transition-all text-center"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
                 <span>{t("Open External Link")}</span>
@@ -343,11 +356,46 @@ export default function DocPreviewModal({ file, isOpen, onClose, onDownload }: D
 
             <button
               onClick={() => onDownload(file)}
-              className="px-5 py-2.5 text-xs font-bold text-white bg-brand-500 hover:bg-brand-600 border border-brand-500 dark:border-brand-600 rounded-lg flex items-center justify-center gap-2 shadow-xs hover:shadow-md transition-all cursor-pointer flex-1 sm:flex-initial"
+              className="px-4 py-2.5 text-xs font-bold text-white bg-brand-500 hover:bg-brand-600 border border-brand-500 dark:border-brand-600 rounded-lg flex items-center justify-center gap-2 shadow-xs hover:shadow-md transition-all cursor-pointer flex-1 sm:flex-initial"
             >
-              <Download className="w-3.5 h-3.5 animate-bounce" />
-              <span>{t("Download Material")}</span>
+              <Download className="w-3.5 h-3.5" />
+              <span>{t("Download")}</span>
             </button>
+
+            {/* In-Preview Quick Review actions */}
+            {canApproveOrReject && (
+              <div className="flex items-center gap-2 border-l border-gray-250 dark:border-slate-800 pl-2.5 ml-0.5">
+                {!isApproved && onApprove && (
+                  <button
+                    onClick={() => {
+                      onApprove(file.id);
+                      onClose();
+                    }}
+                    className="px-4 py-2.5 text-xs font-bold text-white bg-emerald-650 hover:bg-emerald-705 rounded-lg flex items-center justify-center gap-1.5 shadow-xs hover:shadow-md transition-colors cursor-pointer"
+                    title={t("Approve material directly")}
+                  >
+                    <ShieldCheck className="w-4 h-4 shrink-0 text-white" />
+                    <span>{t("Approve")}</span>
+                  </button>
+                )}
+
+                {onReject && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm(t("Are you sure you want to REJECT and delete this material?"))) {
+                        onReject(file.id);
+                        onClose();
+                      }
+                    }}
+                    className="px-4 py-2.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg flex items-center justify-center gap-1.5 shadow-xs hover:shadow-md transition-colors cursor-pointer"
+                    title={t("Reject material details")}
+                  >
+                    <XCircle className="w-4 h-4 shrink-0 text-white" />
+                    <span>{t("Reject")}</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

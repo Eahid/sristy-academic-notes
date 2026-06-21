@@ -1,9 +1,9 @@
-import React, { useState, useRef } from 'react';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import React, { useState, useRef, useEffect } from 'react';
+import { collection, addDoc, serverTimestamp, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { UserProfile, FileArchive } from '../types';
-import { Upload, CheckCircle2, AlertCircle, Sparkles, FolderLock, Globe, BookOpen, Layers, ChevronDown, Loader2 } from 'lucide-react';
+import { Upload, CheckCircle2, AlertCircle, Sparkles, FolderLock, Globe, BookOpen, Layers, ChevronDown, Loader2, Bell, AlertTriangle, Calendar, X } from 'lucide-react';
 import FileCard from './FileCard';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import { useBranchSubject } from './BranchSubjectContext';
@@ -85,6 +85,46 @@ export default function DashboardTeacher({
 
   const { t } = useThemeLanguage();
 
+  const [rejectionLogs, setRejectionLogs] = useState<any[]>([]);
+  const [loadingRejections, setLoadingRejections] = useState(false);
+  const [showRejectionModal, setShowRejectionModal] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const fetchRejectionLogs = async () => {
+      setLoadingRejections(true);
+      try {
+        const q = query(
+          collection(db, 'activity_logs'),
+          where('action', '==', 'file_rejected'),
+          where('uploaderId', '==', user.uid),
+          orderBy('createdAt', 'desc')
+        );
+        const snap = await getDocs(q);
+        if (active) {
+          const logs: any[] = [];
+          snap.forEach((docSnap) => {
+            const data = docSnap.data();
+            logs.push({
+              id: docSnap.id,
+              ...data,
+              createdAt: data.createdAt?.toDate() || null
+            });
+          });
+          setRejectionLogs(logs);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch rejection logs: ", err);
+      } finally {
+        if (active) setLoadingRejections(false);
+      }
+    };
+    fetchRejectionLogs();
+    return () => {
+      active = false;
+    };
+  }, [user.uid]);
+
   // Allowed file extensions
   const ALLOWED_EXTENSIONS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'png', 'jpg', 'jpeg'];
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB SLA Limit
@@ -144,7 +184,7 @@ export default function DashboardTeacher({
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFile) {
-      setUploadError(t("Please choose or drag-and-drop a file archive first."));
+      setUploadError(t("Please choose or drag-and-drop a file note first."));
       return;
     }
 
@@ -318,7 +358,7 @@ export default function DashboardTeacher({
           <div className="flex items-center gap-2 mb-2">
             <span className="bg-white/20 text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wider backdrop-blur-xs flex items-center gap-1">
               <FolderLock className="w-3.5 h-3.5" />
-              <span>{t("Sristy Academic Archive Portal")}</span>
+              <span>{t("Sristy Academic Note's Portal")}</span>
             </span>
           </div>
           <h2 className="text-xl font-bold font-display leading-tight">{user.fullName}</h2>
@@ -327,11 +367,51 @@ export default function DashboardTeacher({
           </p>
         </div>
 
-        <div className="bg-white/10 px-4 py-3 rounded-lg backdrop-blur-xs border border-white/10 text-left min-w-[150px]">
-          <p className="text-[10px] text-brand-100 uppercase tracking-widest font-bold">{t("My Submissions")}</p>
-          <p className="text-base font-bold font-display">{myUploadedFiles.length} {t("Archives uploaded")}</p>
+        <div className="flex items-center gap-4">
+          <div className="bg-white/10 px-4 py-3 rounded-lg backdrop-blur-xs border border-white/10 text-left min-w-[150px]">
+            <p className="text-[10px] text-brand-100 uppercase tracking-widest font-bold">{t("My Submissions")}</p>
+            <p className="text-base font-bold font-display">{myUploadedFiles.length} {t("Note's uploaded")}</p>
+          </div>
+
+          <button 
+            onClick={() => setShowRejectionModal(true)}
+            className="group relative p-3 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-white transition-all cursor-pointer focus:outline-none flex items-center justify-center shadow-xs"
+            title={t("My Rejected Submissions")}
+          >
+            <Bell className="w-5 h-5 group-hover:scale-110 duration-200" />
+            {rejectionLogs.length > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-bold h-5 w-5 flex items-center justify-center rounded-full animate-pulse border-2 border-[#15803d]">
+                {rejectionLogs.length}
+              </span>
+            )}
+          </button>
         </div>
       </div>
+
+      {rejectionLogs.length > 0 && (
+        <div className="bg-amber-50 dark:bg-amber-950/20 border-l-4 border-amber-500 p-4 rounded-r-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm animate-in slide-in-from-top duration-250">
+          <div className="flex items-start gap-3">
+            <div className="bg-amber-100 dark:bg-amber-900/40 p-2 rounded-lg text-amber-600 dark:text-amber-400 mt-0.5 shrink-0">
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-amber-805 dark:text-amber-200">
+                {t("Material Rejection Logs Available")}
+              </p>
+              <p className="text-xs text-amber-700/90 dark:text-amber-300/80 mt-1 leading-normal">
+                {t("Some of your uploaded materials were rejected by managers. Click 'View Rejections' to read feedback so you can revise them.")}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowRejectionModal(true)}
+            className="bg-amber-600 hover:bg-amber-705 active:bg-amber-850 text-white font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-xs shrink-0 uppercase tracking-wider flex items-center gap-1.5 cursor-pointer mt-1 sm:mt-0"
+          >
+            <Bell className="w-3.5 h-3.5 animate-pulse" />
+            <span>{t("View Rejections")}</span>
+          </button>
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-8">
         {/* Upload Column */}
@@ -420,47 +500,31 @@ export default function DashboardTeacher({
                     <BookOpen className="w-3.5 h-3.5 text-brand-500" />
                     {t("Subject")}
                   </span>
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={() => {
-                      setIsNewSubjectForm(!isNewSubjectForm);
-                      setSelectedSubject('');
-                      setNewSubjectText('');
-                    }}
-                    className={`text-[10px] font-bold text-brand-500 hover:underline cursor-pointer ${loading ? 'opacity-40 cursor-not-allowed' : ''}`}
-                  >
-                    {isNewSubjectForm ? t("Choose Existing") : t("+ Create New Subject")}
-                  </button>
+                  <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded flex items-center gap-1">
+                    🔐 {t("Authorized Only")}
+                  </span>
                 </div>
-                {isNewSubjectForm ? (
-                  <input
-                    type="text"
-                    value={newSubjectText}
-                    onChange={(e) => setNewSubjectText(e.target.value)}
-                    placeholder={t("e.g. Bangla 1st")}
-                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
+                <div className="relative">
+                  <select
+                    value={selectedSubject}
+                    onChange={(e) => setSelectedSubject(e.target.value)}
+                    className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                     required
                     disabled={loading}
-                  />
-                ) : (
-                  <div className="relative">
-                    <select
-                      value={selectedSubject}
-                      onChange={(e) => setSelectedSubject(e.target.value)}
-                      className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                      required
-                      disabled={loading}
-                    >
-                      <option value="">{t("-- Select Subject --")}</option>
-                      {(teacherSubjects.length > 0 ? teacherSubjects : subjects).map((sub, idx) => (
-                        <option key={idx} value={sub}>{t(sub)}</option>
-                      ))}
-                    </select>
-                    <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </span>
-                  </div>
+                  >
+                    <option value="">{t("-- Select Subject --")}</option>
+                    {(teacherSubjects.length > 0 ? teacherSubjects : subjects).map((sub, idx) => (
+                      <option key={idx} value={sub}>{t(sub)}</option>
+                    ))}
+                  </select>
+                  <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </span>
+                </div>
+                {teacherSubjects.length === 0 && (
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1.5 font-medium bg-amber-50 dark:bg-amber-950/20 p-2 rounded-lg border border-amber-100 dark:border-amber-900/30">
+                    {t("Security Alert: You do not have any subjects officially assigned to you yet. Please request your administrator to map your subjects.")}
+                  </p>
                 )}
               </div>
 
@@ -629,7 +693,7 @@ export default function DashboardTeacher({
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder={t("Briefly state target topics, chapters, and summary of the archive...")}
+                placeholder={t("Briefly state target topics, chapters, and summary of the note...")}
                 rows={3}
                 className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-805 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
                 disabled={loading}
@@ -670,27 +734,118 @@ export default function DashboardTeacher({
               </span>
             </div>
 
+            {myUploadedFiles.length > 1 && (
+              <div className="flex sm:hidden items-center justify-center gap-1.5 text-[11px] text-brand-605 dark:text-brand-405 mb-3.5 animate-pulse bg-brand-500/5 py-1 px-3 rounded-full border border-brand-500/10">
+                <span className="font-semibold uppercase tracking-wider">Swipe horizontally</span>
+                <span className="text-sm font-bold">↔</span>
+                <span>to browse {myUploadedFiles.length} files</span>
+              </div>
+            )}
+
             {myUploadedFiles.length === 0 ? (
               <div className="bg-white dark:bg-slate-900 rounded-xl p-8 border border-gray-100 dark:border-slate-800 text-center text-xs text-gray-400 dark:text-gray-500">
                 {t("No files found. Clean start!")}
               </div>
             ) : (
-              <div className="grid sm:grid-cols-2 gap-6">
+              <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 sm:gap-6">
                 {myUploadedFiles.map((file) => (
-                  <FileCard
-                    key={file.id}
-                    file={file}
-                    user={user}
-                    onDownload={onDownload}
-                    onPreview={onPreview}
-                    onDelete={onFileDelete}
-                  />
+                  <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
+                    <FileCard
+                      file={file}
+                      user={user}
+                      onDownload={onDownload}
+                      onPreview={onPreview}
+                      onDelete={onFileDelete}
+                    />
+                  </div>
                 ))}
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Rejection Reasons Modal */}
+      {showRejectionModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-200" id="rejection-reasons-modal">
+          <div className="relative bg-white dark:bg-slate-900 rounded-2xl w-full max-w-2xl px-6 py-6 border border-gray-150 dark:border-slate-800 shadow-2xl space-y-4 text-left animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800 pb-4">
+              <h3 className="font-extrabold text-base text-gray-805 dark:text-gray-105 flex items-center gap-2">
+                <Bell className="w-5 h-5 text-red-505" />
+                <span>{t("File Rejection Audit Records")}</span>
+              </h3>
+              <button
+                onClick={() => setShowRejectionModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 focus:outline-none p-1 bg-gray-50 dark:bg-slate-850 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar">
+              {loadingRejections ? (
+                <div className="text-center py-12 text-xs font-semibold text-gray-400 dark:text-gray-500 flex flex-col items-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+                  <span>{t("Scanning server archives...")}</span>
+                </div>
+              ) : rejectionLogs.length === 0 ? (
+                <div className="text-center py-12 text-xs text-gray-400 dark:text-gray-550 font-semibold space-y-2">
+                  <div className="inline-flex p-3 bg-green-50 dark:bg-green-955/20 text-green-600 dark:text-green-400 rounded-full">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <p>{t("Amazing! You do not have any rejected submissions.")}</p>
+                </div>
+              ) : (
+                rejectionLogs.map((log) => (
+                  <div 
+                    key={log.id} 
+                    className="p-4 bg-gray-50 dark:bg-slate-850 border border-gray-150 dark:border-slate-800 rounded-xl space-y-3"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 dark:border-slate-800 pb-2">
+                      <div>
+                        <h4 className="font-bold text-xs text-gray-850 dark:text-gray-100 truncate max-w-[320px]">{log.fileName}</h4>
+                        <div className="flex items-center gap-2 mt-1 text-[10px] font-bold text-gray-400 uppercase tracking-wide">
+                          <span>{t(log.fileSubject)}</span>
+                          <span>•</span>
+                          <span>{t(log.fileBranch)}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-1.5 text-[10px] text-gray-400 font-bold bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 px-2.5 py-1 rounded-md max-w-fit shadow-2xs">
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>{log.createdAt ? log.createdAt.toLocaleDateString() : "Just now"}</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-red-50/50 dark:bg-red-955/10 border-l-4 border-red-500 p-3 rounded-r-lg space-y-1">
+                      <p className="text-[10px] uppercase font-bold text-red-600 dark:text-red-400 tracking-wider flex items-center gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
+                        <span>{t("Reason for Rejection")}</span>
+                      </p>
+                      <p className="text-xs text-red-700 dark:text-red-305 font-semibold whitespace-pre-wrap leading-relaxed">
+                        {log.rejectionReason}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                      <span>{t("Rejected by:")} <strong className="text-gray-600 dark:text-gray-300">{log.actorName}</strong> ({t(log.actorRole)})</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setShowRejectionModal(false)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-gray-700 dark:text-gray-200 text-xs font-bold rounded-lg cursor-pointer transition-all uppercase tracking-wider border border-transparent dark:border-slate-700"
+              >
+                {t("Dismiss")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

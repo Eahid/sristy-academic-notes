@@ -160,7 +160,11 @@ service cloud.firestore {
         (incoming().diff(existing()).affectedKeys().hasOnly(['downloadCount']))
       );
 
-      allow delete: if isEmailVerified() && isMasterAdmin();
+      allow delete: if isEmailVerified() && (
+        isMasterAdmin() ||
+        getUserRole(request.auth.uid) == 'file_approver' ||
+        (getUserRole(request.auth.uid) == 'admin' && existing().branch == getUserData(request.auth.uid).branch)
+      );
     }
 
     // --- Notices Collection ---
@@ -174,7 +178,13 @@ service cloud.firestore {
 
     // --- Activity Logs Collection ---
     match /activity_logs/{logId} {
-      allow read: if isEmailVerified() && isMasterAdmin();
+      allow read: if isEmailVerified() && (
+        isMasterAdmin() ||
+        getUserRole(request.auth.uid) == 'admin' ||
+        getUserRole(request.auth.uid) == 'file_approver' ||
+        resource.data.uploaderId == request.auth.uid ||
+        resource.data.actorId == request.auth.uid
+      );
       allow create: if isEmailVerified(); // Any active logged in user with verified email is authorized to write logs
       allow update, delete: if isEmailVerified() && isMasterAdmin();
     }
