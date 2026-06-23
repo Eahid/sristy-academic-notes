@@ -31,6 +31,7 @@ import DashboardViewer from './components/DashboardViewer';
 import UserSystemDiagram from './components/UserSystemDiagram';
 import DocPreviewModal from './components/DocPreviewModal';
 import FileCard from './components/FileCard';
+import BatchDownloadBar from './components/BatchDownloadBar';
 import { useThemeLanguage } from './components/ThemeLanguageContext';
 import { 
   FolderLock, 
@@ -51,6 +52,7 @@ import {
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [files, setFiles] = useState<FileArchive[]>([]);
   const [deletedFiles, setDeletedFiles] = useState<FileArchive[]>([]);
   const [loading, setLoading] = useState(true);
@@ -476,13 +478,18 @@ export default function App() {
     }
   };
 
-  const handleRejectFile = async (fileId: string) => {
+  const handleRejectFile = async (fileId: string, customReason?: string) => {
     const targetFile = files.find(f => f.id === fileId);
     if (!targetFile) return;
 
-    const reason = window.prompt(
-      t("Are you sure you want to REJECT and permanently delete this file? This will clean physical binaries from storage immediately. Enter rejection reason (optional):")
-    );
+    let reason: string | null = null;
+    if (customReason !== undefined) {
+      reason = customReason;
+    } else {
+      reason = window.prompt(
+        t("Are you sure you want to REJECT and permanently delete this file? This will clean physical binaries from storage immediately. Enter rejection reason (optional):")
+      );
+    }
     if (reason === null) return; // User cancelled
 
     try {
@@ -831,7 +838,7 @@ export default function App() {
         
         {/* If USER is logged in, replace anonymous views with role-specified interior dashboard panel! */}
         {currentUser ? (
-          <div className="space-y-8 animate-in fade-in duration-300">
+          <div className="space-y-8">
             {/* Global Bulletins Notice board for all authenticated segments */}
             <NoticeBoard user={currentUser} />
 
@@ -1116,17 +1123,38 @@ export default function App() {
                   <p>{t("No matching verified documents found in Sristy Education database. Refine your indicators or clear filter.")}</p>
                 </div>
               ) : (
-                <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 sm:gap-6">
-                  {filteredPublicArchives.map((file) => (
-                    <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
-                      <FileCard
-                        file={file}
-                        user={currentUser}
-                        onDownload={handleDownloadAttempt}
-                        onPreview={handlePreviewAttempt}
-                      />
-                    </div>
-                  ))}
+                <div className="space-y-4">
+                  <BatchDownloadBar
+                    selectedIds={selectedFileIds}
+                    allFiles={files}
+                    currentFilteredFiles={filteredPublicArchives}
+                    onSelectToggle={(id) => {
+                      setSelectedFileIds(prev =>
+                        prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+                      );
+                    }}
+                    onClearSelection={() => setSelectedFileIds([])}
+                    onSelectAll={(ids) => setSelectedFileIds(ids)}
+                  />
+
+                  <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 sm:gap-6">
+                    {filteredPublicArchives.map((file) => (
+                      <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
+                        <FileCard
+                          file={file}
+                          user={currentUser}
+                          onDownload={handleDownloadAttempt}
+                          onPreview={handlePreviewAttempt}
+                          isSelected={selectedFileIds.includes(file.id)}
+                          onSelectToggle={(id) => {
+                            setSelectedFileIds(prev =>
+                              prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+                            );
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

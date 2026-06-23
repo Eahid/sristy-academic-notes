@@ -32,6 +32,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import FileCard from './FileCard';
+import BatchDownloadBar from './BatchDownloadBar';
 import { useThemeLanguage } from './ThemeLanguageContext';
 
 interface DashboardMasterAdminProps {
@@ -60,6 +61,7 @@ export default function DashboardMasterAdmin({
   onDownload,
   onPreview,
 }: DashboardMasterAdminProps) {
+  const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [adminsList, setAdminsList] = useState<UserProfile[]>([]);
   const [loadingAdmins, setLoadingAdmins] = useState(false);
   const pendingFiles = files.filter(f => !f.isApproved && !f.isDeleted);
@@ -991,7 +993,7 @@ export default function DashboardMasterAdmin({
       </div>
 
       {/* bKash/Pathao Style Ultra-Elegant Bottom Tab Navigator for Mobile View */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 w-full z-50 bg-white dark:bg-slate-950 border-t border-gray-150 dark:border-slate-800/80 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] mt-0 pb-0 transition-colors">
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 w-full z-50 bg-white dark:bg-slate-950 border-t border-gray-150 dark:border-slate-800/80 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] mt-0 pb-safe transition-colors">
         <div className="flex justify-around items-center h-12 px-1">
           <button
             onClick={() => setActiveTab('admins')}
@@ -1141,7 +1143,7 @@ export default function DashboardMasterAdmin({
           </button>
         </div>
       </div>
-      <div className="sm:hidden h-12 mt-0 pb-0" /> {/* Prevents main layout overlap */}
+      <div className="sm:hidden h-12 pb-safe" /> {/* Prevents main layout overlap */}
 
       {activeTab === 'admins' && (
         <div className="grid lg:grid-cols-3 gap-8 animate-in fade-in duration-200">
@@ -1599,20 +1601,41 @@ export default function DashboardMasterAdmin({
               {t("No files found. Clean start!")}
             </div>
           ) : (
-            <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 sm:gap-6">
-              {files.map((file) => (
-                <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
-                  <FileCard
-                    file={file}
-                    user={user}
-                    onDownload={onDownload}
-                    onPreview={onPreview}
-                    onApprove={onFileApprove}
-                    onReject={onFileReject}
-                    onDelete={onFileDelete}
-                  />
-                </div>
-              ))}
+            <div className="space-y-4">
+              <BatchDownloadBar
+                selectedIds={selectedFileIds}
+                allFiles={files}
+                currentFilteredFiles={files}
+                onSelectToggle={(id) => {
+                  setSelectedFileIds(prev =>
+                    prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+                  );
+                }}
+                onClearSelection={() => setSelectedFileIds([])}
+                onSelectAll={(ids) => setSelectedFileIds(ids)}
+              />
+
+              <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 sm:gap-6">
+                {files.map((file) => (
+                  <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
+                    <FileCard
+                      file={file}
+                      user={user}
+                      onDownload={onDownload}
+                      onPreview={onPreview}
+                      onApprove={onFileApprove}
+                      onReject={onFileReject}
+                      onDelete={onFileDelete}
+                      isSelected={selectedFileIds.includes(file.id)}
+                      onSelectToggle={(id) => {
+                        setSelectedFileIds(prev =>
+                          prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+                        );
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

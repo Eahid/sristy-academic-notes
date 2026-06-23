@@ -3,6 +3,7 @@ import { FileArchive, UserProfile } from '../types';
 import { useBranchSubject } from './BranchSubjectContext';
 import { Search, SlidersHorizontal, BookOpen, School, FileCheck, CheckCircle2, ChevronDown } from 'lucide-react';
 import FileCard from './FileCard';
+import BatchDownloadBar from './BatchDownloadBar';
 import { useThemeLanguage } from './ThemeLanguageContext';
 
 interface DashboardViewerProps {
@@ -13,6 +14,7 @@ interface DashboardViewerProps {
 }
 
 export default function DashboardViewer({ user, files, onDownload, onPreview }: DashboardViewerProps) {
+  const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
@@ -128,6 +130,21 @@ export default function DashboardViewer({ user, files, onDownload, onPreview }: 
           </span>
         </div>
 
+        {filteredArchives.length > 0 && (
+          <BatchDownloadBar
+            selectedIds={selectedFileIds}
+            allFiles={files}
+            currentFilteredFiles={filteredArchives}
+            onSelectToggle={(id) => {
+              setSelectedFileIds(prev =>
+                prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+              );
+            }}
+            onClearSelection={() => setSelectedFileIds([])}
+            onSelectAll={(ids) => setSelectedFileIds(ids)}
+          />
+        )}
+
         {filteredArchives.length === 0 ? (
           <div className="text-center py-16 text-gray-400 dark:text-gray-500 space-y-2">
             <FileCheck className="w-12 h-12 mx-auto opacity-50 stroke-1" />
@@ -142,6 +159,12 @@ export default function DashboardViewer({ user, files, onDownload, onPreview }: 
                 user={user}
                 onDownload={onDownload}
                 onPreview={onPreview}
+                isSelected={selectedFileIds.includes(file.id)}
+                onSelectToggle={(id) => {
+                  setSelectedFileIds(prev =>
+                    prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+                  );
+                }}
               />
             ))}
           </div>

@@ -14,7 +14,8 @@ import {
   Eye,
   XCircle,
   X,
-  ChevronUp
+  ChevronUp,
+  ArrowLeft
 } from 'lucide-react';
 import { useThemeLanguage } from './ThemeLanguageContext';
 
@@ -24,12 +25,14 @@ interface FileCardProps {
   onDownload: (file: FileArchive) => void;
   onPreview?: (file: FileArchive) => void;
   onApprove?: (fileId: string) => void;
-  onReject?: (fileId: string) => void;
+  onReject?: (fileId: string, reason?: string) => void;
   onDelete?: (fileId: string) => void;
+  isSelected?: boolean;
+  onSelectToggle?: (fileId: string) => void;
   key?: string | number;
 }
 
-export default function FileCard({ file, user, onDownload, onPreview, onApprove, onReject, onDelete }: FileCardProps) {
+export default function FileCard({ file, user, onDownload, onPreview, onApprove, onReject, onDelete, isSelected, onSelectToggle }: FileCardProps) {
   const { t } = useThemeLanguage();
 
   // Determine relevant icon of the premium list
@@ -59,6 +62,8 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
   const isApproved = file.isApproved;
 
   const [showReviewPanel, setShowReviewPanel] = useState(false);
+  const [localRejectionReason, setLocalRejectionReason] = useState('');
+  const [isRejectingMode, setIsRejectingMode] = useState(false);
 
   const isSuperOrMaster = user?.role === 'super_admin' || user?.role === 'master_admin';
   const isFileApprover = user?.role === 'file_approver';
@@ -72,14 +77,25 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -15 }}
       whileHover={{ y: -4, transition: { duration: 0.2 } }}
-      className="bg-white dark:bg-slate-900 rounded-xl shadow-xs border border-gray-100 dark:border-slate-800 hover:border-brand-200 dark:hover:border-slate-700 transition-all duration-300 flex flex-col justify-between overflow-hidden file-card text-left" 
+      className={`bg-white dark:bg-slate-900 rounded-xl shadow-xs border ${isSelected ? 'border-brand-500 dark:border-brand-500 ring-2 ring-brand-500/30' : 'border-gray-100 dark:border-slate-800'} hover:border-brand-200 dark:hover:border-slate-700 transition-all duration-300 flex flex-col justify-between overflow-hidden file-card text-left`} 
       id={`file-card-${file.id}`}
     >
       <div className="p-5">
         {/* Header Metadata */}
         <div className="flex justify-between items-start mb-3">
-          <div className="p-2 sm:p-2.5 rounded-lg bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-slate-700">
-            {getFileIcon(file.fileType)}
+          <div className="flex items-center gap-3">
+            {onSelectToggle && (
+              <input
+                type="checkbox"
+                checked={isSelected || false}
+                onChange={() => onSelectToggle(file.id)}
+                className="w-4 h-4 rounded border-gray-300 dark:border-slate-700 text-brand-600 dark:text-brand-500 focus:ring-brand-500 cursor-pointer accent-brand-500 shrink-0"
+                id={`file-select-checkbox-${file.id}`}
+              />
+            )}
+            <div className="p-2 sm:p-2.5 rounded-lg bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-slate-700">
+              {getFileIcon(file.fileType)}
+            </div>
           </div>
           <div className="flex flex-col items-end gap-1.5">
             <span className="text-[10px] font-mono tracking-wider font-semibold uppercase bg-gray-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-gray-600 dark:text-gray-300">
@@ -211,101 +227,221 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
         </button>
       </div>
 
-      {/* Sliding Action Panel for Managers / Approvers / Admins */}
-      <motion.div
-        initial={{ y: "100%" }}
-        animate={{ y: showReviewPanel ? 0 : "100%" }}
-        transition={{ type: "spring", damping: 26, stiffness: 220 }}
-        className="absolute inset-0 bg-slate-900/98 dark:bg-slate-950/98 backdrop-blur-md z-30 p-5 flex flex-col justify-between text-white rounded-xl overflow-hidden"
-      >
-        <div className="flex flex-col gap-3 min-h-0 overflow-y-auto">
-          <div className="flex justify-between items-center pb-2 border-b border-white/10">
-            <h4 className="font-extrabold text-xs uppercase tracking-widest text-[#22c55e] flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-[#22c55e]" />
-              <span>{t("Review Material")}</span>
-            </h4>
-            <button 
-              onClick={() => setShowReviewPanel(false)}
-              className="p-1 px-2 bg-white/10 hover:bg-white/20 rounded-lg text-gray-200 hover:text-white transition-colors cursor-pointer text-[10px] uppercase font-bold flex items-center gap-1"
-            >
-              <span>{t("Close")}</span>
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className="bg-white/5 border border-white/10 p-3 rounded-lg space-y-1.5">
-            <p className="text-[9px] text-gray-400 uppercase font-bold tracking-wider">{t("Document Name")}</p>
-            <p className="text-xs font-bold text-gray-100 truncate" title={file.fileName}>{file.fileName}</p>
-            <div className="flex gap-1.5 items-center mt-1 flex-wrap">
-              <span className="text-[9px] bg-white/10 text-gray-300 font-mono px-1.5 py-0.5 rounded font-bold uppercase">{file.fileType}</span>
-              <span className="text-[9px] bg-emerald-950/80 text-emerald-300 px-1.5 py-0.5 rounded font-bold uppercase">{t(file.subject)}</span>
-              <span className="text-[9px] bg-blue-950/80 text-blue-300 px-1.5 py-0.5 rounded font-bold uppercase">{t(file.branch)}</span>
+      {/* High-Fidelity Centered Review & Action Modal (For Admins/Approvers) */}
+      {showReviewPanel && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md overflow-hidden select-none">
+          <motion.div
+            initial={{ scale: 0.95, y: 15, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            exit={{ scale: 0.95, y: 15, opacity: 0 }}
+            className="relative bg-white dark:bg-slate-900 border border-gray-250 dark:border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6 flex flex-col gap-4 text-gray-900 dark:text-gray-100 max-h-[85vh]"
+          >
+            {/* Modal Header */}
+            <div className="flex justify-between items-center pb-3 border-b border-gray-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-emerald-500" />
+                <h3 className="font-extrabold text-sm uppercase tracking-wider text-gray-800 dark:text-gray-100">
+                  {isRejectingMode ? t("Provide Rejection Reason") : t("Verify Study Material")}
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowReviewPanel(false);
+                  setIsRejectingMode(false);
+                  setLocalRejectionReason('');
+                }}
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 transition-colors cursor-pointer"
+                aria-label="Close dialog"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-          </div>
+
+            {/* Modal Content container (scrollable if needed) */}
+            <div className="overflow-y-auto space-y-4 py-2 pr-1 flex-1 max-h-[50vh] scrollbar-none">
+              {!isRejectingMode ? (
+                <>
+                  {/* File card Details overview inside modal */}
+                  <div className="bg-gray-50 dark:bg-slate-950/50 border border-gray-100 dark:border-slate-800 p-4 rounded-xl space-y-2.5 text-left">
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">{t("Document Name")}</p>
+                      <p className="text-sm font-bold text-gray-800 dark:text-gray-100 break-words">{file.fileName}</p>
+                    </div>
+
+                    {file.description && (
+                      <div>
+                        <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">{t("Description")}</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-300 break-words">{file.description}</p>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap gap-2 pt-1 border-t border-gray-100 dark:border-slate-800">
+                      <span className="text-[10px] bg-gray-150 dark:bg-slate-800 text-gray-700 dark:text-gray-300 font-mono px-2 py-0.5 rounded-full font-semibold uppercase">{file.fileType}</span>
+                      <span className="text-[10px] bg-[#15803d]/10 text-[#15803d] dark:text-[#22c55e] px-2 py-0.5 rounded-full font-semibold">{t(file.subject)}</span>
+                      <span className="text-[10px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full font-semibold">{t(file.branch)}</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 pt-2 text-[11px] text-gray-500 dark:text-gray-400">
+                      <div>
+                        <span className="block text-[9px] uppercase font-bold text-gray-400">{t("Uploaded By")}</span>
+                        <span className="font-semibold text-gray-700 dark:text-gray-300 truncate block">{file.uploaderName}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[9px] uppercase font-bold text-gray-400">{t("File Size")}</span>
+                        <span className="font-semibold text-gray-700 dark:text-gray-300">{formatSize(file.fileSize)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Open Preview Button inside modal */}
+                  {['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes(file.fileType.toLowerCase()) && (
+                    <button
+                      onClick={() => {
+                        if (onPreview) onPreview(file);
+                        setShowReviewPanel(false);
+                      }}
+                      className="w-full bg-[#15803d]/10 hover:bg-[#15803d]/20 text-[#15803d] dark:text-[#22c55e] border border-emerald-100 dark:border-emerald-900/30 py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-xs shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>{t("Open Live Preview")}</span>
+                    </button>
+                  )}
+                </>
+              ) : (
+                /* Rejection Reason Input Field screen */
+                <div className="space-y-3.5 text-left">
+                  <div className="bg-amber-100/10 dark:bg-amber-500/5 border border-amber-500/10 p-3 rounded-lg flex items-start gap-2.5">
+                    <Clock className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                      {t("This submission will be deleted, and dynamic feedback logs will be cataloged for the uploader review.")}
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-extrabold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      {t("Reason for Rejection *")}
+                    </label>
+                    <textarea
+                      value={localRejectionReason}
+                      onChange={(e) => setLocalRejectionReason(e.target.value)}
+                      placeholder={t("Please specify why this material is rejected (e.g., Blur, incomplete notes, wrong chapter assignment)...")}
+                      rows={4}
+                      className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 p-3.5 rounded-xl text-xs text-gray-900 dark:text-gray-150 focus:outline-hidden focus:ring-1 focus:ring-red-500 transition-all font-medium"
+                      required
+                    />
+                  </div>
+
+                  {/* Suggest Quick-Tap template cards */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] uppercase font-bold text-gray-400 block">{t("Tap preset feedback templates")}:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        t("Imprecise notes - Content blurry or unreadable"),
+                        t("Incorrect subject or branch directory category"),
+                        t("Incomplete file or chapters missing critical details"),
+                        t("Duplicate submission with low-quality metadata")
+                      ].map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setLocalRejectionReason(preset)}
+                          className="text-[11px] bg-gray-50 hover:bg-gray-100 dark:bg-slate-800 dark:hover:bg-slate-750 text-gray-600 dark:text-gray-300 py-1.5 px-3.5 rounded-lg border border-gray-150 dark:border-slate-700 text-left transition-all font-medium cursor-pointer"
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Bottom Actions (Comfortable larger tap touch targets) */}
+            <div className="pt-3 border-t border-gray-100 dark:border-slate-800 flex flex-col gap-2.5">
+              {!isRejectingMode ? (
+                <>
+                  <div className="flex gap-2.5 w-full">
+                    <button
+                      onClick={() => setShowReviewPanel(false)}
+                      className="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 py-3 rounded-xl font-bold text-xs select-none shadow-xs transition-colors cursor-pointer"
+                    >
+                      {t("Close")}
+                    </button>
+
+                    {/* Approve Action */}
+                    {!isApproved && onApprove && canApproveOrReject && (
+                      <button
+                        onClick={() => {
+                          onApprove(file.id);
+                          setShowReviewPanel(false);
+                        }}
+                        className="flex-1 bg-[#15803d] hover:bg-[#166534] text-white py-3 rounded-xl font-extrabold text-xs select-none shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <ShieldCheck className="w-4 h-4 shrink-0" />
+                        <span>{t("APPROVE & PUBLISH")}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Reject Action Trigger */}
+                  {onReject && canApproveOrReject && (
+                    <button
+                      onClick={() => setIsRejectingMode(true)}
+                      className="w-full bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:hover:bg-red-950/30 text-red-600 dark:text-red-400 border border-red-150 dark:border-red-900/40 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 select-none shadow-xs transition-all cursor-pointer"
+                    >
+                      <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+                      <span>{t("REJECT SUBMISSION")}</span>
+                    </button>
+                  )}
+
+                  {/* Trash Bin Delete for Super/Master Admins */}
+                  {isSuperOrMaster && onDelete && (
+                    <button
+                      onClick={() => {
+                        if (window.confirm(t("Delete this file permanently?"))) {
+                          onDelete(file.id);
+                          setShowReviewPanel(false);
+                        }
+                      }}
+                      className="w-full bg-gray-50 hover:bg-red-50 dark:bg-slate-950/40 dark:hover:bg-red-950/10 text-gray-500 hover:text-red-500 py-2.5 rounded-xl font-semibold text-[11px] border border-gray-150 dark:border-slate-800 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                      <span>{t("DELETE HISTORIC RECORD")}</span>
+                    </button>
+                  )}
+                </>
+              ) : (
+                /* Rejection Modal Actions */
+                <div className="flex gap-2.5 w-full">
+                  <button
+                    onClick={() => {
+                      setIsRejectingMode(false);
+                      setLocalRejectionReason('');
+                    }}
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 select-none transition-colors cursor-pointer"
+                  >
+                    <ArrowLeft className="w-4 h-4 shrink-0" />
+                    <span>{t("Back")}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      onReject(file.id, localRejectionReason.trim() || t("Unspecified custom reason"));
+                      setShowReviewPanel(false);
+                      setIsRejectingMode(false);
+                      setLocalRejectionReason('');
+                    }}
+                    className="flex-1 bg-red-650 hover:bg-red-700 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 select-none shadow-md transition-all cursor-pointer"
+                  >
+                    <XCircle className="w-4 h-4 shrink-0" />
+                    <span>{t("Confirm Rejection")}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </motion.div>
         </div>
-
-        <div className="flex flex-col gap-2 mt-3 select-none">
-          {/* Live Preview Button */}
-          {['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes(file.fileType.toLowerCase()) && (
-            <button
-              onClick={() => {
-                if (onPreview) onPreview(file);
-                setShowReviewPanel(false);
-              }}
-              className="w-full bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2 text-xs border border-white/10 shadow-xs transition-colors cursor-pointer"
-            >
-              <Eye className="w-4 h-4 text-[#22c55e]" />
-              <span>{t("Open Document Preview")}</span>
-            </button>
-          )}
-
-          {/* Approve Button */}
-          {!isApproved && onApprove && canApproveOrReject && (
-            <button
-              onClick={() => {
-                onApprove(file.id);
-                setShowReviewPanel(false);
-              }}
-              className="w-full bg-[#15803d] hover:bg-[#166534] active:bg-emerald-800 text-white py-2.5 rounded-lg font-extrabold flex items-center justify-center gap-2 text-xs shadow-md transition-all cursor-pointer"
-            >
-              <ShieldCheck className="w-4 h-4" />
-              <span>{t("APPROVE & PUBLISH")}</span>
-            </button>
-          )}
-
-          {/* Reject Button */}
-          {onReject && canApproveOrReject && (
-            <button
-              onClick={() => {
-                if (window.confirm(t("Are you sure you want to REJECT and delete this material?"))) {
-                  onReject(file.id);
-                  setShowReviewPanel(false);
-                }
-              }}
-              className="w-full bg-red-650 hover:bg-red-700 active:bg-red-800 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2 text-xs shadow-xs transition-colors cursor-pointer"
-            >
-              <XCircle className="w-4 h-4" />
-              <span>{t("REJECT SUBMISSION")}</span>
-            </button>
-          )}
-
-          {/* Trash Bin Delete (Master/Super Admins only) */}
-          {isSuperOrMaster && onDelete && (
-            <button
-              onClick={() => {
-                if (window.confirm(t("Delete this file permanently?"))) {
-                  onDelete(file.id);
-                  setShowReviewPanel(false);
-                }
-              }}
-              className="w-full bg-black/40 hover:bg-red-950/40 text-red-400 py-1.5 rounded-lg font-medium flex items-center justify-center gap-1.5 text-[10px] border border-white/5 transition-colors cursor-pointer"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>{t("DELETE HISTORIC RECORD")}</span>
-            </button>
-          )}
-        </div>
-      </motion.div>
+      )}
     </motion.div>
   );
 }

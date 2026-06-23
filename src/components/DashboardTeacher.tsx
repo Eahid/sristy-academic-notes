@@ -5,6 +5,7 @@ import { db, storage } from '../firebase';
 import { UserProfile, FileArchive } from '../types';
 import { Upload, CheckCircle2, AlertCircle, Sparkles, FolderLock, Globe, BookOpen, Layers, ChevronDown, Loader2, Bell, AlertTriangle, Calendar, X } from 'lucide-react';
 import FileCard from './FileCard';
+import BatchDownloadBar from './BatchDownloadBar';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import { useBranchSubject } from './BranchSubjectContext';
 
@@ -25,6 +26,7 @@ export default function DashboardTeacher({
   onDownload,
   onPreview
 }: DashboardTeacherProps) {
+  const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [description, setDescription] = useState('');
   const [isDragActive, setIsDragActive] = useState(false);
@@ -747,18 +749,39 @@ export default function DashboardTeacher({
                 {t("No files found. Clean start!")}
               </div>
             ) : (
-              <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 sm:gap-6">
-                {myUploadedFiles.map((file) => (
-                  <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
-                    <FileCard
-                      file={file}
-                      user={user}
-                      onDownload={onDownload}
-                      onPreview={onPreview}
-                      onDelete={onFileDelete}
-                    />
-                  </div>
-                ))}
+              <div className="space-y-4">
+                <BatchDownloadBar
+                  selectedIds={selectedFileIds}
+                  allFiles={files}
+                  currentFilteredFiles={myUploadedFiles}
+                  onSelectToggle={(id) => {
+                    setSelectedFileIds(prev =>
+                      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+                    );
+                  }}
+                  onClearSelection={() => setSelectedFileIds([])}
+                  onSelectAll={(ids) => setSelectedFileIds(ids)}
+                />
+                
+                <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 sm:gap-6">
+                  {myUploadedFiles.map((file) => (
+                    <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
+                      <FileCard
+                        file={file}
+                        user={user}
+                        onDownload={onDownload}
+                        onPreview={onPreview}
+                        onDelete={onFileDelete}
+                        isSelected={selectedFileIds.includes(file.id)}
+                        onSelectToggle={(id) => {
+                          setSelectedFileIds(prev =>
+                            prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+                          );
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

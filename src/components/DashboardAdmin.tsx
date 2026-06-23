@@ -26,6 +26,7 @@ import {
   Clock
 } from 'lucide-react';
 import FileCard from './FileCard';
+import BatchDownloadBar from './BatchDownloadBar';
 import { useThemeLanguage } from './ThemeLanguageContext';
 
 interface DashboardAdminProps {
@@ -51,6 +52,7 @@ export default function DashboardAdmin({
   onDownload,
   onPreview
 }: DashboardAdminProps) {
+  const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [teachersList, setTeachersList] = useState<UserProfile[]>([]);
   const [loadingTeachers, setLoadingTeachers] = useState(false);
 
@@ -578,7 +580,7 @@ export default function DashboardAdmin({
       {/* bKash/Pathao Style Ultra-Elegant Bottom Tab Navigator for Mobile View */}
       {user.role !== 'file_approver' && (
         <>
-          <div className="sm:hidden fixed bottom-0 left-0 right-0 w-full z-50 bg-white dark:bg-slate-950 border-t border-gray-150 dark:border-slate-800/80 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] mt-0 pb-0 transition-colors">
+          <div className="sm:hidden fixed bottom-0 left-0 right-0 w-full z-50 bg-white dark:bg-slate-950 border-t border-gray-150 dark:border-slate-800/80 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] mt-0 pb-safe transition-colors">
             <div className="flex justify-around items-center h-12">
               <button
                 onClick={() => setActiveTab('teachers')}
@@ -691,7 +693,7 @@ export default function DashboardAdmin({
               </button>
             </div>
           </div>
-          <div className="sm:hidden h-12 mt-0 pb-0" /> {/* Prevents main layout overlap */}
+          <div className="sm:hidden h-12 pb-safe" /> {/* Prevents main layout overlap */}
         </>
       )}
 
@@ -1007,20 +1009,41 @@ export default function DashboardAdmin({
               {fileFilter === 'pending' ? t("Hurrah! No pending approvals found in Sristy vault.") : t("No files found. Clean start!")}
             </div>
           ) : (
-            <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 sm:gap-6">
-              {displayFiles.map((file) => (
-                <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
-                  <FileCard
-                    file={file}
-                    user={user}
-                    onDownload={onDownload}
-                    onPreview={onPreview}
-                    onApprove={onFileApprove}
-                    onReject={onFileReject}
-                    onDelete={onFileDelete}
-                  />
-                </div>
-              ))}
+            <div className="space-y-4">
+              <BatchDownloadBar
+                selectedIds={selectedFileIds}
+                allFiles={files}
+                currentFilteredFiles={displayFiles}
+                onSelectToggle={(id) => {
+                  setSelectedFileIds(prev =>
+                    prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+                  );
+                }}
+                onClearSelection={() => setSelectedFileIds([])}
+                onSelectAll={(ids) => setSelectedFileIds(ids)}
+              />
+
+              <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 sm:gap-6">
+                {displayFiles.map((file) => (
+                  <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
+                    <FileCard
+                      file={file}
+                      user={user}
+                      onDownload={onDownload}
+                      onPreview={onPreview}
+                      onApprove={onFileApprove}
+                      onReject={onFileReject}
+                      onDelete={onFileDelete}
+                      isSelected={selectedFileIds.includes(file.id)}
+                      onSelectToggle={(id) => {
+                        setSelectedFileIds(prev =>
+                          prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+                        );
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

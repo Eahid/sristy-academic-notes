@@ -27,7 +27,7 @@ interface DocPreviewModalProps {
   onDownload: (file: FileArchive) => void;
   user?: UserProfile | null;
   onApprove?: (fileId: string) => void;
-  onReject?: (fileId: string) => void;
+  onReject?: (fileId: string, reason?: string) => void;
 }
 
 type ViewerEngine = 'native' | 'google-docs' | 'ms-office' | 'simulated';
