@@ -13,6 +13,7 @@ interface NavbarProps {
 export default function Navbar({ user, onLogout, onOpenProfile, onTriggerAuth }: NavbarProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [logoFailed, setLogoFailed] = useState(false);
   const { language, setLanguage, theme, toggleTheme, t } = useThemeLanguage();
 
   return (
@@ -22,20 +23,27 @@ export default function Navbar({ user, onLogout, onOpenProfile, onTriggerAuth }:
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 sm:h-20">
           {/* Sristy Logo Branding */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <div className="flex items-center justify-center shrink-0">
-              <img 
-                src="https://sristy.edu.bd/wp-content/uploads/2018/12/Sristy.png.webp" 
-                alt="Sristy Logo" 
-                className="w-10 h-10 object-contain sm:w-12 sm:h-12 filter drop-shadow-xs"
-                referrerPolicy="no-referrer"
-              />
+              {logoFailed ? (
+                <div className="w-8 h-8 sm:w-11 sm:h-11 rounded-lg bg-brand-100 dark:bg-slate-800 flex items-center justify-center text-brand-600 dark:text-brand-400">
+                  <School className="w-5 h-5 sm:w-6 sm:h-6" />
+                </div>
+              ) : (
+                <img 
+                  src="https://sristy.edu.bd/wp-content/uploads/2018/12/Sristy.png.webp" 
+                  alt="Sristy Logo" 
+                  className="w-8 h-8 sm:w-12 sm:h-12 object-contain filter drop-shadow-xs"
+                  referrerPolicy="no-referrer"
+                  onError={() => setLogoFailed(true)}
+                />
+              )}
             </div>
-            <div>
-              <span className="font-bold text-xs sm:text-sm text-brand-500 block uppercase tracking-wider font-display leading-tight">
+            <div className="min-w-0">
+              <span className="font-bold text-[10px] min-[375px]:text-xs sm:text-sm text-brand-500 block uppercase tracking-wider font-display leading-tight truncate">
                 {t("Sristy Education Family")}
               </span>
-              <span className="font-bold text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 tracking-tight block uppercase leading-none mt-0.5">
+              <span className="font-bold text-[8px] min-[375px]:text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 tracking-tight block uppercase leading-none mt-0.5 truncate">
                 {t("Note's Sector")}
               </span>
             </div>
@@ -126,7 +134,7 @@ export default function Navbar({ user, onLogout, onOpenProfile, onTriggerAuth }:
             ) : (
               <button 
                 onClick={onTriggerAuth}
-                className="bg-brand-500 hover:bg-brand-600 text-white font-semibold text-xs px-5 py-2.5 rounded-lg shadow-sm hover:shadow transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="bg-brand-500 hover:bg-brand-600 active:scale-98 text-white font-semibold text-xs px-5 py-2.5 rounded-lg shadow-sm hover:shadow transition-all flex items-center gap-1.5 cursor-pointer select-none"
               >
                 <Sparkles className="w-3.5 h-3.5 animate-pulse" />
                 <span>{t("Sign In / Log In")}</span>
@@ -135,14 +143,22 @@ export default function Navbar({ user, onLogout, onOpenProfile, onTriggerAuth }:
           </div>
 
           {/* Handheld Mobile Hamburger Trigger */}
-          <div className="md:hidden flex items-center gap-2">
-
+          <div className="md:hidden flex items-center gap-1 min-[375px]:gap-2">
+            {!user && (
+              <button 
+                onClick={onTriggerAuth}
+                className="bg-brand-500 hover:bg-brand-600 active:scale-95 text-white font-bold text-[10px] min-[375px]:text-xs px-2 py-1 min-[375px]:px-3 min-[375px]:py-1.5 rounded-lg shadow-xs transition-all flex items-center gap-1 cursor-pointer mr-0.5 select-none shrink-0"
+              >
+                <Sparkles className="w-3 h-3 animate-pulse shrink-0 hidden min-[400px]:inline-block" />
+                <span>{t("Sign In")}</span>
+              </button>
+            )}
 
             <button 
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="text-gray-500 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white p-2 focus:outline-none"
+              className="text-gray-500 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white p-1 min-[375px]:p-2 focus:outline-none cursor-pointer"
             >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              {mobileMenuOpen ? <X className="w-5 h-5 min-[375px]:w-6 min-[375px]:h-6" /> : <Menu className="w-5 h-5 min-[375px]:w-6 min-[375px]:h-6" />}
             </button>
           </div>
         </div>

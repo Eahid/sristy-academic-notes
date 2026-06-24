@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { safeLocalStorage } from '../utils';
 
 type Language = 'en' | 'bn';
 type Theme = 'light' | 'dark';
@@ -427,7 +428,7 @@ export const translations: Record<string, string> = {
 
 export const ThemeLanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguage] = useState<Language>(() => {
-    return (localStorage.getItem('app-language') as Language) || 'en';
+    return (safeLocalStorage.getItem('app-language') as Language) || 'en';
   });
 
   const [theme, setTheme] = useState<Theme>('light');
@@ -436,11 +437,11 @@ export const ThemeLanguageProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     const root = window.document.documentElement;
     root.classList.remove('dark');
-    localStorage.setItem('app-theme', 'light');
+    safeLocalStorage.setItem('app-theme', 'light');
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('app-language', language);
+    safeLocalStorage.setItem('app-language', language);
   }, [language]);
 
   const toggleTheme = () => {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { collection, getDocs, doc, setDoc, query, where, updateDoc, serverTimestamp, onSnapshot, orderBy } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import { db, createSecondaryUser } from '../firebase';
@@ -39,6 +40,7 @@ interface DashboardAdminProps {
   onFileRestore: (fileId: string) => void;
   onDownload: (file: FileArchive) => void;
   onPreview?: (file: FileArchive) => void;
+  onViewTeacherDetails?: (teacherUid: string) => void;
 }
 
 export default function DashboardAdmin({
@@ -50,7 +52,8 @@ export default function DashboardAdmin({
   onFileDelete,
   onFileRestore,
   onDownload,
-  onPreview
+  onPreview,
+  onViewTeacherDetails
 }: DashboardAdminProps) {
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [teachersList, setTeachersList] = useState<UserProfile[]>([]);
@@ -72,6 +75,8 @@ export default function DashboardAdmin({
   // Password resets
   const [resettingUid, setResettingUid] = useState<string | null>(null);
   const [newPasswordVal, setNewPasswordVal] = useState('');
+  const [expandedLogs, setExpandedLogs] = useState<Record<string, boolean>>({});
+  const [expandedTeacherId, setExpandedTeacherId] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'teachers' | 'files' | 'trash_bin' | 'curriculum' | 'activity_logs'>(
     user.role === 'file_approver' ? 'files' : 'teachers'
@@ -578,123 +583,121 @@ export default function DashboardAdmin({
       )}
 
       {/* bKash/Pathao Style Ultra-Elegant Bottom Tab Navigator for Mobile View */}
-      {user.role !== 'file_approver' && (
-        <>
-          <div className="sm:hidden fixed bottom-0 left-0 right-0 w-full z-50 bg-white dark:bg-slate-950 border-t border-gray-150 dark:border-slate-800/80 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] mt-0 pb-safe transition-colors">
-            <div className="flex justify-around items-center h-12">
-              <button
-                onClick={() => setActiveTab('teachers')}
-                className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
-              >
-                <div className={`transition-all duration-300 ${
-                  activeTab === 'teachers' 
-                    ? 'text-[#15803d]' 
-                    : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
-                }`}>
-                  <Users className="w-5 h-5" />
-                </div>
-                <span className={`text-[10px] font-bold tracking-tight transition-all duration-300 ${
-                  activeTab === 'teachers' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
-                }`}>
-                  {t("Members")}
-                </span>
-                {activeTab === 'teachers' && (
-                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full animate-pulse" />
-                )}
-              </button>
+      {user.role !== 'file_approver' && ReactDOM.createPortal(
+        <div className="sm:hidden fixed bottom-0 left-0 right-0 w-full z-[9999] bg-white dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800 transition-colors" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <div className="flex justify-around items-center h-12">
+            <button
+              onClick={() => setActiveTab('teachers')}
+              className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
+            >
+              <div className={`transition-all duration-300 ${
+                activeTab === 'teachers' 
+                  ? 'text-[#15803d]' 
+                  : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
+              }`}>
+                <Users className="w-5 h-5" />
+              </div>
+              <span className={`text-[10px] font-bold tracking-tight transition-all duration-300 ${
+                activeTab === 'teachers' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
+              }`}>
+                {t("Members")}
+              </span>
+              {activeTab === 'teachers' && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full animate-pulse" />
+              )}
+            </button>
 
-              <button
-                onClick={() => setActiveTab('files')}
-                className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
-              >
-                <div className={`transition-all duration-300 relative ${
-                  activeTab === 'files' 
-                    ? 'text-[#15803d]' 
-                    : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
-                }`}>
-                  <FileText className="w-5 h-5" />
-                  {filteredFiles.length > 0 && (
-                    <span className="absolute -top-1 -right-2 bg-[#15803d] text-white text-[9px] font-bold h-4 w-4 flex items-center justify-center rounded-full border border-white dark:border-slate-900 animate-pulse">
-                      {filteredFiles.length}
-                    </span>
-                  )}
-                </div>
-                <span className={`text-[10px] font-bold tracking-tight transition-all duration-300 ${
-                  activeTab === 'files' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
-                }`}>
-                  {t("Verify")}
-                </span>
-                {activeTab === 'files' && (
-                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full animate-pulse" />
+            <button
+              onClick={() => setActiveTab('files')}
+              className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
+            >
+              <div className={`transition-all duration-300 relative ${
+                activeTab === 'files' 
+                  ? 'text-[#15803d]' 
+                  : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
+              }`}>
+                <FileText className="w-5 h-5" />
+                {filteredFiles.length > 0 && (
+                  <span className="absolute -top-1 -right-2 bg-[#15803d] text-white text-[9px] font-bold h-4 w-4 flex items-center justify-center rounded-full border border-white dark:border-slate-900 animate-pulse">
+                    {filteredFiles.length}
+                  </span>
                 )}
-              </button>
+              </div>
+              <span className={`text-[10px] font-bold tracking-tight transition-all duration-300 ${
+                activeTab === 'files' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
+              }`}>
+                {t("Verify")}
+              </span>
+              {activeTab === 'files' && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full animate-pulse" />
+              )}
+            </button>
 
-              <button
-                onClick={() => setActiveTab('curriculum')}
-                className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
-              >
-                <div className={`transition-all duration-300 ${
-                  activeTab === 'curriculum' 
-                    ? 'text-[#15803d]' 
-                    : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
-                }`}>
-                  <FolderTree className="w-5 h-5" />
-                </div>
-                <span className={`text-[10px] font-bold tracking-tight transition-all duration-300 ${
-                  activeTab === 'curriculum' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
-                }`}>
-                  {t("Curriculum")}
-                </span>
-                {activeTab === 'curriculum' && (
-                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full animate-pulse" />
-                )}
-              </button>
+            <button
+              onClick={() => setActiveTab('curriculum')}
+              className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
+            >
+              <div className={`transition-all duration-300 ${
+                activeTab === 'curriculum' 
+                  ? 'text-[#15803d]' 
+                  : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
+              }`}>
+                <FolderTree className="w-5 h-5" />
+              </div>
+              <span className={`text-[10px] font-bold tracking-tight transition-all duration-300 ${
+                activeTab === 'curriculum' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
+              }`}>
+                {t("Curriculum")}
+              </span>
+              {activeTab === 'curriculum' && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full animate-pulse" />
+              )}
+            </button>
 
-              <button
-                onClick={() => setActiveTab('trash_bin')}
-                className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
-              >
-                <div className={`transition-all duration-300 relative ${
-                  activeTab === 'trash_bin' 
-                    ? 'text-[#15803d]' 
-                    : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
-                }`}>
-                  <Trash2 className="w-5 h-5" />
-                </div>
-                <span className={`text-[10px] font-bold tracking-tight transition-all duration-300 ${
-                  activeTab === 'trash_bin' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
-                }`}>
-                  {t("Trash")}
-                </span>
-                {activeTab === 'trash_bin' && (
-                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full" />
-                )}
-              </button>
+            <button
+              onClick={() => setActiveTab('trash_bin')}
+              className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
+            >
+              <div className={`transition-all duration-300 relative ${
+                activeTab === 'trash_bin' 
+                  ? 'text-[#15803d]' 
+                  : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
+              }`}>
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <span className={`text-[10px] font-bold tracking-tight transition-all duration-300 ${
+                activeTab === 'trash_bin' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
+              }`}>
+                {t("Trash")}
+              </span>
+              {activeTab === 'trash_bin' && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full" />
+              )}
+            </button>
 
-              <button
-                onClick={() => setActiveTab('activity_logs')}
-                className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
-              >
-                <div className={`transition-all duration-300 relative ${
-                  activeTab === 'activity_logs' 
-                    ? 'text-[#15803d]' 
-                    : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
-                }`}>
-                  <History className="w-5 h-5" />
-                </div>
-                <span className={`text-[10px] font-bold tracking-tight transition-all duration-300 ${
-                  activeTab === 'activity_logs' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
-                }`}>
-                  {t("Logs")}
-                </span>
-                {activeTab === 'activity_logs' && (
-                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full" />
-                )}
-              </button>
-            </div>
+            <button
+              onClick={() => setActiveTab('activity_logs')}
+              className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
+            >
+              <div className={`transition-all duration-300 relative ${
+                activeTab === 'activity_logs' 
+                  ? 'text-[#15803d]' 
+                  : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
+              }`}>
+                <History className="w-5 h-5" />
+              </div>
+              <span className={`text-[10px] font-bold tracking-tight transition-all duration-300 ${
+                activeTab === 'activity_logs' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
+              }`}>
+                {t("Logs")}
+              </span>
+              {activeTab === 'activity_logs' && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#15803d] rounded-full" />
+              )}
+            </button>
           </div>
-          <div className="sm:hidden h-12 pb-safe" /> {/* Prevents main layout overlap */}
-        </>
+        </div>,
+        document.body
       )}
 
       {activeTab === 'teachers' && (
@@ -842,108 +845,499 @@ export default function DashboardAdmin({
               </span>
             </div>
 
-            <div className="flex-1 overflow-x-auto">
+            <div className="flex-1 overflow-hidden">
               {loadingTeachers ? (
                 <div className="text-center py-12 text-xs text-gray-400 dark:text-gray-500">{t("Loading...")}</div>
               ) : teachersList.length === 0 ? (
                 <div className="text-center py-12 text-xs text-gray-400 dark:text-gray-500">{t("No files found. Clean start!")}</div>
               ) : (
-                <table className="w-full min-w-[600px] border-collapse text-left">
-                  <thead>
-                     <tr className="border-b border-gray-100 dark:border-slate-800 text-gray-400 dark:text-gray-500 text-[10px] font-bold uppercase tracking-wider bg-gray-50/50 dark:bg-slate-800/20">
-                      <th className="py-4 px-6">{t("Institutional Branch Member")}</th>
-                      <th className="py-4 px-6">{t("Assigned Subject Specialty")}</th>
-                      <th className="py-4 px-6">{t("Portal Key / Passwords")}</th>
-                      <th className="py-4 px-6 text-right">{t("Status & Suspend Actions")}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-105 dark:divide-slate-805 text-xs font-medium text-gray-700 dark:text-gray-300">
-                    {teachersList.map((tea) => (
-                      <tr key={tea.uid} className="hover:bg-gray-50/30 dark:hover:bg-slate-800/20 transition-colors">
-                        <td className="py-4.5 px-6">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-brand-50 dark:bg-slate-800 border border-brand-100 dark:border-slate-700 flex items-center justify-center text-brand-500 dark:text-brand-400 font-bold text-xs uppercase shrink-0">
-                              {tea.profilePic ? (
-                                <img src={tea.profilePic} alt="avatar" className="w-full h-full rounded-full object-cover" />
-                              ) : (
-                                tea.fullName.charAt(0)
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="font-bold text-gray-800 dark:text-gray-100 truncate">{tea.fullName}</p>
-                              <p className="text-[10px] text-gray-400 font-mono tracking-wide flex items-center gap-1.5 uppercase font-semibold">
-                                <span className={`w-1.5 h-1.5 rounded-full ${tea.role === 'teacher' ? 'bg-indigo-500 font-bold' : 'bg-gray-400'}`}></span>
-                                <span>{t(tea.role)}</span>
-                              </p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-4.5 px-6">
-                          {tea.role === 'teacher' ? (
-                            <div className="flex flex-wrap gap-1 max-w-[240px]">
-                              {tea.subjects && tea.subjects.length > 0 ? (
-                                tea.subjects.map((s, sIdx) => (
-                                  <span key={sIdx} className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0">
-                                    <BookOpen className="w-2.5 h-2.5" />
-                                    <span>{t(s)}</span>
-                                  </span>
-                                ))
-                              ) : (
-                                <span className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0">
-                                  <BookOpen className="w-3 h-3" />
-                                  <span>{t(tea.subject || '')}</span>
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold tracking-wider uppercase bg-gray-50 dark:bg-slate-800/10 border border-gray-100 dark:border-slate-800 px-2 py-0.5 rounded-full">
-                              {t("Student")}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-4.5 px-6">
-                          {resettingUid === tea.uid ? (
-                            <div className="flex items-center gap-1 max-w-[180px]">
-                              <input
-                                type="text"
-                                value={newPasswordVal}
-                                onChange={(e) => setNewPasswordVal(e.target.value)}
-                                placeholder={t("New password")}
-                                className="px-2 py-1 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-md focus:outline-none focus:border-brand-500 text-xxs w-full"
-                              />
-                              <button
-                                onClick={() => handleResetPassword(tea.uid)}
-                                className="bg-emerald-500 text-white rounded-md p-1.5 hover:bg-emerald-600 transition-colors cursor-pointer shrink-0"
+                <div className="bg-white dark:bg-slate-900 transition-colors">
+                  {/* Desktop view (Table layout) */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full min-w-[600px] border-collapse text-left">
+                      <thead>
+                         <tr className="border-b border-gray-100 dark:border-slate-800 text-gray-400 dark:text-gray-500 text-[10px] font-bold uppercase tracking-wider bg-gray-50/50 dark:bg-slate-800/20">
+                          <th className="py-4 px-6">{t("Institutional Branch Member")}</th>
+                          <th className="py-4 px-6">{t("Assigned Subject Specialty")}</th>
+                          <th className="py-4 px-6">{t("Portal Key / Passwords")}</th>
+                          <th className="py-4 px-6 text-right">{t("Status & Suspend Actions")}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-105 dark:divide-slate-850 text-xs font-medium text-gray-700 dark:text-gray-300">
+                        {teachersList.map((tea) => {
+                          const isExpanded = expandedTeacherId === tea.uid;
+                          const teacherFiles = files.filter(f => f.uploadedBy === tea.uid);
+                          const teacherRejections = logsList.filter(log => log.action === 'file_rejected' && log.uploaderId === tea.uid);
+
+                          return (
+                            <React.Fragment key={tea.uid}>
+                              <tr 
+                                onClick={() => setExpandedTeacherId(isExpanded ? null : tea.uid)}
+                                className="hover:bg-gray-50/40 dark:hover:bg-slate-800/10 transition-colors cursor-pointer select-none"
                               >
-                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <td className="py-4.5 px-6">
+                                  <div className="flex items-center gap-3">
+                                    <ChevronRight className={`w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0 transition-transform ${isExpanded ? 'rotate-90 text-indigo-500 font-bold' : ''}`} />
+                                    <div className="w-9 h-9 rounded-full bg-brand-50 dark:bg-slate-800 border border-brand-100 dark:border-slate-700 flex items-center justify-center text-brand-500 dark:text-brand-400 font-bold text-xs uppercase shrink-0" onClick={(e) => e.stopPropagation()}>
+                                      {tea.profilePic ? (
+                                        <img src={tea.profilePic} alt="avatar" className="w-full h-full rounded-full object-cover" />
+                                      ) : (
+                                        tea.fullName.charAt(0)
+                                      )}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="font-bold text-gray-800 dark:text-gray-100 truncate">{tea.fullName}</p>
+                                      <p className="text-[10px] text-gray-400 font-mono tracking-wide flex items-center gap-1.5 uppercase font-semibold">
+                                        <span className={`w-1.5 h-1.5 rounded-full ${tea.role === 'teacher' ? 'bg-indigo-500 font-bold' : 'bg-gray-400'}`}></span>
+                                        <span>{t(tea.role)}</span>
+                                      </p>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="py-4.5 px-6">
+                                  {tea.role === 'teacher' ? (
+                                    <div className="flex flex-wrap gap-1 max-w-[240px]">
+                                      {tea.subjects && tea.subjects.length > 0 ? (
+                                        tea.subjects.map((s, sIdx) => (
+                                          <span key={sIdx} className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0">
+                                            <BookOpen className="w-2.5 h-2.5" />
+                                            <span>{t(s)}</span>
+                                          </span>
+                                        ))
+                                      ) : (
+                                        <span className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0">
+                                          <BookOpen className="w-3 h-3" />
+                                          <span>{t(tea.subject || '')}</span>
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] text-gray-400 dark:text-gray-550 font-semibold tracking-wider uppercase bg-gray-50 dark:bg-slate-800/10 border border-gray-100 dark:border-slate-800 px-2 py-0.5 rounded-full">
+                                      {t("Student")}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-4.5 px-6" onClick={(e) => e.stopPropagation()}>
+                                  {resettingUid === tea.uid ? (
+                                    <div className="flex items-center gap-1 max-w-[180px]">
+                                      <input
+                                        type="text"
+                                        value={newPasswordVal}
+                                        onChange={(e) => setNewPasswordVal(e.target.value)}
+                                        placeholder={t("New password")}
+                                        className="px-2 py-1 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-808 default:text-gray-100 rounded-md focus:outline-none focus:border-brand-500 text-xxs w-full"
+                                      />
+                                      <button
+                                        onClick={() => handleResetPassword(tea.uid)}
+                                        className="bg-emerald-500 text-white rounded-md p-1.5 hover:bg-emerald-600 transition-colors cursor-pointer shrink-0"
+                                      >
+                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => setResettingUid(tea.uid)}
+                                      className="text-[10px] font-bold text-indigo-505 hover:underline flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Key className="w-3 h-3" />
+                                      <span>{t("Change password")}</span>
+                                    </button>
+                                  )}
+                                </td>
+                                <td className="py-4.5 px-6 text-right" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => handleToggleStatus(tea.uid, tea.status)}
+                                    className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition-all cursor-pointer ${
+                                      tea.status === 'active'
+                                        ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-605 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/30 hover:bg-emerald-100'
+                                        : 'bg-red-50 dark:bg-red-955/20 text-red-650 dark:text-red-400 border-red-100 dark:border-red-900/30 hover:bg-red-100'
+                                    }`}
+                                  >
+                                    {tea.status === 'active' ? t("Active") : t("Suspended")}
+                                  </button>
+                                </td>
+                              </tr>
+
+                              {isExpanded && (
+                                <tr className="bg-gray-50/45 dark:bg-slate-950/25 border-l-2 border-indigo-500">
+                                  <td colSpan={4} className="p-5 sm:p-6">
+                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-xs text-gray-700 dark:text-gray-300">
+                                      {/* Column 1: Account Information & Biography */}
+                                      <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-4 rounded-xl shadow-3xs space-y-3.5">
+                                        <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800/60 pb-2">
+                                          <div className="flex items-center gap-2">
+                                            <Users className="w-4 h-4 text-indigo-505" />
+                                            <span className="font-extrabold text-gray-800 dark:text-white uppercase tracking-wider text-[10px]">{t("Account Overview")}</span>
+                                          </div>
+                                          {onViewTeacherDetails && (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                onViewTeacherDetails(tea.uid);
+                                              }}
+                                              className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-0.5"
+                                            >
+                                              <span>{t("Full Modal")}</span>
+                                              <span>↗</span>
+                                            </button>
+                                          )}
+                                        </div>
+                                        
+                                        <div className="space-y-2 text-[11px]">
+                                          <div className="flex justify-between items-center py-1 border-b border-gray-100/50 dark:border-slate-800/40">
+                                            <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wide">{t("Portal Username")}</span>
+                                            <span className="font-mono text-gray-800 dark:text-gray-200 font-bold">@{tea.username}</span>
+                                          </div>
+                                          <div className="flex justify-between items-center py-1 border-b border-gray-100/50 dark:border-slate-800/40">
+                                            <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wide">{t("Email Address")}</span>
+                                            <span className="text-gray-800 dark:text-gray-200 font-bold truncate max-w-[160px]" title={tea.email}>{tea.email}</span>
+                                          </div>
+                                          <div className="flex justify-between items-center py-1 border-b border-gray-100/50 dark:border-slate-800/40">
+                                            <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wide">{t("Role Level")}</span>
+                                            <span className="capitalize bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded text-[10px] font-bold">
+                                              {t(tea.role)}
+                                            </span>
+                                          </div>
+                                          <div className="flex justify-between items-center py-1 border-b border-gray-100/50 dark:border-slate-800/40">
+                                            <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wide">{t("Member Since")}</span>
+                                            <span className="text-gray-800 dark:text-gray-200 font-mono font-bold">
+                                              {tea.createdAt ? tea.createdAt.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : t("N/A")}
+                                            </span>
+                                          </div>
+                                          <div className="flex justify-between items-center py-1">
+                                            <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wide">{t("Account Status")}</span>
+                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                              tea.status === 'active' 
+                                                ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400' 
+                                                : 'bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400'
+                                            }`}>
+                                              {tea.status === 'active' ? t("Active") : t("Suspended")}
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        <div className="pt-2 border-t border-gray-100 dark:border-slate-800/40">
+                                          <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">{t("Professional Bio")}</span>
+                                          <p className="bg-gray-50/50 dark:bg-slate-950/20 p-2.5 rounded-lg text-xxs text-gray-650 dark:text-gray-450 leading-relaxed italic border border-gray-100/40 dark:border-slate-800/20 whitespace-pre-wrap">
+                                            {tea.bio || t("No professional bio written yet.")}
+                                          </p>
+                                        </div>
+                                      </div>
+
+                                      {/* Column 2: Teacher Uploads & Stats */}
+                                      <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-4 rounded-xl shadow-3xs space-y-3.5">
+                                        <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800/60 pb-2">
+                                          <div className="flex items-center gap-2">
+                                            <FileText className="w-4 h-4 text-emerald-500" />
+                                            <span className="font-extrabold text-gray-800 dark:text-white uppercase tracking-wider text-[10px]">{t("Study Material Uploads")}</span>
+                                          </div>
+                                          <span className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-605 dark:text-emerald-400 text-xxs px-2 py-0.5 rounded-full font-bold">
+                                            {teacherFiles.length} {t("Total")}
+                                          </span>
+                                        </div>
+
+                                        {/* Counts metrics */}
+                                        <div className="grid grid-cols-2 gap-2 text-center text-xxs font-bold">
+                                          <div className="bg-emerald-50/20 dark:bg-emerald-950/10 border border-emerald-100/35 p-2 rounded-lg">
+                                            <p className="text-emerald-600 dark:text-emerald-400 text-sm font-black">{teacherFiles.filter(f => f.isApproved).length}</p>
+                                            <p className="text-gray-405 font-bold uppercase text-[9px] mt-0.5">{t("Approved")}</p>
+                                          </div>
+                                          <div className="bg-amber-50/20 dark:bg-amber-950/10 border border-amber-100/35 p-2 rounded-lg">
+                                            <p className="text-amber-600 dark:text-amber-400 text-sm font-black">{teacherFiles.filter(f => !f.isApproved).length}</p>
+                                            <p className="text-gray-405 font-bold uppercase text-[9px] mt-0.5">{t("Pending")}</p>
+                                          </div>
+                                        </div>
+
+                                        <div className="space-y-2 max-h-[170px] overflow-y-auto pr-1">
+                                          <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">{t("Recent Activity")}</span>
+                                          {teacherFiles.length === 0 ? (
+                                            <p className="text-xxs text-gray-400 dark:text-gray-550 text-center py-6">{t("No upload archives recorded yet.")}</p>
+                                          ) : (
+                                            teacherFiles.slice(0, 3).map((f) => (
+                                              <div key={f.id} className="flex items-center justify-between gap-2 p-2 bg-gray-50/50 dark:bg-slate-950/20 border border-gray-100/30 dark:border-slate-800/20 rounded-lg">
+                                                <div className="min-w-0 flex-1">
+                                                  <p className="font-extrabold text-[11px] text-gray-800 dark:text-gray-100 truncate" title={f.fileName}>{f.fileName}</p>
+                                                  <p className="text-[9px] text-gray-400 font-mono font-bold uppercase">{t(f.subject)} • {(f.fileSize / (1024 * 1024)).toFixed(2)} MB</p>
+                                                </div>
+                                                <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold shrink-0 uppercase tracking-wider ${
+                                                  f.isApproved 
+                                                    ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-605 dark:text-emerald-400' 
+                                                    : 'bg-amber-50 dark:bg-amber-950/20 text-amber-605 dark:text-amber-400'
+                                                }`}>
+                                                  {f.isApproved ? t("Approved") : t("Pending")}
+                                                </span>
+                                              </div>
+                                            ))
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Column 3: Document Rejection Audits */}
+                                      <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-4 rounded-xl shadow-3xs space-y-3.5">
+                                        <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800/60 pb-2">
+                                          <div className="flex items-center gap-2">
+                                            <ShieldAlert className="w-4 h-4 text-red-500" />
+                                            <span className="font-extrabold text-gray-800 dark:text-white uppercase tracking-wider text-[10px]">{t("Rejection Logs")}</span>
+                                          </div>
+                                          <span className="bg-red-50 dark:bg-red-955/20 text-red-650 dark:text-red-400 text-xxs px-2 py-0.5 rounded-full font-bold">
+                                            {teacherRejections.length} {t("Total")}
+                                          </span>
+                                        </div>
+
+                                        <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
+                                          {teacherRejections.length === 0 ? (
+                                            <div className="text-center py-10 text-xxs text-gray-400 dark:text-gray-550">
+                                              <p className="font-extrabold text-emerald-600 dark:text-emerald-400 text-xs mb-1">✓ {t("Excellent Standing")}</p>
+                                              <p className="text-[10px] text-gray-450 font-medium">{t("No document rejections recorded for this account.")}</p>
+                                            </div>
+                                          ) : (
+                                            teacherRejections.slice(0, 3).map((rej) => (
+                                              <div key={rej.id} className="p-2.5 bg-red-50/10 dark:bg-red-955/5 border border-red-100/20 dark:border-red-900/10 rounded-lg space-y-1.5">
+                                                <div className="flex items-start justify-between gap-1.5">
+                                                  <p className="font-extrabold text-[10.5px] text-gray-800 dark:text-gray-100 truncate max-w-[130px]" title={rej.fileName}>{rej.fileName}</p>
+                                                  <span className="text-[8px] text-gray-400 font-mono shrink-0 uppercase tracking-wide font-bold">
+                                                    {rej.createdAt ? rej.createdAt.toLocaleDateString() : t("Just now")}
+                                                  </span>
+                                                </div>
+                                                
+                                                <div className="bg-white/80 dark:bg-slate-900/60 p-2 rounded border border-red-50/30 dark:border-red-955/15 text-[10px] text-red-700 dark:text-red-300 leading-normal font-medium whitespace-pre-wrap">
+                                                  <span className="block text-[8px] font-extrabold uppercase text-red-500 tracking-wider mb-0.5">{t("Reason Specified")}:</span>
+                                                  {rej.rejectionReason}
+                                                </div>
+                                                
+                                                <p className="text-[8.5px] text-gray-400 text-right uppercase tracking-wider font-bold">
+                                                  {t("Rejected By")}: <span className="text-gray-500 dark:text-gray-300 font-mono font-bold">{rej.actorName}</span>
+                                                </p>
+                                              </div>
+                                            ))
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile Card stack layout */}
+                  <div className="md:hidden divide-y divide-gray-105 dark:divide-slate-805/40">
+                    {teachersList.map((tea) => {
+                      const isExpanded = expandedTeacherId === tea.uid;
+                      const teacherFiles = files.filter(f => f.uploadedBy === tea.uid);
+                      const teacherRejections = logsList.filter(log => log.action === 'file_rejected' && log.uploaderId === tea.uid);
+
+                      return (
+                        <div key={tea.uid} className="p-4 space-y-3.5">
+                          <div 
+                            onClick={() => setExpandedTeacherId(isExpanded ? null : tea.uid)}
+                            className="flex items-center justify-between gap-3 cursor-pointer select-none"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-9 h-9 rounded-full bg-brand-50 dark:bg-slate-800 border border-brand-100 dark:border-slate-700 flex items-center justify-center text-brand-500 dark:text-brand-400 font-bold text-xs uppercase shrink-0" onClick={(e) => e.stopPropagation()}>
+                                {tea.profilePic ? (
+                                  <img src={tea.profilePic} alt="avatar" className="w-full h-full rounded-full object-cover" />
+                                ) : (
+                                  tea.fullName.charAt(0)
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-bold text-gray-800 dark:text-gray-100 truncate text-xs">{tea.fullName}</p>
+                                <p className="text-[10px] text-gray-400 font-mono tracking-wide flex items-center gap-1.5 uppercase font-semibold">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${tea.role === 'teacher' ? 'bg-indigo-500 font-bold' : 'bg-gray-400'}`}></span>
+                                  <span>{t(tea.role)}</span>
+                                </p>
+                              </div>
+                            </div>
+                            <ChevronDown className={`w-4 h-4 text-gray-400 dark:text-gray-550 shrink-0 transition-transform ${isExpanded ? 'rotate-180 text-indigo-500 font-bold' : ''}`} />
+                          </div>
+
+                          {/* Subject specialty info */}
+                          <div className="text-xs">
+                            <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">{t("Assigned Subject Specialty")}</span>
+                            {tea.role === 'teacher' ? (
+                              <div className="flex flex-wrap gap-1">
+                                {tea.subjects && tea.subjects.length > 0 ? (
+                                  tea.subjects.map((s, sIdx) => (
+                                    <span key={sIdx} className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0 font-bold">
+                                      <BookOpen className="w-2.5 h-2.5" />
+                                      <span>{t(s)}</span>
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0 font-bold">
+                                    <BookOpen className="w-3 h-3" />
+                                    <span>{t(tea.subject || '')}</span>
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-gray-400 dark:text-gray-550 font-bold tracking-wider uppercase bg-gray-50 dark:bg-slate-800/10 border border-gray-100 dark:border-slate-800 px-2 py-0.5 rounded-full">
+                                {t("Student")}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Expanded detail section for Mobile */}
+                          {isExpanded && (
+                            <div className="pt-3 border-t border-gray-100 dark:border-slate-800/60 space-y-4 text-xs animate-in fade-in duration-150">
+                              {/* Account Info */}
+                              <div className="bg-gray-50/50 dark:bg-slate-950/25 p-3.5 rounded-lg border border-gray-100/50 dark:border-slate-800/30 space-y-2.5">
+                                <div className="flex items-center justify-between border-b border-gray-100/50 dark:border-slate-800/30 pb-1.5 mb-1.5">
+                                  <p className="font-extrabold text-[10px] uppercase text-indigo-505 tracking-wider flex items-center gap-1.5">
+                                    <Users className="w-3.5 h-3.5" />
+                                    <span>{t("Account Overview")}</span>
+                                  </p>
+                                  {onViewTeacherDetails && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onViewTeacherDetails(tea.uid);
+                                      }}
+                                      className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-0.5"
+                                    >
+                                      <span>{t("Full Modal")}</span>
+                                      <span>↗</span>
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="space-y-1.5 text-xxs">
+                                  <p className="flex justify-between"><span className="text-gray-400">{t("Username")}:</span> <span className="font-bold font-mono">@{tea.username}</span></p>
+                                  <p className="flex justify-between"><span className="text-gray-400">{t("Email Address")}:</span> <span className="font-bold truncate max-w-[150px]">{tea.email}</span></p>
+                                  <p className="flex justify-between"><span className="text-gray-400">{t("Role Level")}:</span> <span className="font-bold capitalize">{t(tea.role)}</span></p>
+                                  <p className="flex justify-between"><span className="text-gray-400">{t("Joined Since")}:</span> <span className="font-bold">{tea.createdAt ? tea.createdAt.toLocaleDateString() : t("N/A")}</span></p>
+                                </div>
+                                <div className="pt-2 border-t border-gray-100/50 dark:border-slate-800/40">
+                                  <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-wider mb-1">{t("Professional Bio")}</span>
+                                  <p className="text-[10px] leading-relaxed italic text-gray-600 dark:text-gray-450 bg-white/80 dark:bg-slate-900/60 p-2 rounded whitespace-pre-wrap">
+                                    {tea.bio || t("No professional bio written yet.")}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Uploads */}
+                              <div className="bg-gray-50/50 dark:bg-slate-950/25 p-3.5 rounded-lg border border-gray-100/50 dark:border-slate-800/30 space-y-2.5">
+                                <div className="flex items-center justify-between">
+                                  <p className="font-extrabold text-[10px] uppercase text-emerald-505 tracking-wider flex items-center gap-1.5">
+                                    <FileText className="w-3.5 h-3.5" />
+                                    <span>{t("Study Material Uploads")}</span>
+                                  </p>
+                                  <span className="bg-emerald-50 dark:bg-emerald-955/25 text-emerald-600 dark:text-emerald-400 text-[10px] px-2 py-0.5 rounded font-bold">
+                                    {teacherFiles.length}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-center text-[10px]">
+                                  <div className="bg-white/80 dark:bg-slate-900/60 p-1.5 rounded border border-emerald-100/20">
+                                    <span className="block font-black text-emerald-600">{teacherFiles.filter(f => f.isApproved).length}</span>
+                                    <span className="text-[8px] text-gray-405 uppercase tracking-wide font-bold">{t("Approved")}</span>
+                                  </div>
+                                  <div className="bg-white/80 dark:bg-slate-900/60 p-1.5 rounded border border-amber-100/20">
+                                    <span className="block font-black text-amber-600">{teacherFiles.filter(f => !f.isApproved).length}</span>
+                                    <span className="text-[8px] text-gray-405 uppercase tracking-wide font-bold">{t("Pending")}</span>
+                                  </div>
+                                </div>
+                                <div className="space-y-1.5 max-h-[140px] overflow-y-auto">
+                                  {teacherFiles.length === 0 ? (
+                                    <p className="text-xxs text-gray-400 text-center py-2">{t("No files uploaded yet.")}</p>
+                                  ) : (
+                                    teacherFiles.slice(0, 3).map(f => (
+                                      <div key={f.id} className="flex justify-between items-center bg-white/80 dark:bg-slate-900/60 p-1.5 rounded text-[10px] border border-gray-100/30">
+                                        <span className="truncate font-bold max-w-[140px]">{f.fileName}</span>
+                                        <span className={`text-[8px] px-1 py-0.2 rounded font-bold ${
+                                          f.isApproved ? 'text-emerald-600 bg-emerald-50/50' : 'text-amber-600 bg-amber-50/50'
+                                        }`}>{f.isApproved ? t("Approved") : t("Pending")}</span>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Rejections */}
+                              <div className="bg-gray-50/50 dark:bg-slate-950/25 p-3.5 rounded-lg border border-gray-100/50 dark:border-slate-800/30 space-y-2.5">
+                                <div className="flex items-center justify-between">
+                                  <p className="font-extrabold text-[10px] uppercase text-red-500 tracking-wider flex items-center gap-1.5">
+                                    <ShieldAlert className="w-3.5 h-3.5" />
+                                    <span>{t("Rejection History")}</span>
+                                  </p>
+                                  <span className="bg-red-50 dark:bg-red-955/20 text-red-650 dark:text-red-400 text-[10px] px-2 py-0.5 rounded font-bold">
+                                    {teacherRejections.length}
+                                  </span>
+                                </div>
+                                <div className="space-y-2 max-h-[160px] overflow-y-auto">
+                                  {teacherRejections.length === 0 ? (
+                                    <p className="text-xxs text-emerald-600 font-bold text-center py-2">✓ {t("Excellent Standing (No Rejections)")}</p>
+                                  ) : (
+                                    teacherRejections.slice(0, 3).map(rej => (
+                                      <div key={rej.id} className="p-2 bg-white/80 dark:bg-slate-900/60 rounded border border-red-50 dark:border-slate-800 space-y-1">
+                                        <div className="flex justify-between text-[9px] font-bold">
+                                          <span className="truncate max-w-[130px]">{rej.fileName}</span>
+                                          <span className="text-gray-400 font-mono font-medium">{rej.createdAt ? rej.createdAt.toLocaleDateString() : ''}</span>
+                                        </div>
+                                        <p className="text-[9px] text-red-700 dark:text-red-300 font-medium whitespace-pre-wrap"><span className="font-black text-red-500 text-[8px] uppercase">{t("Reason")}:</span> {rej.rejectionReason}</p>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Password reset & Toggle status block */}
+                          <div className="flex items-center justify-between gap-3 pt-1 border-t border-gray-100/40 dark:border-slate-800/40">
+                            {/* Portal Key */}
+                            <div onClick={(e) => e.stopPropagation()}>
+                              {resettingUid === tea.uid ? (
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="text"
+                                    value={newPasswordVal}
+                                    onChange={(e) => setNewPasswordVal(e.target.value)}
+                                    placeholder={t("New password")}
+                                    className="px-2 py-1 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-808 default:text-gray-100 rounded-md focus:outline-none focus:border-brand-500 text-xxs w-24"
+                                  />
+                                  <button
+                                    onClick={() => handleResetPassword(tea.uid)}
+                                    className="bg-emerald-500 text-white rounded-md p-1.5 hover:bg-emerald-600 transition-colors cursor-pointer shrink-0"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => setResettingUid(tea.uid)}
+                                  className="text-[10px] font-bold text-indigo-505 hover:underline flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Key className="w-3 h-3" />
+                                  <span>{t("Change password")}</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Actions */}
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => handleToggleStatus(tea.uid, tea.status)}
+                                className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition-all cursor-pointer ${
+                                  tea.status === 'active'
+                                    ? 'bg-emerald-50 dark:bg-emerald-955/20 text-emerald-650 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/30 hover:bg-emerald-100'
+                                    : 'bg-red-50 dark:bg-red-955/20 text-red-650 dark:text-red-400 border-red-100 dark:border-red-900/30 hover:bg-red-100'
+                                }`}
+                              >
+                                {tea.status === 'active' ? t("Active") : t("Suspended")}
                               </button>
                             </div>
-                          ) : (
-                            <button
-                              onClick={() => setResettingUid(tea.uid)}
-                              className="text-[10px] font-bold text-indigo-500 hover:underline flex items-center gap-1 cursor-pointer"
-                            >
-                              <Key className="w-3 h-3" />
-                              <span>{t("Change password")}</span>
-                            </button>
-                          )}
-                        </td>
-                        <td className="py-4.5 px-6 text-right">
-                          <button
-                            onClick={() => handleToggleStatus(tea.uid, tea.status)}
-                            className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition-all cursor-pointer ${
-                              tea.status === 'active'
-                                ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-605 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/30 hover:bg-emerald-100'
-                                : 'bg-red-50 dark:bg-red-955/20 text-red-650 dark:text-red-400 border-red-100 dark:border-red-900/30 hover:bg-red-100'
-                            }`}
-                          >
-                            {tea.status === 'active' ? t("Active") : t("Suspended")}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -1040,6 +1434,7 @@ export default function DashboardAdmin({
                           prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
                         );
                       }}
+                      onViewTeacherDetails={onViewTeacherDetails}
                     />
                   </div>
                 ))}
@@ -1063,57 +1458,100 @@ export default function DashboardAdmin({
             <p className="text-xs text-gray-455 dark:text-gray-500 mt-1 leading-normal">
               {t("Branch Admin recover rules: You can restore any deleted file from your branch space within 30 days. Hard delete actions are managed by Super Admin.")}
             </p>
-          </div>
-
-          {filteredDeletedFiles.length === 0 ? (
+          </div>          {filteredDeletedFiles.length === 0 ? (
             <div className="text-center py-12 text-gray-400 dark:text-gray-500 text-xs">
               {t("The branch recycling storage is empty. No files require attention!")}
             </div>
           ) : (
-            <div className="overflow-x-auto border border-gray-105 dark:border-slate-800 rounded-xl">
-              <table className="w-full min-w-[700px] text-left">
-                <thead>
-                  <tr className="border-b border-gray-100 dark:border-slate-800 text-gray-400 dark:text-gray-500 text-[10px] font-bold uppercase tracking-wider bg-gray-50/50 dark:bg-slate-800/20">
-                    <th className="py-4 px-6">{t("Deleted Resource Name")}</th>
-                    <th className="py-4 px-6">{t("Assigned Subject Specialty")}</th>
-                    <th className="py-4 px-6">{t("Deleter Information")}</th>
-                    <th className="py-4 px-6 text-right">{t("Restore action")}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-105 dark:divide-slate-805 text-xs font-medium text-gray-700 dark:text-gray-300">
-                  {filteredDeletedFiles
-                    .map((file) => (
-                      <tr key={file.id} className="hover:bg-gray-50/20 dark:hover:bg-slate-800/10 transition-colors">
-                        <td className="py-4 px-6">
-                          <div>
-                            <p className="font-bold text-gray-800 dark:text-gray-100">{file.fileName}</p>
-                            <p className="text-[10px] text-gray-400 font-mono mt-0.5">{(file.fileSize / (1024 * 1024)).toFixed(2)} MB • {file.fileType.toUpperCase()}</p>
-                          </div>
-                        </td>
-                        <td className="py-4 px-6">
-                          <span className="bg-gray-100 dark:bg-slate-805 text-gray-600 dark:text-gray-400 px-2.5 py-1 rounded-md text-xxs font-semibold uppercase">{t(file.subject)}</span>
-                        </td>
-                        <td className="py-4 px-6">
-                          <div>
-                            <p className="font-semibold text-gray-805 dark:text-gray-200">{file.deletedByName || t("Unknown Actor")}</p>
-                            <p className="text-[10px] text-gray-400 mt-0.5 font-mono">
-                              {file.deletedAt ? file.deletedAt.toLocaleString() : (file.createdAt ? file.createdAt.toLocaleString() : '')}
-                            </p>
-                          </div>
-                        </td>
-                        <td className="py-4 px-6 text-right">
-                          <button
-                            onClick={() => onFileRestore(file.id)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/20 dark:hover:bg-brand-950/40 text-brand-605 dark:text-brand-400 border border-brand-100 dark:border-brand-900/30 rounded-lg text-xs font-bold transition-all cursor-pointer animate-pulse"
-                          >
-                            <RotateCcw className="w-3.5 h-3.5 animate-spin-slow" />
-                            <span>{t("Restore")}</span>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
+            <div className="border border-gray-105 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900 transition-colors">
+              {/* Desktop view */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full min-w-[700px] text-left">
+                  <thead>
+                    <tr className="border-b border-gray-100 dark:border-slate-800 text-gray-400 dark:text-gray-500 text-[10px] font-bold uppercase tracking-wider bg-gray-50/50 dark:bg-slate-800/20">
+                      <th className="py-4 px-6">{t("Deleted Resource Name")}</th>
+                      <th className="py-4 px-6">{t("Assigned Subject Specialty")}</th>
+                      <th className="py-4 px-6">{t("Deleter Information")}</th>
+                      <th className="py-4 px-6 text-right">{t("Restore action")}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-105 dark:divide-slate-805 text-xs font-medium text-gray-700 dark:text-gray-300">
+                    {filteredDeletedFiles
+                      .map((file) => (
+                        <tr key={file.id} className="hover:bg-gray-50/20 dark:hover:bg-slate-800/10 transition-colors">
+                          <td className="py-4 px-6">
+                            <div>
+                              <p className="font-bold text-gray-800 dark:text-gray-100">{file.fileName}</p>
+                              <p className="text-[10px] text-gray-400 font-mono mt-0.5">{(file.fileSize / (1024 * 1024)).toFixed(2)} MB • {file.fileType.toUpperCase()}</p>
+                            </div>
+                          </td>
+                          <td className="py-4 px-6">
+                            <span className="bg-gray-100 dark:bg-slate-805 text-gray-600 dark:text-gray-400 px-2.5 py-1 rounded-md text-xxs font-semibold uppercase">{t(file.subject)}</span>
+                          </td>
+                          <td className="py-4 px-6">
+                            <div>
+                              <p className="font-semibold text-gray-805 dark:text-gray-200">{file.deletedByName || t("Unknown Actor")}</p>
+                              <p className="text-[10px] text-gray-400 mt-0.5 font-mono">
+                                {file.deletedAt ? file.deletedAt.toLocaleString() : (file.createdAt ? file.createdAt.toLocaleString() : '')}
+                              </p>
+                            </div>
+                          </td>
+                          <td className="py-4 px-6 text-right">
+                            <button
+                              onClick={() => onFileRestore(file.id)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/20 dark:hover:bg-brand-950/40 text-brand-605 dark:text-brand-400 border border-brand-100 dark:border-brand-900/30 rounded-lg text-xs font-bold transition-all cursor-pointer animate-pulse"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5 animate-spin-slow" />
+                              <span>{t("Restore")}</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card Stack layout */}
+              <div className="md:hidden divide-y divide-gray-105 dark:divide-slate-805/40">
+                {filteredDeletedFiles.map((file) => (
+                  <div key={file.id} className="p-4 space-y-3 text-xs">
+                    <div>
+                      <h4 className="font-bold text-gray-808 dark:text-white break-all leading-tight text-xs">{file.fileName}</h4>
+                      <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[9px] font-extrabold uppercase tracking-wider">
+                        <span className="bg-gray-105 dark:bg-slate-800 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-xs">
+                          {(file.fileSize / (1024 * 1024)).toFixed(2)} MB • {file.fileType.toUpperCase()}
+                        </span>
+                        <span className="bg-brand-50/80 dark:bg-brand-950/20 text-brand-700 dark:text-brand-400 px-1.5 py-0.5 rounded-xs">
+                          {t(file.subject)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-1.5 bg-gray-50/50 dark:bg-slate-800/15 p-2.5 rounded-lg border border-gray-100/50 dark:border-slate-800/50 text-[10px]">
+                      <div>
+                        <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{t("Deleted By")}</span>
+                        <p className="font-bold text-gray-750 dark:text-gray-200">{file.deletedByName || t("Unknown Actor")}</p>
+                      </div>
+                      <div>
+                        <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{t("Deleted At")}</span>
+                        <p className="font-mono text-gray-550 dark:text-gray-400">
+                          {file.deletedAt ? file.deletedAt.toLocaleString() : (file.createdAt ? file.createdAt.toLocaleString() : '')}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="pt-1.5 flex justify-end">
+                      <button
+                        onClick={() => onFileRestore(file.id)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/20 dark:hover:bg-brand-950/40 text-brand-605 dark:text-brand-400 border border-brand-100 dark:border-brand-900/30 rounded-lg text-xs font-bold transition-all cursor-pointer animate-pulse"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>{t("Restore")}</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -1396,68 +1834,91 @@ export default function DashboardAdmin({
                     actionTitle = t("Restored Material");
                   }
 
+                  const isLogExpanded = !!expandedLogs[log.id];
+
                   return (
-                    <div key={log.id} className="p-4 sm:p-5 hover:bg-gray-50/50 dark:hover:bg-slate-850/20 transition-all space-y-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-2.5">
+                    <div key={log.id} className="divide-y divide-gray-100/50 dark:divide-slate-800/40 bg-white dark:bg-slate-900 transition-colors">
+                      {/* Compact Header */}
+                      <div 
+                        onClick={() => setExpandedLogs(prev => ({ ...prev, [log.id]: !isLogExpanded }))}
+                        className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-gray-50/50 dark:hover:bg-slate-800/20 select-none"
+                      >
+                        <div className="flex flex-wrap items-center gap-2.5">
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${alertBadge}`}>
                             {actionTitle}
                           </span>
-                          <span className="text-gray-300 dark:text-gray-700 font-bold">•</span>
-                          <div className="flex items-center gap-1.5 text-xs text-gray-400 font-mono">
-                            <Clock className="w-3.5 h-3.5" />
+                          <span className="text-gray-300 dark:text-gray-700 font-bold hidden sm:inline">•</span>
+                          <div className="flex items-center gap-1.5 text-xs text-gray-500 font-mono">
+                            <Clock className="w-3.5 h-3.5 text-gray-400" />
                             <span>{log.createdAt ? log.createdAt.toLocaleString() : "Just now"}</span>
                           </div>
                         </div>
 
-                        {log.fileBranch && (
-                          <span className="text-[10px] bg-brand-50/60 dark:bg-brand-950/15 text-brand-700 dark:text-brand-400 px-2.5 py-0.5 rounded-md font-bold uppercase tracking-wider select-none">
-                            {t(log.fileBranch)} {t("Branch")}
+                        <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
+                          <div className="text-left sm:text-right min-w-0 max-w-[280px] sm:max-w-[220px]">
+                            <p className="font-bold text-xs text-gray-805 dark:text-white truncate" title={log.fileName}>
+                              {log.fileName || t("System Log")}
+                            </p>
+                          </div>
+                          
+                          <span className="text-[10px] text-brand-505 font-bold hover:underline shrink-0 flex items-center gap-1">
+                            <span>{isLogExpanded ? t("Hide") : t("View")}</span>
+                            <ChevronDown className={`w-3 h-3 transition-transform ${isLogExpanded ? 'rotate-180' : ''}`} />
                           </span>
-                        )}
+                        </div>
                       </div>
 
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <p className="text-[10px] uppercase font-bold text-gray-405 tracking-wider">{t("Affected Study Material")}</p>
-                          <h4 className="font-extrabold text-xs text-gray-805 dark:text-white truncate max-w-[420px]" title={log.fileName}>
-                            {log.fileName || t("Unknown Note")}
-                          </h4>
-                          {log.fileSubject && (
-                            <div className="flex items-center gap-2 text-[10.5px] font-bold text-gray-450 uppercase tracking-wide">
-                              <span>{t(log.fileSubject)}</span>
-                              {log.fileChapter && (
-                                <>
-                                  <span>/</span>
-                                  <span>{t("Chapter")} {log.fileChapter}</span>
-                                </>
+                      {/* Expanded Details */}
+                      {isLogExpanded && (
+                        <div className="p-4 sm:p-5 bg-gray-50/40 dark:bg-slate-950/20 space-y-4 animate-in fade-in duration-150">
+                          <div className="grid md:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <p className="text-[10px] uppercase font-bold text-gray-405 tracking-wider">{t("Affected Study Material")}</p>
+                              <h4 className="font-extrabold text-xs text-gray-855 dark:text-white break-all">
+                                {log.fileName || t("Unknown Note")}
+                              </h4>
+                              {log.fileSubject && (
+                                <div className="flex items-center gap-2 text-[10.5px] font-bold text-gray-450 uppercase tracking-wide">
+                                  <span>{t(log.fileSubject)}</span>
+                                  {log.fileChapter && (
+                                    <>
+                                      <span>/</span>
+                                      <span>{t("Chapter")} {log.fileChapter}</span>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                              {log.fileBranch && (
+                                <p className="text-[10px] text-gray-400 font-medium">
+                                  {t("Branch Origin")}: <span className="font-bold text-brand-505 dark:text-brand-400">{t(log.fileBranch)}</span>
+                                </p>
                               )}
                             </div>
-                          )}
-                        </div>
 
-                        <div className="space-y-1">
-                          <p className="text-[10px] uppercase font-bold text-gray-405 tracking-wider">{t("Authorized Action Performer")}</p>
-                          <p className="text-xs font-bold text-gray-750 dark:text-gray-250">
-                            {log.actorName} <span className="text-gray-400 font-mono text-[10px]">({t(log.actorRole)})</span>
-                          </p>
-                          {log.actorBranch && (
-                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                              {t("Affiliation")}: {t(log.actorBranch)}
-                            </p>
-                          )}
-                        </div>
-                      </div>
+                            <div className="space-y-1">
+                              <p className="text-[10px] uppercase font-bold text-gray-405 tracking-wider">{t("Authorized Action Performer")}</p>
+                              <p className="text-xs font-bold text-gray-750 dark:text-gray-250">
+                                {log.actorName} <span className="text-gray-450 font-mono text-[10px]">({t(log.actorRole)})</span>
+                              </p>
+                              {log.actorBranch && (
+                                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                                  {t("Affiliation")}: {t(log.actorBranch)}
+                                </p>
+                              )}
+                            </div>
+                          </div>
 
-                      {log.action === "file_rejected" && log.rejectionReason && (
-                        <div className="mt-2.5 bg-red-50/50 dark:bg-red-955/10 border-l-4 border-red-500 p-3 rounded-r-lg space-y-1.5 shadow-3xs">
-                          <p className="text-[10px] uppercase font-extrabold text-red-600 dark:text-red-400 tracking-wider flex items-center gap-1.5">
-                            <AlertCircle className="w-3.5 h-3.5 text-red-550" />
-                            <span>{t("Reason for document rejection")}</span>
-                          </p>
-                          <p className="text-xs text-red-705 dark:text-red-305 font-medium whitespace-pre-wrap leading-relaxed">
-                            {log.rejectionReason}
-                          </p>
+                          {log.action === "file_rejected" && log.rejectionReason && (
+                            <div className="bg-red-50/50 dark:bg-red-955/10 border-l-4 border-red-500 p-3 rounded-r-lg space-y-1.5 shadow-3xs">
+                              <p className="text-[10px] uppercase font-extrabold text-red-600 dark:text-red-400 tracking-wider flex items-center gap-1.5">
+                                <AlertCircle className="w-3.5 h-3.5 text-red-550" />
+                                <span>{t("Reason for document rejection")}</span>
+                              </p>
+                              <p className="text-xs text-red-705 dark:text-red-305 font-medium whitespace-pre-wrap leading-relaxed">
+                                {log.rejectionReason}
+                              </p>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

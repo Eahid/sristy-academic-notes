@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
+import JSZip from 'jszip';
 import { collection, getDocs, doc, setDoc, query, where, updateDoc, deleteDoc, serverTimestamp, onSnapshot, orderBy } from 'firebase/firestore';
 import { db, createSecondaryUser } from '../firebase';
 import { UserProfile, FileArchive } from '../types';
@@ -29,7 +31,9 @@ import {
   ArrowRight,
   AlertCircle,
   FileX,
-  AlertTriangle
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
@@ -47,6 +51,7 @@ interface DashboardMasterAdminProps {
   onDownload: (file: FileArchive) => void;
   onRefreshData?: () => void;
   onPreview?: (file: FileArchive) => void;
+  onViewTeacherDetails?: (teacherUid: string) => void;
 }
 
 export default function DashboardMasterAdmin({ 
@@ -60,6 +65,7 @@ export default function DashboardMasterAdmin({
   onFileHardDelete,
   onDownload,
   onPreview,
+  onViewTeacherDetails,
 }: DashboardMasterAdminProps) {
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [adminsList, setAdminsList] = useState<UserProfile[]>([]);
@@ -80,10 +86,12 @@ export default function DashboardMasterAdmin({
   const [selectedRoleToCreate, setSelectedRoleToCreate] = useState<any>('admin');
   const [selectedSubjectToCreate, setSelectedSubjectToCreate] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [expandedLogs, setExpandedLogs] = useState<Record<string, boolean>>({});
 
   // Password reset states for Admins
   const [resettingUid, setResettingUid] = useState<string | null>(null);
   const [newPasswordVal, setNewPasswordVal] = useState('');
+  const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'admins' | 'all_files' | 'trash_bin' | 'activity_logs' | 'database_backups' | 'rejection_history'>('admins');
   const { t } = useThemeLanguage();
@@ -165,6 +173,9 @@ export default function DashboardMasterAdmin({
   const [logSearchQuery, setLogSearchQuery] = useState('');
   const [logActionFilter, setLogActionFilter] = useState('');
   const [isExporting, setIsExporting] = useState(false);
+  const [isZipping, setIsZipping] = useState(false);
+  const [zipProgress, setZipProgress] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Rejection history state
   const [rejectionSearchQuery, setRejectionSearchQuery] = useState('');
@@ -532,6 +543,182 @@ export default function DashboardMasterAdmin({
       alert(t("System Backup Generation Failed. Please examine cloud console."));
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  // Download Full ZIP Archive Backup (Active Files + backup_info.json)
+  const handleDownloadFullBackupZip = async () => {
+    setIsZipping(true);
+    setZipProgress(t("Querying database collections..."));
+    try {
+      // 1. Fetch Users List
+      const usersSnap = await getDocs(collection(db, 'users'));
+      const usersPayload: any[] = [];
+      usersSnap.forEach(d => {
+        const raw = d.data();
+        usersPayload.push({
+          uid: d.id,
+          username: raw.username,
+          fullName: raw.fullName,
+          email: raw.email,
+          role: raw.role,
+          branch: raw.branch,
+          subject: raw.subject,
+          status: raw.status,
+          bio: raw.bio,
+          createdAt: raw.createdAt?.toDate?.()?.toISOString() || raw.createdAt
+        });
+      });
+
+      // 2. Fetch Files List
+      const filesSnap = await getDocs(collection(db, 'files'));
+      const filesPayload: any[] = [];
+      filesSnap.forEach(d => {
+        const raw = d.data();
+        filesPayload.push({
+          id: d.id,
+          fileName: raw.fileName,
+          fileType: raw.fileType,
+          fileSize: raw.fileSize,
+          fileUrl: raw.fileUrl,
+          storagePath: raw.storagePath,
+          description: raw.description,
+          uploadedBy: raw.uploadedBy,
+          uploaderName: raw.uploaderName,
+          uploaderRole: raw.uploaderRole,
+          branch: raw.branch,
+          subject: raw.subject,
+          isApproved: raw.isApproved,
+          approvedBy: raw.approvedBy,
+          downloadCount: raw.downloadCount,
+          createdAt: raw.createdAt?.toDate?.()?.toISOString() || raw.createdAt
+        });
+      });
+
+      // 3. Fetch Activity Logs
+      const logsSnap = await getDocs(collection(db, 'activity_logs'));
+      const logsPayload: any[] = [];
+      logsSnap.forEach(d => {
+        const raw = d.data();
+        logsPayload.push({
+          id: d.id,
+          action: raw.action,
+          actorId: raw.actorId,
+          actorName: raw.actorName,
+          actorRole: raw.actorRole,
+          actorBranch: raw.actorBranch,
+          fileId: raw.fileId,
+          fileName: raw.fileName,
+          fileSubject: raw.fileSubject,
+          fileBranch: raw.fileBranch,
+          createdAt: raw.createdAt?.toDate?.()?.toISOString() || raw.createdAt
+        });
+      });
+
+      // 4. Fetch Global Bulletins Notices
+      const noticesSnap = await getDocs(collection(db, 'notices'));
+      const noticesPayload: any[] = [];
+      noticesSnap.forEach(d => {
+        const raw = d.data();
+        noticesPayload.push({
+          id: d.id,
+          title: raw.title,
+          content: raw.content,
+          uploadedBy: raw.uploadedBy,
+          uploaderName: raw.uploaderName,
+          createdAt: raw.createdAt?.toDate?.()?.toISOString() || raw.createdAt
+        });
+      });
+
+      // 5. Structure Backup File
+      const backupStructure = {
+        meta: {
+          organization: "Sristy Education Family",
+          generatedAt: new Date().toISOString(),
+          generatedBy: {
+            uid: user.uid,
+            name: user.fullName,
+            role: user.role
+          },
+          contractCompliance: "SLA Clause 7.1 Auto Backup Compliant File"
+        },
+        collections: {
+          users: usersPayload,
+          files: filesPayload,
+          activity_logs: logsPayload,
+          notices: noticesPayload
+        }
+      };
+
+      // 6. Initialize JSZip
+      const zip = new JSZip();
+      
+      // Add backup_info.json
+      zip.file("backup_info.json", JSON.stringify(backupStructure, null, 2));
+
+      // 7. Download all files and add to JSZip
+      const totalFiles = files.length;
+      setZipProgress(t("Compiling files list..."));
+
+      for (let i = 0; i < totalFiles; i++) {
+        const fileItem = files[i];
+        if (!fileItem.fileUrl) continue;
+
+        const currentNum = i + 1;
+        setZipProgress(
+          t("Downloading file {{current}}/{{total}}: {{name}}")
+            .replace('{{current}}', String(currentNum))
+            .replace('{{total}}', String(totalFiles))
+            .replace('{{name}}', fileItem.fileName)
+        );
+
+        try {
+          let downloadUrl = fileItem.fileUrl;
+          if (downloadUrl && !downloadUrl.startsWith('/') && !downloadUrl.startsWith(window.location.origin)) {
+            downloadUrl = `/api/r2/file?url=${encodeURIComponent(downloadUrl)}`;
+          }
+
+          const res = await fetch(downloadUrl);
+          if (!res.ok) {
+            throw new Error(`HTTP error ${res.status}`);
+          }
+          const blob = await res.blob();
+          
+          // Organize folders: branch/subject/filename
+          const branchDir = (fileItem.branch || "General").trim().replace(/[/\\?%*:|"<>\s]+/g, '_');
+          const subjectDir = (fileItem.subject || "General").trim().replace(/[/\\?%*:|"<>\s]+/g, '_');
+          const sanitizedFileName = (fileItem.fileName || "unnamed_file").trim().replace(/[/\\?%*:|"<>]+/g, '_');
+
+          zip.file(`Sristy_Education_Vault/Files/${branchDir}/${subjectDir}/${sanitizedFileName}`, blob);
+        } catch (fileErr) {
+          console.error(`Failed to pack file: ${fileItem.fileName}`, fileErr);
+          // Write an error marker in the folder instead of crashing the whole export!
+          const branchDir = (fileItem.branch || "General").trim().replace(/[/\\?%*:|"<>\s]+/g, '_');
+          const subjectDir = (fileItem.subject || "General").trim().replace(/[/\\?%*:|"<>\s]+/g, '_');
+          const sanitizedFileName = (fileItem.fileName || "unnamed_file").trim().replace(/[/\\?%*:|"<>]+/g, '_');
+          zip.file(
+            `Sristy_Education_Vault/Files/${branchDir}/${subjectDir}/${sanitizedFileName}_error.txt`,
+            `Failed to download file from original url: ${fileItem.fileUrl}. Error detail: ${fileErr instanceof Error ? fileErr.message : String(fileErr)}`
+          );
+        }
+      }
+
+      setZipProgress(t("Generating ZIP archive..."));
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.href = URL.createObjectURL(zipBlob);
+      downloadAnchor.download = `sristy_vault_full_backup_${new Date().toISOString().split('T')[0]}.zip`;
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+
+      setZipProgress('');
+    } catch (e: any) {
+      console.error("ZIP backup generation failed:", e);
+      alert(t("Failed to generate complete ZIP backup: ") + (e?.message || String(e)));
+    } finally {
+      setIsZipping(false);
     }
   };
 
@@ -993,7 +1180,8 @@ export default function DashboardMasterAdmin({
       </div>
 
       {/* bKash/Pathao Style Ultra-Elegant Bottom Tab Navigator for Mobile View */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 w-full z-50 bg-white dark:bg-slate-950 border-t border-gray-150 dark:border-slate-800/80 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] mt-0 pb-safe transition-colors">
+      {ReactDOM.createPortal(
+        <div className="sm:hidden fixed bottom-0 left-0 right-0 w-full z-[9999] bg-white dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800 transition-colors" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <div className="flex justify-around items-center h-12 px-1">
           <button
             onClick={() => setActiveTab('admins')}
@@ -1142,8 +1330,9 @@ export default function DashboardMasterAdmin({
             )}
           </button>
         </div>
-      </div>
-      <div className="sm:hidden h-12 pb-safe" /> {/* Prevents main layout overlap */}
+      </div>,
+        document.body
+      )}
 
       {activeTab === 'admins' && (
         <div className="grid lg:grid-cols-3 gap-8 animate-in fade-in duration-200">
@@ -1426,150 +1615,639 @@ export default function DashboardMasterAdmin({
               ) : adminsList.filter(u => roleFilter === 'all' || u.role === roleFilter).length === 0 ? (
                 <div className="text-center py-12 text-xs text-gray-400 dark:text-gray-550">{t("No matched profiles found.")}</div>
               ) : (
-                <table className="w-full min-w-[600px] border-collapse text-left">
-                  <thead>
-                    <tr className="border-b border-gray-100 dark:border-slate-803 text-gray-400 dark:text-gray-500 text-[10px] font-bold uppercase tracking-wider bg-gray-50/50 dark:bg-slate-800/20">
-                      <th className="py-4 px-6">{t("Institutional Branch Member")}</th>
-                      <th className="py-4 px-6">{t("Profile Role Level")}</th>
-                      <th className="py-4 px-6">{t("Branch / Subject Assigned")}</th>
-                      <th className="py-4 px-6">{t("Portal Key / Passwords")}</th>
-                      <th className="py-4 px-6 text-right">{t("Suspend / Kill")}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-105 dark:divide-slate-805 text-xs font-medium text-gray-750 dark:text-gray-300">
+                <>
+                  {/* Desktop Table View */}
+                  <div className="hidden md:block">
+                    <table className="w-full min-w-[600px] border-collapse text-left">
+                      <thead>
+                        <tr className="border-b border-gray-100 dark:border-slate-803 text-gray-400 dark:text-gray-500 text-[10px] font-bold uppercase tracking-wider bg-gray-50/50 dark:bg-slate-800/20">
+                          <th className="py-4 px-6">{t("Institutional Branch Member")}</th>
+                          <th className="py-4 px-6">{t("Profile Role Level")}</th>
+                          <th className="py-4 px-6">{t("Branch / Subject Assigned")}</th>
+                          <th className="py-4 px-6">{t("Portal Key / Passwords")}</th>
+                          <th className="py-4 px-6 text-right">{t("Suspend / Kill")}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-105 dark:divide-slate-850 text-xs font-medium text-gray-750 dark:text-gray-300">
+                        {adminsList
+                          .filter((adm) => roleFilter === 'all' || adm.role === roleFilter)
+                          .map((adm) => {
+                            const isExpanded = expandedMemberId === adm.uid;
+                            const teacherFiles = files.filter(f => f.uploadedBy === adm.uid);
+                            const teacherRejections = logsList.filter(log => log.action === 'file_rejected' && log.uploaderId === adm.uid);
+
+                            return (
+                              <React.Fragment key={adm.uid}>
+                                <tr 
+                                  onClick={() => setExpandedMemberId(isExpanded ? null : adm.uid)}
+                                  className="hover:bg-gray-50/40 dark:hover:bg-slate-800/10 transition-colors cursor-pointer select-none"
+                                >
+                                  <td className="py-4.5 px-6">
+                                    <div className="flex items-center gap-3">
+                                      <ChevronRight className={`w-4 h-4 text-gray-400 dark:text-gray-550 shrink-0 transition-transform ${isExpanded ? 'rotate-90 text-indigo-500 font-bold' : ''}`} />
+                                      <div className="w-9 h-9 rounded-full bg-brand-50 dark:bg-slate-800 border border-brand-100 dark:border-slate-700 flex items-center justify-center text-brand-505 dark:text-brand-409 font-bold text-xs uppercase shrink-0" onClick={(e) => e.stopPropagation()}>
+                                        {adm.profilePic ? (
+                                          <img src={adm.profilePic} alt="avatar" className="w-full h-full rounded-full object-cover" />
+                                        ) : (
+                                          adm.fullName.charAt(0)
+                                        )}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="font-semibold text-xs text-gray-800 dark:text-gray-100 truncate">{adm.fullName}</p>
+                                        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                          <span className="text-[10px] text-gray-400 font-mono">@{adm.username}</span>
+                                          {adm.status === 'inactive' && (
+                                            <span className="text-[8px] bg-red-100 dark:bg-red-955/20 text-red-650 dark:text-red-400 px-1 rounded font-bold uppercase tracking-wider font-sans">SUSPENDED</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="py-4.5 px-6" onClick={(e) => e.stopPropagation()}>
+                                    {(user.role === 'super_admin' || user.role === 'master_admin') ? (
+                                      <select
+                                        value={adm.role}
+                                        onChange={(e) => handleUpdateUserRole(adm.uid, e.target.value)}
+                                        className="px-2 py-1 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-705 text-gray-808 default:text-gray-150 rounded-lg text-xxs font-bold focus:outline-none focus:border-brand-500 cursor-pointer"
+                                      >
+                                        <option value="viewer">{t("Viewer / Student")}</option>
+                                        <option value="teacher">{t("Teacher")}</option>
+                                        <option value="file_approver">{t("File Approver")}</option>
+                                        <option value="admin">{t("Branch Admin")}</option>
+                                        {user.role === 'super_admin' && <option value="master_admin">{t("Master Admin")}</option>}
+                                        {user.role === 'super_admin' && <option value="super_admin">{t("Super Admin")}</option>}
+                                      </select>
+                                    ) : (
+                                      <span className="inline-block bg-brand-50 dark:bg-brand-950/20 font-medium text-[10px] text-brand-600 dark:text-brand-400 border border-brand-100 dark:border-brand-900/30 px-2 py-0.5 rounded-full select-none uppercase tracking-wider">
+                                        {adm.role === 'super_admin' ? t("Super Admin") : adm.role === 'master_admin' ? t("Master Admin") : adm.role === 'admin' ? t("Branch Admin") : adm.role === 'file_approver' ? t("Approver") : adm.role === 'teacher' ? t("Teacher") : t("Viewer")}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-4.5 px-6">
+                                    <div className="space-y-1">
+                                      <span className="inline-block bg-gray-50 dark:bg-slate-800 text-gray-550 dark:text-gray-400 border border-gray-100 dark:border-slate-750 text-[10px] px-2 py-0.5 rounded-full select-none">
+                                        {adm.branch ? t(adm.branch) : t("Global Overlord")}
+                                      </span>
+                                      {adm.role === 'teacher' && (
+                                        <div className="flex flex-col gap-1 mt-1">
+                                          <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">{t("Assigned Subjects")}:</div>
+                                          {adm.subjects && adm.subjects.length > 0 ? (
+                                            <div className="flex flex-wrap gap-1 max-w-[200px]">
+                                              {adm.subjects.map((s, sIdx) => (
+                                                <span key={sIdx} className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[9px] px-2 py-0.5 rounded-md flex items-center gap-1">
+                                                  <BookOpen className="w-2.5 h-2.5 shrink-0" />
+                                                  <span>{t(s)}</span>
+                                                </span>
+                                              ))}
+                                            </div>
+                                          ) : adm.subject ? (
+                                            <span className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-705 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[9px] px-2 py-0.5 rounded-md flex items-center gap-1 w-fit">
+                                              <BookOpen className="w-2.5 h-2.5 shrink-0" />
+                                              <span>{t(adm.subject)}</span>
+                                            </span>
+                                          ) : (
+                                            <span className="text-[9px] text-gray-455 italic">{t("None Assigned")}</span>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="py-4.5 px-6" onClick={(e) => e.stopPropagation()}>
+                                    {resettingUid === adm.uid ? (
+                                      <div className="flex items-center gap-1 max-w-[200px]">
+                                        <input
+                                          type="text"
+                                          value={newPasswordVal}
+                                          onChange={(e) => setNewPasswordVal(e.target.value)}
+                                          placeholder={t("New password")}
+                                          className="px-2 py-1 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-703 text-gray-808 dark:text-gray-100 rounded-md focus:outline-none focus:border-brand-500 text-xxs w-full"
+                                        />
+                                        <button
+                                          onClick={() => handleResetPassword(adm.uid)}
+                                          className="bg-emerald-500 text-white rounded-md p-1.5 hover:bg-emerald-600 transition-colors cursor-pointer shrink-0"
+                                          title="Confirm password reset"
+                                        >
+                                          <CheckCircle2 className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          onClick={() => setResettingUid(null)}
+                                          className="text-gray-400 dark:text-gray-505 hover:text-gray-650 dark:hover:text-gray-300 text-xxs px-1"
+                                        >
+                                          {t("Cancel")}
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        onClick={() => setResettingUid(adm.uid)}
+                                        className="text-[10px] font-bold text-indigo-505 hover:underline flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <Key className="w-3 h-3" />
+                                        <span>{t("Change password")}</span>
+                                      </button>
+                                    )}
+                                  </td>
+                                  <td className="py-4.5 px-6 text-right" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      <button
+                                        onClick={() => handleToggleUserStatus(adm.uid, adm.status || 'active')}
+                                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                          adm.status === 'inactive' 
+                                            ? 'text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-955/20' 
+                                            : 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-955/20'
+                                        }`}
+                                        title={adm.status === 'inactive' ? t("Activate Account") : t("Suspend Account")}
+                                      >
+                                        <ShieldAlert className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteUser(adm.uid, adm.fullName)}
+                                        className="p-1.5 text-gray-450 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-405 hover:bg-red-50 dark:hover:bg-red-955/20 rounded-lg transition-colors cursor-pointer"
+                                        title="Delete Admin Permanently"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+
+                                {isExpanded && (
+                                  <tr className="bg-gray-50/45 dark:bg-slate-950/25 border-l-2 border-indigo-500 animate-in fade-in duration-150">
+                                    <td colSpan={5} className="p-5 sm:p-6">
+                                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-xs text-gray-700 dark:text-gray-300">
+                                        {/* Column 1: Account Information & Biography */}
+                                        <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-4 rounded-xl shadow-3xs space-y-3.5 text-left">
+                                          <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800/60 pb-2">
+                                            <div className="flex items-center gap-2">
+                                              <Users className="w-4 h-4 text-indigo-505" />
+                                              <span className="font-extrabold text-gray-800 dark:text-white uppercase tracking-wider text-[10px]">{t("Account Overview")}</span>
+                                            </div>
+                                            {onViewTeacherDetails && (
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  onViewTeacherDetails(adm.uid);
+                                                }}
+                                                className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-0.5"
+                                              >
+                                                <span>{t("Full Modal")}</span>
+                                                <span>↗</span>
+                                              </button>
+                                            )}
+                                          </div>
+                                          
+                                          <div className="space-y-2 text-[11px]">
+                                            <div className="flex justify-between items-center py-1 border-b border-gray-100/50 dark:border-slate-800/40">
+                                              <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wide">{t("Portal Username")}</span>
+                                              <span className="font-mono text-gray-800 dark:text-gray-200 font-bold">@{adm.username}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center py-1 border-b border-gray-100/50 dark:border-slate-800/40">
+                                              <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wide">{t("Email Address")}</span>
+                                              <span className="text-gray-800 dark:text-gray-200 font-bold truncate max-w-[160px]" title={adm.email}>{adm.email}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center py-1 border-b border-gray-100/50 dark:border-slate-800/40">
+                                              <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wide">{t("Branch Assigned")}</span>
+                                              <span className="font-bold text-gray-800 dark:text-gray-200 truncate">{adm.branch ? t(adm.branch) : t("Global Overlord")}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center py-1 border-b border-gray-100/50 dark:border-slate-800/40">
+                                              <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wide">{t("Role Level")}</span>
+                                              <span className="capitalize bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded text-[10px] font-bold">
+                                                {t(adm.role)}
+                                              </span>
+                                            </div>
+                                            <div className="flex justify-between items-center py-1 border-b border-gray-100/50 dark:border-slate-800/40">
+                                              <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wide">{t("Member Since")}</span>
+                                              <span className="text-gray-800 dark:text-gray-200 font-mono font-bold">
+                                                {adm.createdAt ? adm.createdAt.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : t("N/A")}
+                                              </span>
+                                            </div>
+                                            <div className="flex justify-between items-center py-1">
+                                              <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wide">{t("Account Status")}</span>
+                                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                                adm.status === 'inactive' 
+                                                  ? 'bg-red-50 dark:bg-red-955/20 text-red-650 dark:text-red-400'
+                                                  : 'bg-emerald-50 dark:bg-emerald-955/20 text-emerald-650 dark:text-emerald-400'
+                                              }`}>
+                                                {adm.status === 'inactive' ? t("Suspended") : t("Active")}
+                                              </span>
+                                            </div>
+                                          </div>
+
+                                          <div className="pt-2 border-t border-gray-100 dark:border-slate-800/40">
+                                            <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">{t("Professional Bio")}</span>
+                                            <p className="bg-gray-50/50 dark:bg-slate-950/20 p-2.5 rounded-lg text-xxs text-gray-650 dark:text-gray-450 leading-relaxed italic border border-gray-100/40 dark:border-slate-800/20 whitespace-pre-wrap">
+                                              {adm.bio || t("No professional bio written yet.")}
+                                            </p>
+                                          </div>
+                                        </div>
+
+                                        {/* Column 2: Teacher Uploads & Stats */}
+                                        <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-4 rounded-xl shadow-3xs space-y-3.5 text-left">
+                                          <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800/60 pb-2">
+                                            <div className="flex items-center gap-2">
+                                              <FileText className="w-4 h-4 text-emerald-500" />
+                                              <span className="font-extrabold text-gray-800 dark:text-white uppercase tracking-wider text-[10px]">{t("Study Material Uploads")}</span>
+                                            </div>
+                                            <span className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-605 dark:text-emerald-400 text-xxs px-2 py-0.5 rounded-full font-bold">
+                                              {teacherFiles.length} {t("Total")}
+                                            </span>
+                                          </div>
+
+                                          {/* Counts metrics */}
+                                          <div className="grid grid-cols-2 gap-2 text-center text-xxs font-bold">
+                                            <div className="bg-emerald-50/20 dark:bg-emerald-950/10 border border-emerald-100/35 p-2 rounded-lg">
+                                              <p className="text-emerald-600 dark:text-emerald-400 text-sm font-black">{teacherFiles.filter(f => f.isApproved).length}</p>
+                                              <p className="text-gray-405 font-bold uppercase text-[9px] mt-0.5">{t("Approved")}</p>
+                                            </div>
+                                            <div className="bg-amber-50/20 dark:bg-amber-950/10 border border-amber-100/35 p-2 rounded-lg">
+                                              <p className="text-amber-600 dark:text-amber-400 text-sm font-black">{teacherFiles.filter(f => !f.isApproved).length}</p>
+                                              <p className="text-gray-405 font-bold uppercase text-[9px] mt-0.5">{t("Pending")}</p>
+                                            </div>
+                                          </div>
+
+                                          <div className="space-y-2 max-h-[170px] overflow-y-auto pr-1">
+                                            <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">{t("Recent Activity")}</span>
+                                            {teacherFiles.length === 0 ? (
+                                              <p className="text-xxs text-gray-400 dark:text-gray-550 text-center py-6">{t("No upload archives recorded yet.")}</p>
+                                            ) : (
+                                              teacherFiles.slice(0, 3).map((f) => (
+                                                <div key={f.id} className="flex items-center justify-between gap-2 p-2 bg-gray-50/50 dark:bg-slate-950/20 border border-gray-100/30 dark:border-slate-800/20 rounded-lg">
+                                                  <div className="min-w-0 flex-1">
+                                                    <p className="font-extrabold text-[11px] text-gray-800 dark:text-gray-100 truncate" title={f.fileName}>{f.fileName}</p>
+                                                    <p className="text-[9px] text-gray-400 font-mono font-bold uppercase">{t(f.subject)} • {(f.fileSize / (1024 * 1024)).toFixed(2)} MB</p>
+                                                  </div>
+                                                  <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold shrink-0 uppercase tracking-wider ${
+                                                    f.isApproved 
+                                                      ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-605 dark:text-emerald-400' 
+                                                      : 'bg-amber-50 dark:bg-amber-950/20 text-amber-605 dark:text-amber-400'
+                                                  }`}>
+                                                    {f.isApproved ? t("Approved") : t("Pending")}
+                                                  </span>
+                                                </div>
+                                              ))
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {/* Column 3: Document Rejection Audits */}
+                                        <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-4 rounded-xl shadow-3xs space-y-3.5 text-left">
+                                          <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800/60 pb-2">
+                                            <div className="flex items-center gap-2">
+                                              <ShieldAlert className="w-4 h-4 text-red-500" />
+                                              <span className="font-extrabold text-gray-800 dark:text-white uppercase tracking-wider text-[10px]">{t("Rejection Logs")}</span>
+                                            </div>
+                                            <span className="bg-red-50 dark:bg-red-955/20 text-red-650 dark:text-red-400 text-xxs px-2 py-0.5 rounded-full font-bold">
+                                              {teacherRejections.length} {t("Total")}
+                                            </span>
+                                          </div>
+
+                                          <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
+                                            {teacherRejections.length === 0 ? (
+                                              <div className="text-center py-10 text-xxs text-gray-400 dark:text-gray-550">
+                                                <p className="font-extrabold text-emerald-600 dark:text-emerald-400 text-xs mb-1">✓ {t("Excellent Standing")}</p>
+                                                <p className="text-[10px] text-gray-450 font-medium">{t("No document rejections recorded for this account.")}</p>
+                                              </div>
+                                            ) : (
+                                              teacherRejections.slice(0, 3).map((rej) => (
+                                                <div key={rej.id} className="p-2.5 bg-red-50/10 dark:bg-red-955/5 border border-red-100/20 dark:border-red-900/10 rounded-lg space-y-1.5">
+                                                  <div className="flex items-start justify-between gap-1.5">
+                                                    <p className="font-extrabold text-[10.5px] text-gray-800 dark:text-gray-100 truncate max-w-[130px]" title={rej.fileName}>{rej.fileName}</p>
+                                                    <span className="text-[8px] text-gray-400 font-mono shrink-0 uppercase tracking-wide font-bold">
+                                                      {rej.createdAt ? rej.createdAt.toLocaleDateString() : t("Just now")}
+                                                    </span>
+                                                  </div>
+                                                  
+                                                  <div className="bg-white/80 dark:bg-slate-900/60 p-2 rounded border border-red-50/30 dark:border-red-955/15 text-[10px] text-red-700 dark:text-red-300 leading-normal font-medium whitespace-pre-wrap">
+                                                    <span className="block text-[8px] font-extrabold uppercase text-red-500 tracking-wider mb-0.5">{t("Reason Specified")}:</span>
+                                                    {rej.rejectionReason}
+                                                  </div>
+                                                  
+                                                  <p className="text-[8.5px] text-gray-400 text-right uppercase tracking-wider font-bold">
+                                                    {t("Rejected By")}: <span className="text-gray-500 dark:text-gray-300 font-mono font-bold">{rej.actorName}</span>
+                                                  </p>
+                                                </div>
+                                              ))
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile Card Stack View */}
+                  <div className="md:hidden divide-y divide-gray-105 dark:divide-slate-805/40 bg-white dark:bg-slate-900 transition-colors">
                     {adminsList
                       .filter((adm) => roleFilter === 'all' || adm.role === roleFilter)
-                      .map((adm) => (
-                      <tr key={adm.uid} className="hover:bg-gray-50/50 dark:hover:bg-slate-850/20 transition-colors">
-                        <td className="py-4.5 px-6">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-brand-50 dark:bg-slate-800 border border-brand-100 dark:border-slate-700 flex items-center justify-center text-brand-505 dark:text-brand-409 font-bold text-xs uppercase shrink-0">
-                              {adm.profilePic ? (
-                                <img src={adm.profilePic} alt="avatar" className="w-full h-full rounded-full object-cover" />
-                              ) : (
-                                adm.fullName.charAt(0)
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="font-semibold text-xs text-gray-800 dark:text-gray-100 truncate">{adm.fullName}</p>
-                              <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                                <span className="text-[10px] text-gray-400 font-mono">@{adm.username}</span>
-                                {adm.status === 'inactive' && (
-                                  <span className="text-[8px] bg-red-100 dark:bg-red-950/40 text-red-650 dark:text-red-400 px-1 rounded font-bold uppercase tracking-wider font-sans">SUSPENDED</span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-4.5 px-6">
-                          {(user.role === 'super_admin' || user.role === 'master_admin') ? (
-                            <select
-                              value={adm.role}
-                              onChange={(e) => handleUpdateUserRole(adm.uid, e.target.value)}
-                              className="px-2 py-1 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-808 default:text-gray-150 rounded-lg text-xxs font-bold focus:outline-none focus:border-brand-500 cursor-pointer"
+                      .map((adm) => {
+                        const isExpanded = expandedMemberId === adm.uid;
+                        const teacherFiles = files.filter(f => f.uploadedBy === adm.uid);
+                        const teacherRejections = logsList.filter(log => log.action === 'file_rejected' && log.uploaderId === adm.uid);
+
+                        return (
+                          <div key={adm.uid} className="transition-colors">
+                            {/* Card Header Trigger */}
+                            <div 
+                              onClick={() => setExpandedMemberId(isExpanded ? null : adm.uid)}
+                              className="p-4 flex items-center justify-between hover:bg-gray-50/50 dark:hover:bg-slate-850/10 cursor-pointer select-none"
                             >
-                              <option value="viewer">{t("Viewer / Student")}</option>
-                              <option value="teacher">{t("Teacher")}</option>
-                              <option value="file_approver">{t("File Approver")}</option>
-                              <option value="admin">{t("Branch Admin")}</option>
-                              {user.role === 'super_admin' && <option value="master_admin">{t("Master Admin")}</option>}
-                              {user.role === 'super_admin' && <option value="super_admin">{t("Super Admin")}</option>}
-                            </select>
-                          ) : (
-                            <span className="inline-block bg-brand-50 dark:bg-brand-950/20 font-medium text-[10px] text-brand-600 dark:text-brand-400 border border-brand-100 dark:border-brand-900/30 px-2 py-0.5 rounded-full select-none uppercase tracking-wider">
-                              {adm.role === 'super_admin' ? t("Super Admin") : adm.role === 'master_admin' ? t("Master Admin") : adm.role === 'admin' ? t("Branch Admin") : adm.role === 'file_approver' ? t("Approver") : adm.role === 'teacher' ? t("Teacher") : t("Viewer")}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-4.5 px-6">
-                          <div className="space-y-1">
-                            <span className="inline-block bg-gray-50 dark:bg-slate-800 text-gray-550 dark:text-gray-400 border border-gray-100 dark:border-slate-750 text-[10px] px-2 py-0.5 rounded-full select-none">
-                              {adm.branch ? t(adm.branch) : t("Global Overlord")}
-                            </span>
-                            {adm.role === 'teacher' && (
-                              <div className="flex flex-col gap-1 mt-1">
-                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">{t("Assigned Subjects")}:</div>
-                                {adm.subjects && adm.subjects.length > 0 ? (
-                                  <div className="flex flex-wrap gap-1 max-w-[200px]">
-                                    {adm.subjects.map((s, sIdx) => (
-                                      <span key={sIdx} className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[9px] px-2 py-0.5 rounded-md flex items-center gap-1">
-                                        <BookOpen className="w-2.5 h-2.5 shrink-0" />
-                                        <span>{t(s)}</span>
-                                      </span>
-                                    ))}
+                              <div className="flex items-center gap-3 min-w-0">
+                                <ChevronRight className={`w-4 h-4 text-gray-400 dark:text-gray-550 shrink-0 transition-transform ${isExpanded ? 'rotate-90 text-indigo-500 font-bold' : ''}`} />
+                                <div className="w-10 h-10 rounded-full bg-brand-50 dark:bg-slate-800 border border-brand-100 dark:border-slate-700 flex items-center justify-center text-brand-505 dark:text-brand-409 font-bold text-xs uppercase shrink-0" onClick={(e) => e.stopPropagation()}>
+                                  {adm.profilePic ? (
+                                    <img src={adm.profilePic} alt="avatar" className="w-full h-full rounded-full object-cover" />
+                                  ) : (
+                                    adm.fullName.charAt(0)
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <h4 className="font-bold text-xs text-gray-850 dark:text-white truncate">{adm.fullName}</h4>
+                                    {adm.status === 'inactive' && (
+                                      <span className="text-[8px] bg-red-105 dark:bg-red-955/30 text-red-650 dark:text-red-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider shrink-0">SUSPENDED</span>
+                                    )}
                                   </div>
-                                ) : adm.subject ? (
-                                  <span className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[9px] px-2 py-0.5 rounded-md flex items-center gap-1 w-fit">
-                                    <BookOpen className="w-2.5 h-2.5 shrink-0" />
-                                    <span>{t(adm.subject)}</span>
-                                  </span>
-                                ) : (
-                                  <span className="text-[9px] text-gray-450 italic">{t("None Assigned")}</span>
-                                )}
+                                  <p className="text-[10px] text-gray-400 font-mono">@{adm.username}</p>
+                                </div>
+                              </div>
+                              <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/35 text-indigo-650 dark:text-indigo-400 border border-indigo-100/30 px-2 py-0.5 rounded font-extrabold uppercase shrink-0">
+                                {t(adm.role)}
+                              </span>
+                            </div>
+
+                            {/* Collapsible Details */}
+                            {isExpanded && (
+                              <div className="p-4 pt-0 bg-gray-50/45 dark:bg-slate-950/20 border-l-2 border-indigo-500 space-y-4 text-xs text-gray-700 dark:text-gray-300">
+                                {/* Account Information / Overview */}
+                                <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800/80 p-3.5 rounded-xl space-y-3 shadow-3xs text-left">
+                                  <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800/60 pb-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <Users className="w-3.5 h-3.5 text-indigo-505" />
+                                      <span className="font-extrabold text-[9.5px] uppercase tracking-wider text-gray-800 dark:text-white">{t("Account Overview")}</span>
+                                    </div>
+                                    {onViewTeacherDetails && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onViewTeacherDetails(adm.uid);
+                                        }}
+                                        className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-0.5"
+                                      >
+                                        <span>{t("Full Modal")}</span>
+                                        <span>↗</span>
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  <div className="space-y-2 text-[10.5px]">
+                                    <div className="flex justify-between items-center py-0.5 border-b border-gray-100/55 dark:border-slate-800/40">
+                                      <span className="text-gray-400 font-bold uppercase text-[8.5px] tracking-wide">{t("Portal Username")}</span>
+                                      <span className="font-mono font-bold text-gray-800 dark:text-gray-200">@{adm.username}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-0.5 border-b border-gray-100/55 dark:border-slate-800/40">
+                                      <span className="text-gray-400 font-bold uppercase text-[8.5px] tracking-wide">{t("Email Address")}</span>
+                                      <span className="font-bold text-gray-800 dark:text-gray-200 truncate max-w-[170px]" title={adm.email}>{adm.email}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-0.5 border-b border-gray-100/55 dark:border-slate-800/40">
+                                      <span className="text-gray-400 font-bold uppercase text-[8.5px] tracking-wide">{t("Branch")}</span>
+                                      <span className="font-bold text-gray-800 dark:text-gray-200 truncate">{adm.branch ? t(adm.branch) : t("Global Overlord")}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-0.5 border-b border-gray-100/55 dark:border-slate-800/40">
+                                      <span className="text-gray-400 font-bold uppercase text-[8.5px] tracking-wide">{t("Role")}</span>
+                                      <span className="capitalize bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded text-[9.5px] font-bold">
+                                        {t(adm.role)}
+                                      </span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-0.5 border-b border-gray-100/55 dark:border-slate-800/40">
+                                      <span className="text-gray-400 font-bold uppercase text-[8.5px] tracking-wide">{t("Member Since")}</span>
+                                      <span className="font-bold text-gray-800 dark:text-gray-200 font-mono">
+                                        {adm.createdAt ? adm.createdAt.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : t("N/A")}
+                                      </span>
+                                    </div>
+                                    {adm.role === 'teacher' && (
+                                      <div className="py-1 border-b border-gray-100/55 dark:border-slate-800/40 space-y-1">
+                                        <span className="text-gray-400 font-bold uppercase text-[8.5px] tracking-wide">{t("Assigned Subjects")}</span>
+                                        {adm.subjects && adm.subjects.length > 0 ? (
+                                          <div className="flex flex-wrap gap-1 mt-0.5">
+                                            {adm.subjects.map((s, sIdx) => (
+                                              <span key={sIdx} className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/35 text-[9px] px-1.5 py-0.5 rounded flex items-center gap-1 font-bold">
+                                                <BookOpen className="w-2.5 h-2.5" />
+                                                <span>{t(s)}</span>
+                                              </span>
+                                            ))}
+                                          </div>
+                                        ) : adm.subject ? (
+                                          <span className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/35 text-[9px] px-1.5 py-0.5 rounded flex items-center gap-1 font-bold w-fit mt-0.5">
+                                            <BookOpen className="w-2.5 h-2.5" />
+                                            <span>{t(adm.subject)}</span>
+                                          </span>
+                                        ) : (
+                                          <span className="block text-[9px] text-gray-450 italic">{t("None Assigned")}</span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="pt-2 border-t border-gray-100 dark:border-slate-800/40 text-left">
+                                    <span className="block text-[8.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">{t("Professional Bio")}</span>
+                                    <p className="bg-gray-50/50 dark:bg-slate-950/25 p-2.5 rounded-lg text-xxs text-gray-650 dark:text-gray-455 leading-relaxed italic border border-gray-100/40 dark:border-slate-800/20 whitespace-pre-wrap">
+                                      {adm.bio || t("No professional bio written yet.")}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Study Material Uploads Stack */}
+                                <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800/80 p-3.5 rounded-xl space-y-3 shadow-3xs text-left">
+                                  <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800/60 pb-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <FileText className="w-3.5 h-3.5 text-emerald-500" />
+                                      <span className="font-extrabold text-[9.5px] uppercase tracking-wider text-gray-800 dark:text-white">{t("Study Material Uploads")}</span>
+                                    </div>
+                                    <span className="bg-emerald-50 dark:bg-emerald-950/25 text-emerald-600 dark:text-emerald-450 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                                      {teacherFiles.length} {t("Total")}
+                                    </span>
+                                  </div>
+
+                                  {/* Stats metrics */}
+                                  <div className="grid grid-cols-2 gap-2 text-center text-xxs font-bold">
+                                    <div className="bg-emerald-50/20 dark:bg-emerald-950/10 border border-emerald-100/35 p-1.5 rounded-lg">
+                                      <p className="text-emerald-600 dark:text-emerald-400 text-xs font-black">{teacherFiles.filter(f => f.isApproved).length}</p>
+                                      <p className="text-gray-405 font-bold uppercase text-[8px] mt-0.5">{t("Approved")}</p>
+                                    </div>
+                                    <div className="bg-amber-50/20 dark:bg-amber-950/10 border border-amber-100/35 p-1.5 rounded-lg">
+                                      <p className="text-amber-600 dark:text-amber-400 text-xs font-black">{teacherFiles.filter(f => !f.isApproved).length}</p>
+                                      <p className="text-gray-405 font-bold uppercase text-[8px] mt-0.5">{t("Pending")}</p>
+                                    </div>
+                                  </div>
+
+                                  <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+                                    {teacherFiles.length === 0 ? (
+                                      <p className="text-xxs text-gray-400 dark:text-gray-550 text-center py-6">{t("No upload archives recorded yet.")}</p>
+                                    ) : (
+                                      teacherFiles.slice(0, 3).map((f) => (
+                                        <div key={f.id} className="flex items-center justify-between gap-2 p-2 bg-gray-50/50 dark:bg-slate-950/20 border border-gray-100/30 dark:border-slate-800/20 rounded-lg">
+                                          <div className="min-w-0 flex-1">
+                                            <p className="font-extrabold text-[10px] text-gray-800 dark:text-gray-100 truncate" title={f.fileName}>{f.fileName}</p>
+                                            <p className="text-[8px] text-gray-400 font-mono font-bold uppercase">{t(f.subject)} • {(f.fileSize / (1024 * 1024)).toFixed(2)} MB</p>
+                                          </div>
+                                          <span className={`text-[8.5px] px-1.5 py-0.5 rounded font-bold shrink-0 uppercase tracking-wide ${
+                                            f.isApproved 
+                                              ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-605 dark:text-emerald-400' 
+                                              : 'bg-amber-50 dark:bg-amber-950/20 text-amber-605 dark:text-amber-400'
+                                          }`}>
+                                            {f.isApproved ? t("Approved") : t("Pending")}
+                                          </span>
+                                        </div>
+                                      ))
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Rejections Audit Log Stack */}
+                                <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800/80 p-3.5 rounded-xl space-y-3 shadow-3xs text-left">
+                                  <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800/60 pb-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <ShieldAlert className="w-3.5 h-3.5 text-red-500" />
+                                      <span className="font-extrabold text-[9.5px] uppercase tracking-wider text-gray-800 dark:text-white">{t("Rejection Logs")}</span>
+                                    </div>
+                                    <span className="bg-red-50 dark:bg-red-955/25 text-red-600 dark:text-red-400 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                                      {teacherRejections.length} {t("Total")}
+                                    </span>
+                                  </div>
+
+                                  <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
+                                    {teacherRejections.length === 0 ? (
+                                      <div className="text-center py-6 text-xxs text-gray-400 dark:text-gray-550">
+                                        <p className="font-extrabold text-emerald-600 dark:text-emerald-400 text-[11px] mb-0.5">✓ {t("Excellent Standing")}</p>
+                                        <p className="text-[9.5px] text-gray-450">{t("No rejections recorded.")}</p>
+                                      </div>
+                                    ) : (
+                                      teacherRejections.slice(0, 3).map((rej) => (
+                                        <div key={rej.id} className="p-2 bg-red-50/10 dark:bg-red-955/5 border border-red-100/20 dark:border-red-900/10 rounded-lg space-y-1.5">
+                                          <div className="flex items-start justify-between gap-1.5">
+                                            <p className="font-extrabold text-[10px] text-gray-800 dark:text-gray-100 truncate max-w-[150px]" title={rej.fileName}>{rej.fileName}</p>
+                                            <span className="text-[8px] text-gray-400 font-mono shrink-0 font-bold uppercase">
+                                              {rej.createdAt ? rej.createdAt.toLocaleDateString() : t("Just now")}
+                                            </span>
+                                          </div>
+                                          
+                                          <div className="bg-white/90 dark:bg-slate-900/60 p-2 rounded border border-red-50/30 dark:border-red-955/15 text-[9.5px] text-red-750 dark:text-red-350 leading-relaxed font-medium whitespace-pre-wrap">
+                                            <span className="block text-[8px] font-extrabold uppercase text-red-500 tracking-wider mb-0.5">{t("Reason Specified")}:</span>
+                                            {rej.rejectionReason}
+                                          </div>
+                                          
+                                          <p className="text-[8px] text-gray-400 text-right font-bold uppercase tracking-wide">
+                                            {t("Rejected By")}: <span className="text-gray-500 dark:text-gray-300 font-mono">{rej.actorName}</span>
+                                          </p>
+                                        </div>
+                                      ))
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Quick Settings Area */}
+                                <div className="bg-white dark:bg-slate-900 border border-gray-105 dark:border-slate-800 p-3.5 rounded-xl space-y-3.5 shadow-3xs text-left" onClick={(e) => e.stopPropagation()}>
+                                  <div className="flex items-center gap-2 border-b border-gray-100 dark:border-slate-800/60 pb-1.5">
+                                    <Key className="w-3.5 h-3.5 text-indigo-505" />
+                                    <span className="font-extrabold text-[9.5px] uppercase tracking-wider text-gray-800 dark:text-white">{t("Administrative Settings")}</span>
+                                  </div>
+
+                                  <div className="space-y-3">
+                                    {/* Update Role Select in mobile settings */}
+                                    <div className="space-y-1">
+                                      <label className="text-[8.5px] font-bold text-gray-400 uppercase tracking-wider">{t("Update Role Level")}</label>
+                                      {(user.role === 'super_admin' || user.role === 'master_admin') ? (
+                                        <select
+                                          value={adm.role}
+                                          onChange={(e) => handleUpdateUserRole(adm.uid, e.target.value)}
+                                          className="px-2 py-1.5 bg-gray-50 dark:bg-slate-800 border border-gray-205 dark:border-slate-700 text-gray-808 dark:text-gray-150 rounded-lg text-xxs font-bold focus:outline-none focus:border-brand-500 w-full cursor-pointer"
+                                        >
+                                          <option value="viewer">{t("Viewer / Student")}</option>
+                                          <option value="teacher">{t("Teacher")}</option>
+                                          <option value="file_approver">{t("File Approver")}</option>
+                                          <option value="admin">{t("Branch Admin")}</option>
+                                          {user.role === 'super_admin' && <option value="master_admin">{t("Master Admin")}</option>}
+                                          {user.role === 'super_admin' && <option value="super_admin">{t("Super Admin")}</option>}
+                                        </select>
+                                      ) : (
+                                        <p className="font-bold text-xxs text-gray-800 dark:text-gray-200 capitalize">{t(adm.role)}</p>
+                                      )}
+                                    </div>
+
+                                    {/* Password Reset Section */}
+                                    <div className="space-y-1">
+                                      <label className="text-[8.5px] font-bold text-gray-400 uppercase tracking-wider">{t("Portal Keys & Passwords")}</label>
+                                      {resettingUid === adm.uid ? (
+                                        <div className="flex items-center gap-1.5">
+                                          <input
+                                            type="text"
+                                            value={newPasswordVal}
+                                            onChange={(e) => setNewPasswordVal(e.target.value)}
+                                            placeholder={t("New password")}
+                                            className="px-2 py-1 bg-gray-55 dark:bg-slate-800 border border-gray-205 dark:border-slate-703 text-gray-808 dark:text-gray-100 rounded-md focus:outline-none focus:border-brand-500 text-xxs w-full"
+                                          />
+                                          <button
+                                            onClick={() => handleResetPassword(adm.uid)}
+                                            className="bg-emerald-500 text-white rounded-md p-1.5 hover:bg-emerald-600 transition-colors cursor-pointer shrink-0"
+                                            title="Confirm password reset"
+                                          >
+                                            <CheckCircle2 className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            onClick={() => setResettingUid(null)}
+                                            className="text-gray-400 dark:text-gray-505 hover:text-gray-650 dark:hover:text-gray-300 text-xxs px-1"
+                                          >
+                                            {t("Cancel")}
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <button
+                                          onClick={() => setResettingUid(adm.uid)}
+                                          className="text-xxs font-extrabold text-indigo-505 hover:underline flex items-center gap-1 cursor-pointer bg-indigo-50/40 dark:bg-indigo-950/15 border border-indigo-100/30 px-2 py-1.5 rounded-lg w-full justify-center"
+                                        >
+                                          <Key className="w-3 h-3" />
+                                          <span>{t("Change password")}</span>
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {/* Suspend & Delete Actions */}
+                                    <div className="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-slate-800/40">
+                                      <button
+                                        onClick={() => handleToggleUserStatus(adm.uid, adm.status || 'active')}
+                                        className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg border text-xxs font-bold transition-colors cursor-pointer ${
+                                          adm.status === 'inactive' 
+                                            ? 'bg-emerald-50 dark:bg-emerald-955/20 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/30' 
+                                            : 'bg-amber-50 dark:bg-amber-955/20 text-amber-605 dark:text-amber-400 border-amber-100 dark:border-amber-900/30'
+                                        }`}
+                                      >
+                                        <ShieldAlert className="w-3.5 h-3.5" />
+                                        <span>{adm.status === 'inactive' ? t("Activate Account") : t("Suspend Account")}</span>
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteUser(adm.uid, adm.fullName)}
+                                        className="flex items-center justify-center gap-1 px-2.5 py-1.5 bg-red-50 dark:bg-red-955/20 text-red-655 dark:text-red-400 border border-red-101 dark:border-red-900/30 rounded-lg text-xxs font-bold transition-colors cursor-pointer"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                        <span>{t("Delete")}</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                             )}
                           </div>
-                        </td>
-                        <td className="py-4.5 px-6">
-                          {resettingUid === adm.uid ? (
-                            <div className="flex items-center gap-1 max-w-[200px]">
-                              <input
-                                type="text"
-                                value={newPasswordVal}
-                                onChange={(e) => setNewPasswordVal(e.target.value)}
-                                placeholder={t("New password")}
-                                className="px-2 py-1 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-703 text-gray-808 dark:text-gray-100 rounded-md focus:outline-none focus:border-brand-500 text-xxs w-full"
-                              />
-                              <button
-                                onClick={() => handleResetPassword(adm.uid)}
-                                className="bg-emerald-500 text-white rounded-md p-1.5 hover:bg-emerald-600 transition-colors cursor-pointer shrink-0"
-                                title="Confirm password reset"
-                              >
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => setResettingUid(null)}
-                                className="text-gray-400 dark:text-gray-505 hover:text-gray-650 dark:hover:text-gray-300 text-xxs px-1"
-                              >
-                                {t("Cancel")}
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setResettingUid(adm.uid)}
-                              className="text-[10px] font-bold text-indigo-500 hover:underline flex items-center gap-1 cursor-pointer"
-                            >
-                              <Key className="w-3 h-3" />
-                              <span>{t("Change password")}</span>
-                            </button>
-                          )}
-                        </td>
-                        <td className="py-4.5 px-6 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => handleToggleUserStatus(adm.uid, adm.status || 'active')}
-                              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                                adm.status === 'inactive' 
-                                  ? 'text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/20' 
-                                  : 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20'
-                              }`}
-                              title={adm.status === 'inactive' ? t("Activate Account") : t("Suspend Account")}
-                            >
-                              <ShieldAlert className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteUser(adm.uid, adm.fullName)}
-                              className="p-1.5 text-gray-450 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-405 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors cursor-pointer"
-                              title="Delete Admin Permanently"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        );
+                      })}
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -1632,6 +2310,7 @@ export default function DashboardMasterAdmin({
                           prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
                         );
                       }}
+                      onViewTeacherDetails={onViewTeacherDetails}
                     />
                   </div>
                 ))}
@@ -1679,35 +2358,136 @@ export default function DashboardMasterAdmin({
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-gray-100 dark:border-slate-800">
+          <div className="rounded-xl border border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 transition-colors">
             {loadingLogs ? (
               <div className="text-center py-12 text-xs text-gray-400 dark:text-gray-505 font-medium">{t("Loading...")}</div>
-            ) : logsList.length === 0 ? (
-              <div className="text-center py-12 text-gray-400 dark:text-gray-550 text-xs font-medium">
-                {t("No activity logs recorded yet in cloud database. Safe start!")}
-              </div>
-            ) : (
-              <table className="w-full min-w-[700px] border-collapse text-left text-xs">
-                <thead>
-                  <tr className="border-b border-gray-100 dark:border-slate-803 text-gray-400 dark:text-gray-505 text-[10px] font-bold uppercase tracking-wider bg-gray-50/50 dark:bg-slate-800/20">
-                    <th className="py-3 px-5">{t("Timestamp")}</th>
-                    <th className="py-3 px-5">{t("Operation Actor")}</th>
-                    <th className="py-3 px-5">{t("Execution Action")}</th>
-                    <th className="py-3 px-5">{t("Target Resource Details")}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-slate-800 font-medium text-gray-700 dark:text-gray-300">
-                  {logsList
-                    .filter(log => {
-                      const mSearch = !logSearchQuery.trim() || 
-                        log.actorName?.toLowerCase().includes(logSearchQuery.toLowerCase()) ||
-                        log.fileName?.toLowerCase().includes(logSearchQuery.toLowerCase()) ||
-                        log.fileSubject?.toLowerCase().includes(logSearchQuery.toLowerCase()) ||
-                        log.fileBranch?.toLowerCase().includes(logSearchQuery.toLowerCase());
-                      const mAction = !logActionFilter || log.action === logActionFilter;
-                      return mSearch && mAction;
-                    })
-                    .map((log) => {
+            ) : (() => {
+              const filteredLogs = logsList.filter(log => {
+                const mSearch = !logSearchQuery.trim() || 
+                  log.actorName?.toLowerCase().includes(logSearchQuery.toLowerCase()) ||
+                  log.fileName?.toLowerCase().includes(logSearchQuery.toLowerCase()) ||
+                  log.fileSubject?.toLowerCase().includes(logSearchQuery.toLowerCase()) ||
+                  log.fileBranch?.toLowerCase().includes(logSearchQuery.toLowerCase());
+                const mAction = !logActionFilter || log.action === logActionFilter;
+                return mSearch && mAction;
+              });
+
+              if (filteredLogs.length === 0) {
+                return (
+                  <div className="text-center py-12 text-gray-400 dark:text-gray-550 text-xs font-medium">
+                    {t("No activity logs recorded yet in cloud database. Safe start!")}
+                  </div>
+                );
+              }
+
+              return (
+                <>
+                  {/* Desktop view (Table layout) */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full min-w-[700px] border-collapse text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-100 dark:border-slate-803 text-gray-400 dark:text-gray-505 text-[10px] font-bold uppercase tracking-wider bg-gray-50/50 dark:bg-slate-800/20">
+                          <th className="py-3 px-5">{t("Timestamp")}</th>
+                          <th className="py-3 px-5">{t("Operation Actor")}</th>
+                          <th className="py-3 px-5">{t("Execution Action")}</th>
+                          <th className="py-3 px-5">{t("Target Resource Details")}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-slate-800 font-medium text-gray-700 dark:text-gray-300">
+                        {filteredLogs.map((log) => {
+                          const isExpanded = expandedLogs[log.id];
+                          let actionColorBadge = "bg-green-50 dark:bg-green-955/20 text-green-700 dark:text-green-400 border border-green-105 dark:border-green-900/30";
+                          let actionTextLabel = "Teacher Upload";
+                          if (log.action === 'file_approved') {
+                            actionColorBadge = "bg-sky-50 dark:bg-sky-955/20 text-sky-700 dark:text-sky-455 border border-sky-105 dark:border-sky-900/30";
+                            actionTextLabel = "Admin Approval";
+                          } else if (log.action === 'file_deleted') {
+                            actionColorBadge = "bg-red-50 dark:bg-red-955/20 text-red-700 dark:text-red-400 border border-red-105 dark:border-red-900/10";
+                            actionTextLabel = "File Deletion";
+                          } else if (log.action === 'file_rejected') {
+                            actionColorBadge = "bg-amber-50 dark:bg-amber-955/25 text-amber-700 dark:text-amber-400 border border-amber-105 dark:border-amber-900/30";
+                            actionTextLabel = "File Rejected";
+                          }
+
+                          return (
+                            <React.Fragment key={log.id}>
+                              <tr 
+                                onClick={() => setExpandedLogs(prev => ({ ...prev, [log.id]: !prev[log.id] }))}
+                                className="hover:bg-gray-50/40 dark:hover:bg-slate-850/10 transition-colors cursor-pointer"
+                              >
+                                <td className="py-3.5 px-5 text-gray-400 dark:text-gray-500 font-mono text-[10px] whitespace-nowrap">
+                                  <span className="flex items-center gap-1.5">
+                                    <Clock className="w-3.5 h-3.5 text-gray-400" />
+                                    <span>{log.createdAt ? log.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "just now"}</span>
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-5 font-bold text-gray-800 dark:text-gray-100 text-xs">
+                                  {log.actorName}
+                                </td>
+                                <td className="py-3.5 px-5">
+                                  <span className={`inline-block px-2.5 py-0.5 text-[9px] font-bold rounded-full uppercase tracking-wider ${actionColorBadge}`}>
+                                    {t(actionTextLabel)}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-5">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-semibold text-gray-750 dark:text-gray-250 text-xs truncate max-w-[240px]" title={log.fileName}>
+                                      {log.fileName}
+                                    </span>
+                                    <span className="text-xs text-brand-505 font-bold hover:underline shrink-0 flex items-center gap-1 select-none">
+                                      <span>{isExpanded ? t("Hide") : t("View")}</span>
+                                      <ChevronDown className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                    </span>
+                                  </div>
+                                </td>
+                              </tr>
+                              {isExpanded && (
+                                <tr className="bg-gray-50/30 dark:bg-slate-800/10">
+                                  <td colSpan={4} className="py-4 px-6 border-b border-gray-100 dark:border-slate-800/40">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                                      {/* Actor Details */}
+                                      <div className="space-y-1">
+                                        <p className="text-[9px] uppercase font-bold text-gray-400 tracking-wider">{t("Full Actor Details")}</p>
+                                        <p className="font-bold text-gray-800 dark:text-gray-200">{log.actorName}</p>
+                                        <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase">
+                                          {t(log.actorRole)} {log.actorBranch ? `• ${t(log.actorBranch)}` : ''}
+                                        </p>
+                                      </div>
+
+                                      {/* Target Resource Details */}
+                                      <div className="space-y-1 md:col-span-2">
+                                        <p className="text-[9px] uppercase font-bold text-gray-400 tracking-wider">{t("Full Resource Details")}</p>
+                                        <p className="font-bold text-gray-805 dark:text-gray-150 break-all leading-tight">{log.fileName}</p>
+                                        <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[9px] font-extrabold uppercase tracking-wide">
+                                          <span className="bg-gray-105 dark:bg-slate-800 text-gray-505 dark:text-gray-400 px-1.5 py-0.5 rounded-xs">{t(log.fileSubject)}</span>
+                                          <span className="bg-brand-50/50 dark:bg-brand-950/20 text-brand-700 dark:text-brand-400 px-1.5 py-0.5 rounded-xs">{t(log.fileBranch)}</span>
+                                          <span className="text-gray-400 font-mono text-[10px] normal-case font-medium">{log.createdAt ? log.createdAt.toLocaleString() : "just now"}</span>
+                                        </div>
+                                        {log.rejectionReason && (
+                                          <div className="bg-red-50/50 dark:bg-red-955/15 border-l-4 border-red-500 py-2 px-3 rounded-r-lg mt-2 text-[11px] text-red-750 dark:text-red-350 leading-relaxed font-semibold">
+                                            <p className="font-bold text-[9px] uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                                              <AlertTriangle className="w-3.5 h-3.5 text-red-505" />
+                                              <span>{t("Rejection Feedback")}</span>
+                                            </p>
+                                            <p className="whitespace-pre-wrap">{log.rejectionReason}</p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile stacked card layout */}
+                  <div className="md:hidden divide-y divide-gray-105 dark:divide-slate-805/40 bg-white dark:bg-slate-900 transition-colors">
+                    {filteredLogs.map((log) => {
+                      const isExpanded = expandedLogs[log.id];
                       let actionColorBadge = "bg-green-50 dark:bg-green-955/20 text-green-700 dark:text-green-400 border border-green-105 dark:border-green-900/30";
                       let actionTextLabel = "Teacher Upload";
                       if (log.action === 'file_approved') {
@@ -1722,53 +2502,74 @@ export default function DashboardMasterAdmin({
                       }
 
                       return (
-                        <tr key={log.id} className="hover:bg-gray-50/40 dark:hover:bg-slate-850/10 transition-colors">
-                          <td className="py-4 px-5 text-gray-400 dark:text-gray-500 font-mono text-[10px] whitespace-nowrap">
-                            <span className="flex items-center gap-1.5">
-                              <Clock className="w-3.5 h-3.5 text-gray-400" />
-                              <span>{log.createdAt ? log.createdAt.toLocaleString() : "just now"}</span>
-                            </span>
-                          </td>
-                          <td className="py-4 px-5">
-                            <div>
-                              <p className="font-bold text-gray-800 dark:text-gray-100 text-xs">{log.actorName}</p>
-                              <span className="inline-flex items-center gap-1 mt-0.5 text-[9px] font-bold text-gray-400 uppercase tracking-wider">
-                                <span>{t(log.actorRole)}</span>
-                                {log.actorBranch && (
-                                  <>
-                                    <span>•</span>
-                                    <span className="truncate max-w-[150px]">{t(log.actorBranch)}</span>
-                                  </>
-                                )}
+                        <div 
+                          key={log.id} 
+                          onClick={() => setExpandedLogs(prev => ({ ...prev, [log.id]: !prev[log.id] }))}
+                          className="p-3.5 space-y-2 hover:bg-gray-50/20 dark:hover:bg-slate-850/5 transition-colors cursor-pointer text-xs"
+                        >
+                          {/* Condensed Row: Badge, Actor name & view toggle */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className={`inline-block px-2 py-0.5 text-[8px] font-bold rounded-full uppercase tracking-wider shrink-0 ${actionColorBadge}`}>
+                                {t(actionTextLabel)}
                               </span>
+                              <span className="font-bold text-gray-800 dark:text-gray-100 truncate text-[11px]">{log.actorName}</span>
                             </div>
-                          </td>
-                          <td className="py-4 px-5">
-                            <span className={`inline-block px-2.5 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider ${actionColorBadge}`}>
-                              {t(actionTextLabel)}
+                            <span className="text-[10px] text-gray-400 dark:text-gray-505 font-mono shrink-0">
+                              {log.createdAt ? log.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "just now"}
                             </span>
-                          </td>
-                          <td className="py-4 px-5">
-                            <div className="max-w-[280px]">
-                              <p className="font-semibold text-gray-800 dark:text-gray-200 text-xs truncate" title={log.fileName}>{log.fileName}</p>
-                              {log.rejectionReason && (
-                                <p className="text-[10px] text-red-500 italic mt-0.5 font-medium" title={log.rejectionReason}>
-                                  {t("Reason")}: {log.rejectionReason}
-                                </p>
-                              )}
-                              <div className="flex flex-wrap items-center gap-1.5 mt-1 font-semibold text-[9px] uppercase tracking-wide text-gray-400">
-                                <span className="bg-gray-50 dark:bg-slate-800 px-1.5 py-0.5 rounded-sm">{t(log.fileSubject)}</span>
-                                <span>/</span>
-                                <span className="truncate max-w-[150px]">{t(log.fileBranch)}</span>
+                          </div>
+
+                          {/* Brief filename & expand toggle */}
+                          <div className="flex items-center justify-between gap-3 text-[11px] text-gray-605 dark:text-gray-300">
+                            <span className="truncate max-w-[200px] font-medium" title={log.fileName}>{log.fileName}</span>
+                            <span className="text-[10px] text-brand-505 font-bold shrink-0 flex items-center gap-0.5">
+                              <span>{isExpanded ? t("Hide") : t("View")}</span>
+                              <ChevronDown className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                            </span>
+                          </div>
+
+                          {/* Expanded detail card */}
+                          {isExpanded && (
+                            <div className="bg-gray-50/60 dark:bg-slate-800/15 p-3 rounded-lg border border-gray-100/40 dark:border-slate-800/40 space-y-2.5 mt-1 animate-in slide-in-from-top-1 duration-150">
+                              <div>
+                                <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{t("Actor Affiliation")}</span>
+                                <span className="font-semibold text-gray-700 dark:text-gray-300">{log.actorName}</span>
+                                <p className="text-[9px] font-medium text-gray-450 uppercase mt-0.5">{t(log.actorRole)} {log.actorBranch ? `• ${t(log.actorBranch)}` : ''}</p>
                               </div>
+
+                              <div>
+                                <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{t("Target Resource Details")}</span>
+                                <p className="font-bold text-gray-800 dark:text-gray-200 break-all leading-tight">{log.fileName}</p>
+                                <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[9px] font-extrabold uppercase tracking-wide">
+                                  <span className="bg-gray-105 dark:bg-slate-800 text-gray-505 dark:text-gray-400 px-1.5 py-0.5 rounded-xs">{t(log.fileSubject)}</span>
+                                  <span className="bg-brand-50/50 dark:bg-brand-950/20 text-brand-700 dark:text-brand-400 px-1.5 py-0.5 rounded-xs">{t(log.fileBranch)}</span>
+                                </div>
+                              </div>
+
+                              <div>
+                                <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{t("Date & Time")}</span>
+                                <span className="font-mono text-gray-500">{log.createdAt ? log.createdAt.toLocaleString() : "just now"}</span>
+                              </div>
+
+                              {log.rejectionReason && (
+                                <div className="bg-red-50/50 dark:bg-red-955/15 border-l-4 border-red-500 py-2 px-3 rounded-r-lg text-[11px] text-red-750 dark:text-red-305 font-medium leading-relaxed">
+                                  <p className="font-bold text-[8px] uppercase tracking-wider mb-1 flex items-center gap-1">
+                                    <AlertTriangle className="w-3.5 h-3.5" />
+                                    <span>{t("Rejection Feedback")}</span>
+                                  </p>
+                                  <p className="whitespace-pre-wrap">{log.rejectionReason}</p>
+                                </div>
+                              )}
                             </div>
-                          </td>
-                        </tr>
+                          )}
+                        </div>
                       );
                     })}
-                </tbody>
-              </table>
-            )}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -1794,66 +2595,122 @@ export default function DashboardMasterAdmin({
               {t("The system recycling storage is empty. No files require attention!")}
             </div>
           ) : (
-            <div className="overflow-x-auto border border-gray-105 dark:border-slate-800 rounded-xl">
-              <table className="w-full min-w-[800px] text-left">
-                <thead>
-                  <tr className="border-b border-gray-100 dark:border-slate-800 text-gray-400 dark:text-gray-500 text-[10px] font-bold uppercase tracking-wider bg-gray-50/50 dark:bg-slate-800/20">
-                    <th className="py-4 px-6">{t("Deleted Resource Name")}</th>
-                    <th className="py-4 px-6">{t("Governing Body / Branch")}</th>
-                    <th className="py-4 px-6">{t("Assigned Subject Specialty")}</th>
-                    <th className="py-4 px-6">{t("Deleter Information")}</th>
-                    <th className="py-4 px-6 text-right">{t("Available Actions")}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-105 dark:divide-slate-805 text-xs font-medium text-gray-700 dark:text-gray-300">
-                  {deletedFiles.map((file) => (
-                    <tr key={file.id} className="hover:bg-gray-50/20 dark:hover:bg-slate-800/10 transition-colors">
-                      <td className="py-4 px-6">
-                        <div>
-                          <p className="font-bold text-gray-800 dark:text-gray-100">{file.fileName}</p>
-                          <p className="text-[10px] text-gray-400 font-mono mt-0.5">{(file.fileSize / (1024 * 1024)).toFixed(2)} MB • {file.fileType.toUpperCase()}</p>
-                        </div>
-                      </td>
-                      <td className="py-4 px-6">
-                        <span className="font-semibold text-gray-800 dark:text-gray-200">{t(file.branch)}</span>
-                      </td>
-                      <td className="py-4 px-6">
-                        <span className="bg-gray-100 dark:bg-slate-805 text-gray-600 dark:text-gray-400 px-2.5 py-1 rounded-md text-xxs font-semibold uppercase">{t(file.subject)}</span>
-                      </td>
-                      <td className="py-4 px-6">
-                        <div>
-                          <p className="font-semibold text-gray-805 dark:text-gray-200">{file.deletedByName || t("Unknown Actor")}</p>
-                          <p className="text-[10px] text-gray-400 mt-0.5 font-mono">
-                            {file.deletedAt ? file.deletedAt.toLocaleString() : (file.createdAt ? file.createdAt.toLocaleString() : '')}
-                          </p>
-                        </div>
-                      </td>
-                      <td className="py-4 px-6 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => onFileRestore(file.id)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/20 dark:hover:bg-brand-950/40 text-brand-605 dark:text-brand-400 border border-brand-100 dark:border-brand-900/30 rounded-lg text-xs font-bold transition-all cursor-pointer"
-                          >
-                            <RotateCcw className="w-3.5 h-3.5" />
-                            <span>{t("Restore")}</span>
-                          </button>
-                          
-                          {user.role === 'super_admin' && (
-                            <button
-                              onClick={() => onFileHardDelete(file.id)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/25 dark:hover:bg-red-950/45 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/30 rounded-lg text-xs font-bold transition-all cursor-pointer"
-                              title={t("Permanently delete file and physical storage contents permanently.")}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>{t("Hard Delete")}</span>
-                            </button>
-                          )}
-                        </div>
-                      </td>
+            <div className="border border-gray-105 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 overflow-hidden transition-colors">
+              {/* Desktop view */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full min-w-[800px] text-left">
+                  <thead>
+                    <tr className="border-b border-gray-100 dark:border-slate-800 text-gray-400 dark:text-gray-500 text-[10px] font-bold uppercase tracking-wider bg-gray-50/50 dark:bg-slate-800/20">
+                      <th className="py-4 px-6">{t("Deleted Resource Name")}</th>
+                      <th className="py-4 px-6">{t("Governing Body / Branch")}</th>
+                      <th className="py-4 px-6">{t("Assigned Subject Specialty")}</th>
+                      <th className="py-4 px-6">{t("Deleter Information")}</th>
+                      <th className="py-4 px-6 text-right">{t("Available Actions")}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-105 dark:divide-slate-805 text-xs font-medium text-gray-700 dark:text-gray-300">
+                    {deletedFiles.map((file) => (
+                      <tr key={file.id} className="hover:bg-gray-50/20 dark:hover:bg-slate-800/10 transition-colors">
+                        <td className="py-4 px-6">
+                          <div>
+                            <p className="font-bold text-gray-800 dark:text-gray-100">{file.fileName}</p>
+                            <p className="text-[10px] text-gray-400 font-mono mt-0.5">{(file.fileSize / (1024 * 1024)).toFixed(2)} MB • {file.fileType.toUpperCase()}</p>
+                          </div>
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className="font-semibold text-gray-800 dark:text-gray-200">{t(file.branch)}</span>
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className="bg-gray-100 dark:bg-slate-805 text-gray-600 dark:text-gray-400 px-2.5 py-1 rounded-md text-xxs font-semibold uppercase">{t(file.subject)}</span>
+                        </td>
+                        <td className="py-4 px-6">
+                          <div>
+                            <p className="font-semibold text-gray-805 dark:text-gray-200">{file.deletedByName || t("Unknown Actor")}</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5 font-mono">
+                              {file.deletedAt ? file.deletedAt.toLocaleString() : (file.createdAt ? file.createdAt.toLocaleString() : '')}
+                            </p>
+                          </div>
+                        </td>
+                        <td className="py-4 px-6 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => onFileRestore(file.id)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/20 dark:hover:bg-brand-950/40 text-brand-605 dark:text-brand-400 border border-brand-100 dark:border-brand-900/30 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span>{t("Restore")}</span>
+                            </button>
+                            
+                            {user.role === 'super_admin' && (
+                              <button
+                                onClick={() => onFileHardDelete(file.id)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/25 dark:hover:bg-red-950/45 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/30 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                                title={t("Permanently delete file and physical storage contents permanently.")}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>{t("Hard Delete")}</span>
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile stacked card layout */}
+              <div className="md:hidden divide-y divide-gray-105 dark:divide-slate-805/40">
+                {deletedFiles.map((file) => (
+                  <div key={file.id} className="p-4 space-y-3">
+                    {/* Header: Name & size */}
+                    <div>
+                      <h4 className="font-bold text-xs text-gray-800 dark:text-gray-100 break-all leading-tight">{file.fileName}</h4>
+                      <p className="text-[10px] text-gray-400 font-mono mt-0.5">{(file.fileSize / (1024 * 1024)).toFixed(2)} MB • {file.fileType.toUpperCase()}</p>
+                    </div>
+
+                    {/* Tags & info */}
+                    <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-wide">
+                      <span className="bg-gray-105 dark:bg-slate-800 text-gray-500 dark:text-gray-450 px-2 py-0.5 rounded-md">{t(file.branch)}</span>
+                      <span className="bg-brand-50/50 dark:bg-brand-950/20 text-brand-700 dark:text-brand-400 px-2 py-0.5 rounded-md">{t(file.subject)}</span>
+                    </div>
+
+                    {/* Deleter details */}
+                    <div className="bg-gray-50/50 dark:bg-slate-800/15 p-2.5 rounded-lg border border-gray-100/50 dark:border-slate-800/50 flex justify-between items-center text-[10px] text-gray-550 dark:text-gray-400">
+                      <div>
+                        <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{t("Deleted By")}</span>
+                        <span className="font-semibold text-gray-705 dark:text-gray-300">{file.deletedByName || t("Unknown Actor")}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{t("Date Deleted")}</span>
+                        <span className="font-mono">{file.deletedAt ? file.deletedAt.toLocaleString() : (file.createdAt ? file.createdAt.toLocaleString() : '')}</span>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        onClick={() => onFileRestore(file.id)}
+                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/25 dark:hover:bg-brand-950/45 text-brand-605 dark:text-brand-400 border border-brand-100 dark:border-brand-900/30 rounded-lg text-xs font-bold transition-all cursor-pointer flex-1"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>{t("Restore")}</span>
+                      </button>
+                      
+                      {user.role === 'super_admin' && (
+                        <button
+                          onClick={() => onFileHardDelete(file.id)}
+                          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-105 dark:bg-red-955/20 dark:hover:bg-red-955/35 text-red-600 dark:text-red-400 border border-red-105 dark:border-red-900/30 rounded-lg text-xs font-bold transition-all cursor-pointer flex-1"
+                          title={t("Permanently delete file.")}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>{t("Hard Delete")}</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -1861,288 +2718,310 @@ export default function DashboardMasterAdmin({
 
       {activeTab === 'database_backups' && (
         <div className="space-y-6 animate-in fade-in duration-200" id="database-backup-dashboard">
-          {/* Cloud Connection & Credentials Checklist */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-xs border border-gray-100 dark:border-slate-800 transition-all">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-50 dark:border-slate-800/50 pb-4 mb-4 gap-3">
-              <div>
-                <h3 className="font-bold text-sm text-gray-800 dark:text-gray-150 uppercase tracking-tight font-display flex items-center gap-2">
-                  <Server className="w-5 h-5 text-brand-500" />
-                  <span>{t("Active Cloud Storage Status")}</span>
-                </h3>
-                <p className="text-xxs text-gray-400 dark:text-gray-500 font-medium">
-                  {t("Connection validation with Cloudflare R2 / AWS S3 storage backend system")}
-                </p>
-              </div>
-              <button 
-                type="button" 
-                onClick={fetchR2Status}
-                disabled={isLoadingR2Status}
-                className="self-start sm:self-center bg-gray-50 dark:bg-slate-850 hover:bg-gray-100 dark:hover:bg-slate-800 border border-gray-200 dark:border-slate-800 rounded-lg p-2 text-gray-600 dark:text-gray-400 font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingR2Status ? 'animate-spin' : ''}`} />
-                <span>{t("Re-test Connection")}</span>
-              </button>
+          {/* Section 1: Dynamic Database Statistics Grid - Fully Responsive */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-gray-100 dark:border-slate-800 text-center shadow-xs transition-all">
+              <p className="text-xxs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest font-display">{t("Users")}</p>
+              <p className="text-2xl font-black font-display text-brand-600 dark:text-brand-400 mt-1">{adminsList.length + 1}</p>
             </div>
-
-            <div className="grid md:grid-cols-4 gap-6 items-start">
-              <div className="md:col-span-1 border border-gray-105 dark:border-slate-800 rounded-xl p-4 bg-gray-50/50 dark:bg-slate-850/10 text-center flex flex-col items-center justify-center h-full min-h-[140px]">
-                {r2ConfigStatus.configured ? (
-                  <>
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping mb-2" />
-                    <span className="inline-block bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-xxs font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
-                      {t("R2 Cloud Storage Active")}
-                    </span>
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-2 font-mono">
-                      {r2ConfigStatus.bucketName}
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 mb-2" />
-                    <span className="inline-block bg-amber-500/15 text-amber-600 dark:text-amber-400 text-xxs font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
-                      {t("Firebase Client Fallback")}
-                    </span>
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-2 font-medium">
-                      {t("Direct client storage channel active")}
-                    </p>
-                  </>
-                )}
-              </div>
-
-              <div className="md:col-span-3 text-xs text-gray-500 dark:text-gray-400 space-y-2">
-                <p className="font-medium text-gray-700 dark:text-gray-300">
-                  {r2ConfigStatus.configured 
-                    ? t("Enterprise Cloudflare R2 S3-Compatible storage pipeline is successfully operating. All worksheets, worksheets templates, custom lectures, and slide downloads uploaded by Sristy Faculty are automatically housed in R2.")
-                    : t("Cloudflare R2 is currently in offline fallback mode. Sristy College system is utilizing standard Firebase static buckets. For complete data sovereignty, configure your secrets variables below.")
-                  }
-                </p>
-                <div className="bg-gray-950 text-emerald-405 font-mono text-[10px] p-3 rounded-lg border border-gray-900 leading-relaxed overflow-x-auto whitespace-pre">
-                  {`# Environment Credentials (Cloudflare R2 Storage Platform Config)
-R2_ACCESS_KEY_ID="your_access_key_id"
-R2_SECRET_ACCESS_KEY="your_secret_access_key"
-R2_ENDPOINT="https://<account_id>.r2.cloudflarestorage.com"
-R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
-                </div>
-              </div>
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-gray-100 dark:border-slate-800 text-center shadow-xs transition-all">
+              <p className="text-xxs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest font-display">{t("Resource Files")}</p>
+              <p className="text-2xl font-black font-display text-indigo-600 dark:text-indigo-400 mt-1">{files.length}</p>
+            </div>
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-gray-100 dark:border-slate-800 text-center shadow-xs transition-all">
+              <p className="text-xxs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest font-display">{t("Audit Logs")}</p>
+              <p className="text-2xl font-black font-display text-amber-600 dark:text-amber-400 mt-1">{logsList.length}</p>
+            </div>
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-gray-100 dark:border-slate-800 text-center shadow-xs transition-all flex flex-col justify-center items-center">
+              <p className="text-xxs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest font-display">{t("System Health")}</p>
+              <p className="text-xs font-bold text-emerald-500 mt-1.5 uppercase tracking-wide flex items-center gap-1.5 select-none">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                {t("Active")}
+              </p>
             </div>
           </div>
 
-          <div className="grid lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-              {/* Part 1: Secure Database Backup Terminal */}
-              <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-xs border border-gray-100 dark:border-slate-800 transition-colors">
-                <div className="mb-6">
-                  <h3 className="font-bold text-sm text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase flex items-center gap-2">
-                    <Database className="w-5 h-5 text-indigo-500" />
-                    <span>{t("Secure Database Backup Terminal")}</span>
-                  </h3>
-                  <p className="text-xxs text-gray-400 dark:text-gray-500 mt-1 font-medium">
-                    {t("Contract SLA Clause 7.1 Compliance: Full database snapshots exporter. Facilitates instantaneous localized physical exports for Sristy Family server-side archives.")}
-                  </p>
-                </div>
-
-                <div className="bg-gray-50/50 dark:bg-slate-850/10 border border-gray-100 dark:border-slate-800 rounded-xl p-5">
-                  <h4 className="font-bold text-xs uppercase text-gray-455 dark:text-gray-400 tracking-wider mb-2 font-display">{t("Cloud Snapshot Package Overview")}</h4>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed font-medium mb-4">
-                    {t("Executing a manual download generates a single, clean JSON snapshot encompassing users database entries, notices, files structure metadata, and activity logs archives immediately.")}
-                  </p>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-                    <div className="bg-white dark:bg-slate-800/50 p-3 rounded-lg border border-gray-100 dark:border-slate-800 text-center shadow-xs">
-                      <p className="text-xxs font-bold text-gray-400 dark:text-gray-550 uppercase tracking-widest leading-none font-display">{t("Users")}</p>
-                      <p className="text-lg font-bold font-display text-brand-600 dark:text-brand-400 mt-1">{adminsList.length + 1}</p>
-                    </div>
-                    <div className="bg-white dark:bg-slate-800/50 p-3 rounded-lg border border-gray-100 dark:border-slate-800 text-center shadow-xs">
-                      <p className="text-xxs font-bold text-gray-400 dark:text-gray-550 uppercase tracking-widest leading-none font-display">{t("Resource Files")}</p>
-                      <p className="text-lg font-bold font-display text-indigo-600 dark:text-indigo-400 mt-1">{files.length}</p>
-                    </div>
-                    <div className="bg-white dark:bg-slate-800/50 p-3 rounded-lg border border-gray-100 dark:border-slate-800 text-center shadow-xs">
-                      <p className="text-xxs font-bold text-gray-400 dark:text-gray-550 uppercase tracking-widest leading-none font-display">{t("Audit Logs")}</p>
-                      <p className="text-lg font-bold font-display text-amber-600 dark:text-amber-400 mt-1">{logsList.length}</p>
-                    </div>
-                    <div className="bg-white dark:bg-slate-800/50 p-3 rounded-lg border border-gray-100 dark:border-slate-800 text-center shadow-xs">
-                      <p className="text-xxs font-bold text-gray-400 dark:text-gray-550 uppercase tracking-widest leading-none font-display">{t("Status Health")}</p>
-                      <p className="text-[10px] font-bold text-emerald-500 mt-1.5 uppercase select-none">● {t("ACTIVE ACTIVE")}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <button
-                      type="button"
-                      onClick={handleDownloadBackup}
-                      disabled={isExporting}
-                      className="w-full sm:w-auto bg-brand-500 hover:bg-brand-600 active:bg-brand-700 text-white font-semibold text-xs px-4 py-2.5 rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                    >
-                      <DownloadCloud className={`w-4 h-4 ${isExporting ? 'animate-bounce' : ''}`} />
-                      <span>{isExporting ? t("Compiling...") : t("Download JSON Metadata Snapshot")}</span>
-                    </button>
-                  </div>
-                </div>
+          {/* Section 2: 1-Click Premium Full Backup Panel (Simple & Modern) */}
+          <div className="bg-gradient-to-br from-white to-gray-50/50 dark:from-slate-900 dark:to-slate-950 rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-100 dark:border-slate-800 transition-all">
+            <div className="max-w-2xl mx-auto text-center space-y-6">
+              <div className="inline-flex p-4 rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-400">
+                <DownloadCloud className={`w-8 h-8 ${isZipping ? 'animate-bounce' : ''}`} />
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="font-extrabold text-lg sm:text-xl text-gray-900 dark:text-white tracking-tight font-display">
+                  {t("One-Click Complete Backup Archive")}
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed max-w-lg mx-auto">
+                  {t("Instantly compile and download all your academic resources, lectures, and files organized into branch and subject folder hierarchies, complete with a structured database JSON snapshot in a single high-integrity ZIP package.")}
+                </p>
               </div>
 
-              {/* Data Portability Option A: Universal Bulk Local Downloader */}
-              <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-xs border border-gray-100 dark:border-slate-800 transition-colors">
-                <div className="mb-4">
-                  <h3 className="font-bold text-sm text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase flex items-center gap-2">
-                    <Download className="w-5 h-5 text-[#15803d]" />
-                    <span>{t("Instant 1-Click Offline File Downloader")}</span>
-                  </h3>
-                  <p className="text-xxs text-gray-400 dark:text-gray-500 mt-1 font-medium">
-                    {t("Download a localized multithreaded executable python template script to export your actual files anywhere instantly.")}
-                  </p>
-                </div>
-
-                <div className="bg-[#15803d]/5 border border-[#15803d]/15 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="space-y-1 sm:max-w-[70%]">
-                    <h4 className="font-bold text-xs text-gray-800 dark:text-gray-200">{t("Automated Vault Cloning Utility")}</h4>
-                    <p className="text-xxs text-gray-500 dark:text-gray-400 leading-normal">
-                      {t("Generates a personalized portability python script embeded with all active file records. Run it locally in CMD/Terminal to fetch attachments from cloud storage and sort them perfectly into academic folders like /Biology/Chapter-2/Worksheet.pdf on your machine automatically.")}
-                    </p>
+              {/* Live ZIP Generation Progress View */}
+              {isZipping && (
+                <div className="bg-brand-50/50 dark:bg-slate-850/30 border border-brand-100/40 dark:border-slate-800 p-4 rounded-2xl max-w-md mx-auto space-y-3 animate-pulse">
+                  <div className="flex items-center justify-between text-xxs font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400">
+                    <span>{t("Assembling Archive...")}</span>
+                    <span className="animate-pulse">● {t("In Progress")}</span>
                   </div>
-                  <button 
+                  <p className="text-xs font-mono text-gray-600 dark:text-gray-300 text-left line-clamp-1 break-all bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border border-gray-100 dark:border-slate-800">
+                    {zipProgress}
+                  </p>
+                  <div className="w-full bg-gray-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                    <div className="bg-brand-500 h-full rounded-full animate-pulse" style={{ width: '100%' }} />
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleDownloadFullBackupZip}
+                  disabled={isZipping}
+                  className="w-full sm:w-auto bg-brand-500 hover:bg-brand-600 active:bg-brand-700 text-white font-bold text-xs px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <DownloadCloud className="w-4 h-4" />
+                  <span>{isZipping ? t("Assembling ZIP Archive...") : t("1-Click Full ZIP Backup")}</span>
+                </button>
+              </div>
+
+              {/* Secondary Metadata or Script Downloads */}
+              <div className="border-t border-gray-100 dark:border-slate-800/80 pt-6 mt-6 max-w-lg mx-auto">
+                <p className="text-xxs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-3">{t("Alternative Single Downloads")}</p>
+                <div className="flex flex-col sm:flex-row justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleDownloadBackup}
+                    disabled={isExporting || isZipping}
+                    className="flex-1 py-2 px-3 text-[11px] font-semibold text-gray-650 dark:text-gray-300 hover:text-brand-600 dark:hover:text-brand-400 bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-800 hover:border-brand-500/30 rounded-xl transition-all shadow-xxs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Database className="w-3.5 h-3.5 text-gray-400" />
+                    <span>{isExporting ? t("Compiling JSON...") : t("Download DB JSON Only")}</span>
+                  </button>
+                  <button
                     type="button"
                     onClick={handleGeneratePythonDownloader}
-                    className="self-center bg-[#15803d] hover:bg-green-700 active:bg-green-800 text-white font-semibold text-xs px-4 py-2.5 rounded-lg shadow-xs hover:shadow transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                    disabled={isZipping}
+                    className="flex-1 py-2 px-3 text-[11px] font-semibold text-gray-650 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-800 hover:border-green-500/30 rounded-xl transition-all shadow-xxs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
-                    <Download className="w-3.5 h-3.5" />
+                    <Download className="w-3.5 h-3.5 text-gray-400" />
                     <span>{t("Download Python File Cloner")}</span>
                   </button>
                 </div>
               </div>
             </div>
-
-            {/* Sidebar safeguards and restrictions info */}
-            <div className="space-y-6">
-              <div className="bg-indigo-950 text-indigo-100 rounded-2xl p-5 border border-indigo-900 shadow-xs flex flex-col justify-between h-full min-h-[320px]">
-                <div>
-                  <span className="inline-block bg-indigo-900 text-indigo-305 font-bold text-xxs px-2 py-0.5 rounded-full uppercase tracking-widest mb-3">
-                    {t("Recovery Restore Safeguard")}
-                  </span>
-                  <h4 className="font-bold text-xs text-white mb-2">{t("Write-back Restore Restrictions")}</h4>
-                  <p className="text-xxs leading-relaxed text-indigo-300/80">
-                    {t("To avoid active data collisions or malicious file escalations, automated database writing/import restores are strictly disabled within Sristy Family interface. To restore Sristy databases manually, submit this exported backup files structure directly to Sristy Academic Engineering Desk.")}
-                  </p>
-                </div>
-                <div className="border-t border-indigo-900/50 pt-4 mt-6 text-[10px] text-indigo-300/40 font-mono">
-                  {t("SECURE PORTAL RECOVERY LAYER v2.2")}
-                </div>
-              </div>
-            </div>
           </div>
 
-          {/* Cloud-to-Cloud Storage Migrator (Option B) */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-xs border border-gray-100 dark:border-slate-800 transition-colors">
-            <div className="mb-6">
-              <h3 className="font-bold text-sm text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase flex items-center gap-2">
-                <RotateCcw className="w-5 h-5 text-indigo-650" />
-                <span>{t("Server-to-Server cloud Storage Migrator")}</span>
-              </h3>
-              <p className="text-xxs text-gray-400 dark:text-gray-500 mt-1 font-medium">
-                {t("High-Integrity Bulk Replication: Clone Sristy Education physical files directly from active Cloudflare R2 bucket into any AWS S3, Cloudflare, or S3-Compatible bucket without local downloads.")}
-              </p>
-            </div>
-
-            <form onSubmit={handleInitiateS3Migration} className="space-y-6">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block text-xxs font-extrabold uppercase text-gray-450 dark:text-gray-400 tracking-wider">
-                    {t("Target Endpoint URL")}
-                  </label>
-                  <input
-                    type="url"
-                    required
-                    placeholder="https://<account_id>.r2.cloudflarestorage.com or https://s3.us-east-1.amazonaws.com"
-                    value={targetEndpoint}
-                    onChange={(e) => setTargetEndpoint(e.target.value)}
-                    disabled={isMigrating}
-                    className="w-full text-xs bg-gray-50 dark:bg-slate-850 hover:bg-gray-100/50 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-lg p-2.5 outline-hidden transition-all text-gray-800 dark:text-gray-100 font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-xxs font-extrabold uppercase text-gray-450 dark:text-gray-400 tracking-wider">
-                    {t("Target Bucket Name")}
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="sristy-academic-notes-backup"
-                    value={targetBucketName}
-                    onChange={(e) => setTargetBucketName(e.target.value)}
-                    disabled={isMigrating}
-                    className="w-full text-xs bg-gray-50 dark:bg-slate-850 hover:bg-gray-100/50 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-lg p-2.5 outline-hidden transition-all text-gray-800 dark:text-gray-100 font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-xxs font-extrabold uppercase text-gray-455 dark:text-gray-400 tracking-wider">
-                    {t("Target Access Key ID")}
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. 5d5a27ba8bf679c23577ef37c8fd..."
-                    value={targetAccessKeyId}
-                    onChange={(e) => setTargetAccessKeyId(e.target.value)}
-                    disabled={isMigrating}
-                    className="w-full text-xs bg-gray-50 dark:bg-slate-850 hover:bg-gray-100/50 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-lg p-2.5 outline-hidden transition-all text-gray-800 dark:text-gray-100 font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-xxs font-extrabold uppercase text-gray-455 dark:text-gray-400 tracking-wider">
-                    {t("Target Secret Access Key")}
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    placeholder="••••••••••••••••••••••••••••••••"
-                    value={targetSecretAccessKey}
-                    onChange={(e) => setTargetSecretAccessKey(e.target.value)}
-                    disabled={isMigrating}
-                    className="w-full text-xs bg-gray-50 dark:bg-slate-850 hover:bg-gray-100/50 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-lg p-2.5 outline-hidden transition-all text-gray-800 dark:text-gray-100 font-mono"
-                  />
-                </div>
+          {/* Section 3: Collapsible Advanced Settings (Keeps it clean & simple) */}
+          <div className="border border-gray-100 dark:border-slate-800 rounded-2xl overflow-hidden bg-white dark:bg-slate-900 transition-colors">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="w-full flex items-center justify-between p-5 bg-gray-50/50 dark:bg-slate-850/5 hover:bg-gray-50 dark:hover:bg-slate-850/20 transition-all cursor-pointer text-left"
+            >
+              <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200">
+                <Server className="w-4 h-4 text-indigo-500" />
+                <span className="font-extrabold text-xs uppercase tracking-wider font-display">{t("Advanced Cloud Integrations & Migration")}</span>
               </div>
+              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${showAdvanced ? 'rotate-180' : ''}`} />
+            </button>
 
-              {migrationError && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 p-3 rounded-lg text-xxs font-semibold">
-                  {migrationError}
+            {showAdvanced && (
+              <div className="p-6 border-t border-gray-100 dark:border-slate-800 space-y-6 animate-in slide-in-from-top-4 duration-200">
+                {/* Connection validation banner */}
+                <div className="bg-gray-50/50 dark:bg-slate-850/10 border border-gray-100 dark:border-slate-800 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <h4 className="font-extrabold text-xs text-gray-800 dark:text-gray-150 uppercase tracking-tight">{t("Active Cloud Storage Status")}</h4>
+                    <p className="text-xxs text-gray-400 dark:text-gray-500 font-medium">
+                      {t("Connection validation with Cloudflare R2 / AWS S3 storage backend system")}
+                    </p>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={fetchR2Status}
+                    disabled={isLoadingR2Status}
+                    className="bg-white dark:bg-slate-900 hover:bg-gray-50 dark:hover:bg-slate-800 border border-gray-150 dark:border-slate-800 rounded-lg py-1.5 px-3 text-gray-650 dark:text-gray-400 font-semibold text-xxs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isLoadingR2Status ? 'animate-spin' : ''}`} />
+                    <span>{t("Re-test Connection")}</span>
+                  </button>
                 </div>
-              )}
 
-              {migrationSummary && (
-                <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 p-3 rounded-lg text-xxs font-bold">
-                  {migrationSummary}
-                </div>
-              )}
+                {/* Cloud storage information layout */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="md:col-span-1 border border-gray-100 dark:border-slate-800 rounded-xl p-4 bg-gray-50/30 dark:bg-slate-850/5 text-center flex flex-col items-center justify-center min-h-[140px]">
+                    {r2ConfigStatus.configured ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse mb-2 inline-block" />
+                        <span className="inline-block bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xxs font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                          {t("R2 Storage Active")}
+                        </span>
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-2 font-mono truncate max-w-full">
+                          {r2ConfigStatus.bucketName}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-amber-500 mb-2 inline-block" />
+                        <span className="inline-block bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xxs font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                          {t("Firebase Fallback")}
+                        </span>
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-2 font-medium">
+                          {t("Standard client channel active")}
+                        </p>
+                      </>
+                    )}
+                  </div>
 
-              <div className="flex items-center gap-3">
-                <button
-                  type="submit"
-                  disabled={isMigrating}
-                  className="bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-xs px-5 py-3 rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isMigrating ? 'animate-spin' : ''}`} />
-                  <span>{isMigrating ? t("Bulk Replicating Cloud Files...") : t("Begin Cloud-to-Cloud replication")}</span>
-                </button>
-              </div>
-            </form>
-
-            {/* Migration Logs Terminal View */}
-            {migrationLogs.length > 0 && (
-              <div className="mt-6 space-y-2">
-                <h4 className="font-bold text-xxs uppercase text-gray-400 tracking-widest font-display flex items-center gap-1.5">
-                  <Terminal className="w-3.5 h-3.5" />
-                  <span>{t("Server Sync Terminal Logs")}</span>
-                </h4>
-                <div className="bg-black/95 dark:bg-black rounded-lg border border-slate-900 p-4 font-mono text-[9px] text-green-400 space-y-1 max-h-[160px] overflow-auto leading-relaxed shadow-inner">
-                  {migrationLogs.map((log, index) => (
-                    <div key={index} className="flex gap-2">
-                      <span className="text-gray-600 dark:text-gray-650">{`>`}</span>
-                      <span>{log}</span>
+                  <div className="md:col-span-2 text-xxs text-gray-500 dark:text-gray-400 space-y-2">
+                    <p className="font-medium text-gray-650 dark:text-gray-300">
+                      {r2ConfigStatus.configured 
+                        ? t("Enterprise Cloudflare R2 S3-Compatible storage pipeline is successfully operating. All worksheets, worksheets templates, custom lectures, and slide downloads uploaded by Sristy Faculty are automatically housed in R2.")
+                        : t("Cloudflare R2 is currently in offline fallback mode. Sristy College system is utilizing standard Firebase static buckets. For complete data sovereignty, configure your secrets variables below.")
+                      }
+                    </p>
+                    <div className="bg-gray-950 text-emerald-400 font-mono text-[9px] p-3 rounded-lg border border-gray-900 leading-relaxed overflow-x-auto whitespace-pre">
+                      {`# Environment Credentials (Cloudflare R2 Storage Platform Config)
+R2_ACCESS_KEY_ID="your_access_key_id"
+R2_SECRET_ACCESS_KEY="your_secret_access_key"
+R2_ENDPOINT="https://<account_id>.r2.cloudflarestorage.com"
+R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
                     </div>
-                  ))}
+                  </div>
+                </div>
+
+                {/* Cloud-to-Cloud Storage Migrator Form */}
+                <div className="border-t border-gray-100 dark:border-slate-800 pt-6 space-y-4">
+                  <div>
+                    <h4 className="font-bold text-xs text-gray-800 dark:text-gray-150 uppercase tracking-tight flex items-center gap-1.5">
+                      <RotateCcw className="w-4 h-4 text-indigo-500" />
+                      <span>{t("Server-to-Server Cloud Storage Migrator")}</span>
+                    </h4>
+                    <p className="text-xxs text-gray-400 dark:text-gray-500 mt-1">
+                      {t("High-Integrity Bulk Replication: Clone Sristy Education physical files directly from active Cloudflare R2 bucket into any AWS S3, Cloudflare, or S3-Compatible bucket without local downloads.")}
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleInitiateS3Migration} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-extrabold uppercase text-gray-450 dark:text-gray-400 tracking-wider">
+                          {t("Target Endpoint URL")}
+                        </label>
+                        <input
+                          type="url"
+                          required
+                          placeholder="https://<account_id>.r2.cloudflarestorage.com or https://s3.us-east-1.amazonaws.com"
+                          value={targetEndpoint}
+                          onChange={(e) => setTargetEndpoint(e.target.value)}
+                          disabled={isMigrating}
+                          className="w-full text-xs bg-gray-50 dark:bg-slate-850 hover:bg-gray-100/30 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-lg p-2.5 outline-hidden transition-all text-gray-800 dark:text-gray-100 font-mono"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-extrabold uppercase text-gray-450 dark:text-gray-400 tracking-wider">
+                          {t("Target Bucket Name")}
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="sristy-academic-notes-backup"
+                          value={targetBucketName}
+                          onChange={(e) => setTargetBucketName(e.target.value)}
+                          disabled={isMigrating}
+                          className="w-full text-xs bg-gray-50 dark:bg-slate-850 hover:bg-gray-100/30 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-lg p-2.5 outline-hidden transition-all text-gray-800 dark:text-gray-100 font-mono"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-extrabold uppercase text-gray-450 dark:text-gray-400 tracking-wider">
+                          {t("Target Access Key ID")}
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. 5d5a27ba8bf679c23577ef37c8fd..."
+                          value={targetAccessKeyId}
+                          onChange={(e) => setTargetAccessKeyId(e.target.value)}
+                          disabled={isMigrating}
+                          className="w-full text-xs bg-gray-50 dark:bg-slate-850 hover:bg-gray-100/30 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-lg p-2.5 outline-hidden transition-all text-gray-800 dark:text-gray-100 font-mono"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-extrabold uppercase text-gray-455 dark:text-gray-400 tracking-wider">
+                          {t("Target Secret Access Key")}
+                        </label>
+                        <input
+                          type="password"
+                          required
+                          placeholder="••••••••••••••••••••••••••••••••"
+                          value={targetSecretAccessKey}
+                          onChange={(e) => setTargetSecretAccessKey(e.target.value)}
+                          disabled={isMigrating}
+                          className="w-full text-xs bg-gray-50 dark:bg-slate-850 hover:bg-gray-100/30 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-lg p-2.5 outline-hidden transition-all text-gray-800 dark:text-gray-100 font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    {migrationError && (
+                      <div className="bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 p-3 rounded-lg text-xxs font-semibold">
+                        {migrationError}
+                      </div>
+                    )}
+
+                    {migrationSummary && (
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 p-3 rounded-lg text-xxs font-bold">
+                        {migrationSummary}
+                      </div>
+                    )}
+
+                    <div>
+                      <button
+                        type="submit"
+                        disabled={isMigrating}
+                        className="bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-xs px-5 py-2.5 rounded-lg shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isMigrating ? 'animate-spin' : ''}`} />
+                        <span>{isMigrating ? t("Bulk Replicating Cloud Files...") : t("Begin Cloud-to-Cloud replication")}</span>
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Migration Logs Terminal View */}
+                  {migrationLogs.length > 0 && (
+                    <div className="space-y-2 pt-2">
+                      <h4 className="font-bold text-xxs uppercase text-gray-400 tracking-widest font-display flex items-center gap-1.5">
+                        <Terminal className="w-3.5 h-3.5" />
+                        <span>{t("Server Sync Terminal Logs")}</span>
+                      </h4>
+                      <div className="bg-black/95 dark:bg-black rounded-lg border border-slate-900 p-4 font-mono text-[9px] text-green-400 space-y-1 max-h-[160px] overflow-auto leading-relaxed shadow-inner">
+                        {migrationLogs.map((log, index) => (
+                          <div key={index} className="flex gap-2">
+                            <span className="text-gray-650">{`>`}</span>
+                            <span>{log}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Safeguard & Restore Warning */}
+                <div className="bg-indigo-950 text-indigo-100 rounded-xl p-5 border border-indigo-900/60 shadow-xs">
+                  <div className="flex items-start gap-2.5">
+                    <ShieldAlert className="w-4 h-4 text-brand-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="inline-block bg-indigo-900 text-indigo-300 font-bold text-[9px] px-2 py-0.5 rounded-full uppercase tracking-widest mb-2">
+                        {t("Recovery Restore Safeguard")}
+                      </span>
+                      <h4 className="font-bold text-xs text-white mb-1">{t("Write-back Restore Restrictions")}</h4>
+                      <p className="text-[10px] leading-relaxed text-indigo-300/85">
+                        {t("To avoid active data collisions or malicious file escalations, automated database writing/import restores are strictly disabled within Sristy Family interface. To restore Sristy databases manually, submit this exported backup files structure directly to Sristy Academic Engineering Desk.")}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -2252,86 +3131,141 @@ R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
               }
 
               return (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[950px] border-collapse text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-gray-100 dark:border-slate-800 text-gray-400 dark:text-gray-505 text-[10px] font-bold uppercase tracking-wider bg-gray-50/50 dark:bg-slate-800/10">
-                        <th className="py-4 px-6">{t("File Details")}</th>
-                        <th className="py-4 px-6">{t("Submitted By")}</th>
-                        <th className="py-4 px-6">{t("Rejected By")}</th>
-                        <th className="py-4 px-6">{t("Date Rejected")}</th>
-                        <th className="py-4 px-6">{t("Rejection Reason & Feedback")}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800 font-medium text-gray-700 dark:text-gray-300">
-                      {filteredRejections.map((log) => (
-                        <tr key={log.id} className="hover:bg-gray-50/30 dark:hover:bg-slate-850/10 transition-colors">
-                          {/* File Details */}
-                          <td className="py-4 px-6">
-                            <div className="max-w-[280px]">
-                              <p className="font-bold text-gray-800 dark:text-gray-100 text-xs truncate animate-in fade-in" title={log.fileName}>
-                                {log.fileName}
-                              </p>
-                              <div className="flex flex-wrap items-center gap-1.5 mt-1 font-semibold text-[9px] uppercase tracking-wide">
-                                <span className="bg-brand-50/80 dark:bg-[#15803d]/15 text-[#15803d] dark:text-brand-400 px-1.5 py-0.5 rounded-xs">
-                                  {t(log.fileSubject)}
-                                </span>
-                                <span className="text-gray-350 dark:text-gray-700">•</span>
-                                <span className="bg-gray-105 dark:bg-slate-800 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-xs">
-                                  {t(log.fileBranch)}
+                <div className="bg-white dark:bg-slate-900 overflow-hidden transition-colors">
+                  {/* Desktop view */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full min-w-[950px] border-collapse text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-100 dark:border-slate-800 text-gray-400 dark:text-gray-505 text-[10px] font-bold uppercase tracking-wider bg-gray-50/50 dark:bg-slate-800/10">
+                          <th className="py-4 px-6">{t("File Details")}</th>
+                          <th className="py-4 px-6">{t("Submitted By")}</th>
+                          <th className="py-4 px-6">{t("Rejected By")}</th>
+                          <th className="py-4 px-6">{t("Date Rejected")}</th>
+                          <th className="py-4 px-6">{t("Rejection Reason & Feedback")}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-slate-800 font-medium text-gray-700 dark:text-gray-300">
+                        {filteredRejections.map((log) => (
+                          <tr key={log.id} className="hover:bg-gray-50/30 dark:hover:bg-slate-850/10 transition-colors">
+                            {/* File Details */}
+                            <td className="py-4 px-6">
+                              <div className="max-w-[280px]">
+                                <p className="font-bold text-gray-800 dark:text-gray-100 text-xs truncate animate-in fade-in" title={log.fileName}>
+                                  {log.fileName}
+                                </p>
+                                <div className="flex flex-wrap items-center gap-1.5 mt-1 font-semibold text-[9px] uppercase tracking-wide">
+                                  <span className="bg-brand-50/80 dark:bg-[#15803d]/15 text-[#15803d] dark:text-brand-400 px-1.5 py-0.5 rounded-xs">
+                                    {t(log.fileSubject)}
+                                  </span>
+                                  <span className="text-gray-350 dark:text-gray-700">•</span>
+                                  <span className="bg-gray-105 dark:bg-slate-800 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-xs">
+                                    {t(log.fileBranch)}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Submitted By */}
+                            <td className="py-4 px-6">
+                              <div>
+                                <p className="font-bold text-gray-800 dark:text-gray-150 text-xs">{log.uploaderName || t("Unknown Teacher")}</p>
+                                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{t("Teacher")}</span>
+                              </div>
+                            </td>
+
+                            {/* Rejected By */}
+                            <td className="py-4 px-6">
+                              <div>
+                                <p className="font-bold text-red-600 dark:text-red-400 text-xs">{log.actorName}</p>
+                                <span className="inline-flex items-center gap-1 mt-0.5 text-[9px] font-bold text-gray-405 uppercase tracking-wider">
+                                  <span>{t(log.actorRole)}</span>
+                                  {log.actorBranch && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="truncate max-w-[120px]">{t(log.actorBranch)}</span>
+                                    </>
+                                  )}
                                 </span>
                               </div>
-                            </div>
-                          </td>
+                            </td>
 
-                          {/* Submitted By */}
-                          <td className="py-4 px-6">
-                            <div>
-                              <p className="font-bold text-gray-800 dark:text-gray-150 text-xs">{log.uploaderName || t("Unknown Teacher")}</p>
-                              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{t("Teacher")}</span>
-                            </div>
-                          </td>
-
-                          {/* Rejected By */}
-                          <td className="py-4 px-6">
-                            <div>
-                              <p className="font-bold text-red-600 dark:text-red-400 text-xs">{log.actorName}</p>
-                              <span className="inline-flex items-center gap-1 mt-0.5 text-[9px] font-bold text-gray-405 uppercase tracking-wider">
-                                <span>{t(log.actorRole)}</span>
-                                {log.actorBranch && (
-                                  <>
-                                    <span>•</span>
-                                    <span className="truncate max-w-[120px]">{t(log.actorBranch)}</span>
-                                  </>
-                                )}
+                            {/* Date Rejected */}
+                            <td className="py-4 px-6 text-gray-400 dark:text-gray-505 font-mono text-[10px] whitespace-nowrap">
+                              <span className="flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5 text-gray-400" />
+                                <span>{log.createdAt ? log.createdAt.toLocaleString() : "Just now"}</span>
                               </span>
-                            </div>
-                          </td>
+                            </td>
 
-                          {/* Date Rejected */}
-                          <td className="py-4 px-6 text-gray-400 dark:text-gray-500 font-mono text-[10px] whitespace-nowrap">
-                            <span className="flex items-center gap-1.5">
-                              <Clock className="w-3.5 h-3.5 text-gray-400" />
-                              <span>{log.createdAt ? log.createdAt.toLocaleString() : "Just now"}</span>
+                            {/* Rejection Reason */}
+                            <td className="py-4 px-6">
+                              <div className="bg-red-50/50 dark:bg-red-955/15 border-l-4 border-red-500 py-2 px-3 rounded-r-lg max-w-[340px]">
+                                <p className="text-[10px] uppercase font-bold text-red-650 dark:text-red-400 tracking-wider flex items-center gap-1 mb-1">
+                                  <AlertTriangle className="w-3.5 h-3.5" />
+                                  <span>{t("Rejection Reason")}</span>
+                                </p>
+                                <p className="text-xs text-red-750 dark:text-red-300 font-semibold leading-relaxed break-words whitespace-pre-wrap">
+                                  {log.rejectionReason}
+                                </p>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile stacked card view */}
+                  <div className="md:hidden divide-y divide-gray-105 dark:divide-slate-805/40">
+                    {filteredRejections.map((log) => (
+                      <div key={log.id} className="p-4 space-y-3">
+                        {/* Header: File name */}
+                        <div>
+                          <h4 className="font-bold text-xs text-gray-805 dark:text-white break-all leading-tight">{log.fileName}</h4>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[9px] font-extrabold uppercase tracking-wide">
+                            <span className="bg-brand-50/80 dark:bg-[#15803d]/15 text-[#15803d] dark:text-brand-400 px-1.5 py-0.5 rounded-xs">
+                              {t(log.fileSubject)}
                             </span>
-                          </td>
+                            <span className="bg-gray-105 dark:bg-slate-800 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-xs">
+                              {t(log.fileBranch)}
+                            </span>
+                          </div>
+                        </div>
 
-                          {/* Rejection Reason */}
-                          <td className="py-4 px-6">
-                            <div className="bg-red-50/50 dark:bg-red-955/15 border-l-4 border-red-500 py-2 px-3 rounded-r-lg max-w-[340px]">
-                              <p className="text-[10px] uppercase font-bold text-red-650 dark:text-red-400 tracking-wider flex items-center gap-1 mb-1">
-                                <AlertTriangle className="w-3.5 h-3.5" />
-                                <span>{t("Rejection Reason")}</span>
-                              </p>
-                              <p className="text-xs text-red-750 dark:text-red-300 font-semibold leading-relaxed break-words whitespace-pre-wrap">
-                                {log.rejectionReason}
-                              </p>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                        {/* Info block: Submitted & Rejected by */}
+                        <div className="grid grid-cols-2 gap-3 bg-gray-50/50 dark:bg-slate-800/15 p-3 rounded-lg border border-gray-100/50 dark:border-slate-800/50 text-[10px] text-gray-550 dark:text-gray-400">
+                          <div>
+                            <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{t("Submitted By")}</span>
+                            <p className="font-bold text-gray-750 dark:text-gray-200">{log.uploaderName || t("Unknown Teacher")}</p>
+                            <span className="text-[9px] font-medium text-gray-400 uppercase">{t("Teacher")}</span>
+                          </div>
+                          <div>
+                            <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{t("Rejected By")}</span>
+                            <p className="font-bold text-red-605 dark:text-red-400">{log.actorName}</p>
+                            <span className="text-[9px] font-medium text-gray-400 uppercase">{t(log.actorRole)}</span>
+                          </div>
+                          <div className="col-span-2 pt-1.5 border-t border-gray-100/40 dark:border-slate-800/50">
+                            <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{t("Date Rejected")}</span>
+                            <span className="font-mono flex items-center gap-1 text-gray-600 dark:text-gray-300">
+                              <Clock className="w-3 h-3 text-gray-400" />
+                              {log.createdAt ? log.createdAt.toLocaleString() : "Just now"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Rejection Reason */}
+                        <div className="bg-red-50/50 dark:bg-red-955/15 border-l-4 border-red-500 py-2 px-3 rounded-r-lg">
+                          <p className="text-[9px] uppercase font-bold text-red-655 dark:text-red-400 tracking-wider flex items-center gap-1 mb-1">
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                            <span>{t("Rejection Reason")}</span>
+                          </p>
+                          <p className="text-xs text-red-750 dark:text-red-300 font-semibold leading-relaxed break-words whitespace-pre-wrap">
+                            {log.rejectionReason}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               );
             })()}

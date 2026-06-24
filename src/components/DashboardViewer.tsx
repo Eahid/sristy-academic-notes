@@ -11,9 +11,10 @@ interface DashboardViewerProps {
   files: FileArchive[];
   onDownload: (file: FileArchive) => void;
   onPreview?: (file: FileArchive) => void;
+  onViewTeacherDetails?: (teacherUid: string) => void;
 }
 
-export default function DashboardViewer({ user, files, onDownload, onPreview }: DashboardViewerProps) {
+export default function DashboardViewer({ user, files, onDownload, onPreview, onViewTeacherDetails }: DashboardViewerProps) {
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('');
@@ -165,6 +166,7 @@ export default function DashboardViewer({ user, files, onDownload, onPreview }: 
                     prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
                   );
                 }}
+                onViewTeacherDetails={onViewTeacherDetails}
               />
             ))}
           </div>

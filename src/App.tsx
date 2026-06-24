@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   collection, 
   query, 
@@ -18,6 +18,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { ref, deleteObject } from 'firebase/storage';
 import { motion, AnimatePresence } from 'motion/react';
 import { db, auth, storage } from './firebase';
+import { safeLocalStorage } from './utils';
 import { UserProfile, FileArchive } from './types';
 import { BRANCHES, SUBJECTS } from './constants';
 import Navbar from './components/Navbar';
@@ -32,6 +33,7 @@ import UserSystemDiagram from './components/UserSystemDiagram';
 import DocPreviewModal from './components/DocPreviewModal';
 import FileCard from './components/FileCard';
 import BatchDownloadBar from './components/BatchDownloadBar';
+import TeacherDetailsModal from './components/TeacherDetailsModal';
 import { useThemeLanguage } from './components/ThemeLanguageContext';
 import { 
   FolderLock, 
@@ -68,11 +70,15 @@ export default function App() {
   const [triggerRefresh, setTriggerRefresh] = useState(0);
 
   const [previewFile, setPreviewFile] = useState<FileArchive | null>(null);
+  const [viewingTeacherUid, setViewingTeacherUid] = useState<string | null>(null);
 
   const [isSystemShutDown, setIsSystemShutDown] = useState(false);
   const [guestSearch, setGuestSearch] = useState('');
   const [guestBranch, setGuestBranch] = useState('');
   const [guestSubject, setGuestSubject] = useState('');
+
+  const hasAutoOpened = useRef(false);
+  const [logoFailed, setLogoFailed] = useState(false);
 
   const { t } = useThemeLanguage();
 
@@ -149,14 +155,14 @@ export default function App() {
 
   useEffect(() => {
     // Read local bypass storage initially if any
-    const localUserJSON = localStorage.getItem('sristy_local_user');
+    const localUserJSON = safeLocalStorage.getItem('sristy_local_user');
     if (localUserJSON) {
       try {
         const parsed = JSON.parse(localUserJSON);
         parsed.createdAt = parsed.createdAt ? new Date(parsed.createdAt) : new Date();
         setCurrentUser(parsed);
       } catch (e) {
-        localStorage.removeItem('sristy_local_user');
+        safeLocalStorage.removeItem('sristy_local_user');
       }
     }
 
@@ -175,7 +181,7 @@ export default function App() {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         // Clear local bypass if dynamic Firebase connection succeeds
-        localStorage.removeItem('sristy_local_user');
+        safeLocalStorage.removeItem('sristy_local_user');
         try {
           const userDocSnap = await getDoc(doc(db, 'users', firebaseUser.uid));
           let currentRole: string | undefined;
@@ -237,7 +243,7 @@ export default function App() {
         }
       } else {
         // If Firebase Auth logged out or cleared, check if we still have local bypass active
-        const localUserJSON = localStorage.getItem('sristy_local_user');
+        const localUserJSON = safeLocalStorage.getItem('sristy_local_user');
         if (localUserJSON) {
           try {
             const parsed = JSON.parse(localUserJSON);
@@ -245,7 +251,7 @@ export default function App() {
             setCurrentUser(parsed);
             return;
           } catch (e) {
-            localStorage.removeItem('sristy_local_user');
+            safeLocalStorage.removeItem('sristy_local_user');
           }
         }
         setCurrentUser(null);
@@ -254,6 +260,16 @@ export default function App() {
 
     return () => unsub();
   }, []);
+
+  // Automatically trigger the login modal when loading completes if there is no active authenticated user
+  useEffect(() => {
+    if (!loading && !currentUser && !hasAutoOpened.current) {
+      hasAutoOpened.current = true;
+      setAuthModalOpen(true);
+    } else if (currentUser) {
+      setAuthModalOpen(false);
+    }
+  }, [loading, currentUser]);
 
   // 2. Fetch all system files archives with multiple secure sub-queries depending on role
   useEffect(() => {
@@ -377,7 +393,7 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
-      localStorage.removeItem('sristy_local_user');
+      safeLocalStorage.removeItem('sristy_local_user');
       await signOut(auth);
       setCurrentUser(null);
       setAuthModalOpen(false);
@@ -719,12 +735,19 @@ export default function App() {
             transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut" }}
             className="w-24 h-24 bg-white/50 dark:bg-slate-800/40 backdrop-blur-xs rounded-[28px] flex items-center justify-center mx-auto shadow-xl border border-gray-100 dark:border-slate-800 p-4"
           >
-            <img 
-              src="https://sristy.edu.bd/wp-content/uploads/2018/12/Sristy.png.webp" 
-              alt="Sristy Logo" 
-              className="w-full h-full object-contain filter drop-shadow-sm"
-              referrerPolicy="no-referrer"
-            />
+            {logoFailed ? (
+              <div className="w-16 h-16 rounded-xl bg-brand-100 dark:bg-slate-800 flex items-center justify-center text-brand-600 dark:text-brand-400">
+                <School className="w-10 h-10" />
+              </div>
+            ) : (
+              <img 
+                src="https://sristy.edu.bd/wp-content/uploads/2018/12/Sristy.png.webp" 
+                alt="Sristy Logo" 
+                className="w-full h-full object-contain filter drop-shadow-sm"
+                referrerPolicy="no-referrer"
+                onError={() => setLogoFailed(true)}
+              />
+            )}
           </motion.div>
           
           <div className="space-y-1">
@@ -814,7 +837,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 flex flex-col justify-between transition-colors duration-300" id="sristy-edu-app-root">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 flex flex-col transition-colors duration-300" id="sristy-edu-app-root">
       
       {/* Navbar header */}
       <Navbar 
@@ -855,6 +878,7 @@ export default function App() {
                 onFileHardDelete={handleHardDeleteFile}
                 onDownload={handleDownloadAttempt}
                 onPreview={handlePreviewAttempt}
+                onViewTeacherDetails={setViewingTeacherUid}
               />
             )}
 
@@ -869,6 +893,7 @@ export default function App() {
                 onFileRestore={handleRestoreFile}
                 onDownload={handleDownloadAttempt}
                 onPreview={handlePreviewAttempt}
+                onViewTeacherDetails={setViewingTeacherUid}
               />
             )}
 
@@ -880,6 +905,7 @@ export default function App() {
                 onFileDelete={handleDeleteFile}
                 onDownload={handleDownloadAttempt}
                 onPreview={handlePreviewAttempt}
+                onViewTeacherDetails={setViewingTeacherUid}
               />
             )}
 
@@ -889,6 +915,7 @@ export default function App() {
                 files={files} 
                 onDownload={handleDownloadAttempt}
                 onPreview={handlePreviewAttempt}
+                onViewTeacherDetails={setViewingTeacherUid}
               />
             )}
           </div>
@@ -1151,6 +1178,7 @@ export default function App() {
                               prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
                             );
                           }}
+                          onViewTeacherDetails={setViewingTeacherUid}
                         />
                       </div>
                     ))}
@@ -1184,7 +1212,7 @@ export default function App() {
       </main>
 
       {/* FOOTER */}
-      <footer className="bg-white dark:bg-slate-950 border-t border-gray-100 dark:border-slate-900 py-6 text-center text-xs text-gray-400 dark:text-gray-500 transition-colors" id="sristy-family-footer">
+      <footer className={`hidden sm:block bg-white dark:bg-slate-950 border-t border-gray-100 dark:border-slate-900 pt-6 pb-6 text-center text-xs text-gray-400 dark:text-gray-500 transition-colors`} id="sristy-family-footer">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p>© 2026 Sristy Education Family. All rights reserved across board affiliates.</p>
           <div className="flex gap-4">
@@ -1258,6 +1286,19 @@ export default function App() {
         onApprove={handleApproveFile}
         onReject={handleRejectFile}
       />
+
+      {/* TEACHER/INSTRUCTOR DETAILS MODAL */}
+      <AnimatePresence>
+        {viewingTeacherUid && (
+          <TeacherDetailsModal 
+            teacherUid={viewingTeacherUid}
+            onClose={() => setViewingTeacherUid(null)}
+            files={files}
+            onDownload={handleDownloadAttempt}
+            onPreview={handlePreviewAttempt}
+          />
+        )}
+      </AnimatePresence>
 
     </div>
   );

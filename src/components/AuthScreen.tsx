@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { collection, query, where, getDocs, doc, setDoc, getDoc, serverTimestamp, limit } from 'firebase/firestore';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
+import { safeLocalStorage } from '../utils';
 import { UserProfile, UserRole } from '../types';
 import { BRANCHES, SUBJECTS } from '../constants';
 import { Lock, User, Mail, School, BookOpen, AlertCircle, Sparkles, CheckCircle2, ChevronDown } from 'lucide-react';
@@ -26,6 +27,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [logoFailed, setLogoFailed] = useState(false);
   const { t } = useThemeLanguage();
 
   const handleBypassLogin = async (role: UserRole) => {
@@ -91,7 +93,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
       }
 
       // 2. Unlink any previous offline cache to prevent login conflicts
-      localStorage.removeItem('sristy_local_user');
+      safeLocalStorage.removeItem('sristy_local_user');
 
       // 3. Initiate real Firebase Auth sign-in
       const userCredential = await signInWithEmailAndPassword(auth, demoEmail, demoPassword);
@@ -175,7 +177,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
       if (demoSubject) fallbackUser.subject = demoSubject;
       if (demoSubjects.length > 0) fallbackUser.subjects = demoSubjects;
 
-      localStorage.setItem('sristy_local_user', JSON.stringify(fallbackUser));
+      safeLocalStorage.setItem('sristy_local_user', JSON.stringify(fallbackUser));
       setLoading(false);
       setSuccessMsg(t("Welcome back") + ` (Local Sandbox Bypass), ${fallbackUser.fullName}!`);
       setTimeout(() => {
@@ -520,7 +522,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           };
         }
 
-        localStorage.setItem('sristy_local_user', JSON.stringify(fallbackUser));
+        safeLocalStorage.setItem('sristy_local_user', JSON.stringify(fallbackUser));
         setSuccessMsg(t("Welcome back") + ` (Local Bypass), ${fallbackUser.fullName}!`);
         setTimeout(() => {
           onAuthSuccess(fallbackUser);
@@ -643,12 +645,19 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
             <span>{t("Authorized Access Control Gateway")}</span>
           </div>
           <div className="flex justify-center mb-3">
-            <img 
-              src="https://sristy.edu.bd/wp-content/uploads/2018/12/Sristy.png.webp" 
-              alt="Sristy Logo" 
-              className="w-16 h-16 object-contain filter drop-shadow-md brightness-110 animate-duration-1000"
-              referrerPolicy="no-referrer"
-            />
+            {logoFailed ? (
+              <div className="w-16 h-16 rounded-xl bg-white/20 flex items-center justify-center text-white backdrop-blur-xs">
+                <School className="w-10 h-10" />
+              </div>
+            ) : (
+              <img 
+                src="https://sristy.edu.bd/wp-content/uploads/2018/12/Sristy.png.webp" 
+                alt="Sristy Logo" 
+                className="w-16 h-16 object-contain filter drop-shadow-md brightness-110"
+                referrerPolicy="no-referrer"
+                onError={() => setLogoFailed(true)}
+              />
+            )}
           </div>
           <h1 className="text-xl sm:text-2xl font-bold font-display tracking-tight mb-2 uppercase">{t("Sristy Education Family")}</h1>
           <p className="text-xs text-brand-50/80 max-w-xs mx-auto">

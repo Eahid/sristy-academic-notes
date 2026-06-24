@@ -16,6 +16,7 @@ interface DashboardTeacherProps {
   onFileDelete: (fileId: string) => void;
   onDownload: (file: FileArchive) => void;
   onPreview?: (file: FileArchive) => void;
+  onViewTeacherDetails?: (teacherUid: string) => void;
 }
 
 export default function DashboardTeacher({
@@ -24,7 +25,8 @@ export default function DashboardTeacher({
   onUploadSuccess,
   onFileDelete,
   onDownload,
-  onPreview
+  onPreview,
+  onViewTeacherDetails
 }: DashboardTeacherProps) {
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -778,6 +780,7 @@ export default function DashboardTeacher({
                             prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
                           );
                         }}
+                        onViewTeacherDetails={onViewTeacherDetails}
                       />
                     </div>
                   ))}

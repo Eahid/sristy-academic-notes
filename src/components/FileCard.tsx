@@ -29,10 +29,11 @@ interface FileCardProps {
   onDelete?: (fileId: string) => void;
   isSelected?: boolean;
   onSelectToggle?: (fileId: string) => void;
+  onViewTeacherDetails?: (teacherId: string) => void;
   key?: string | number;
 }
 
-export default function FileCard({ file, user, onDownload, onPreview, onApprove, onReject, onDelete, isSelected, onSelectToggle }: FileCardProps) {
+export default function FileCard({ file, user, onDownload, onPreview, onApprove, onReject, onDelete, isSelected, onSelectToggle, onViewTeacherDetails }: FileCardProps) {
   const { t } = useThemeLanguage();
 
   // Determine relevant icon of the premium list
@@ -170,9 +171,17 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
 
         {/* Uploader Details info block */}
         <div className="border-t border-gray-100 dark:border-slate-800 pt-3 flex items-center justify-between">
-          <div className="min-w-0">
-            <p className="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-semibold tracking-wider">{t("Uploaded By")}</p>
-            <p className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate" title={file.uploaderName}>{file.uploaderName}</p>
+          <div 
+            className={`min-w-0 ${onViewTeacherDetails ? 'cursor-pointer group' : ''}`}
+            onClick={() => onViewTeacherDetails && onViewTeacherDetails(file.uploadedBy)}
+          >
+            <p className={`text-[10px] text-gray-500 dark:text-gray-400 uppercase font-semibold tracking-wider flex items-center gap-1 ${onViewTeacherDetails ? 'group-hover:text-brand-500' : ''}`}>
+              <span>{t("Uploaded By")}</span>
+              {onViewTeacherDetails && (
+                <span className="text-[8px] text-brand-505 dark:text-brand-409 font-bold lowercase opacity-0 group-hover:opacity-100 transition-opacity">({t("view profile")})</span>
+              )}
+            </p>
+            <p className={`text-xs font-bold text-gray-800 dark:text-gray-200 truncate ${onViewTeacherDetails ? 'group-hover:text-brand-600 dark:group-hover:text-brand-400' : ''}`} title={file.uploaderName}>{file.uploaderName}</p>
           </div>
           <div className="text-right text-[10px] text-gray-400 dark:text-gray-500">
             <p>{formatSize(file.fileSize)}</p>
