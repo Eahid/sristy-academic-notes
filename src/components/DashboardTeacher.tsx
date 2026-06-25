@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { collection, addDoc, serverTimestamp, query, where, getDocs, orderBy } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { UserProfile, FileArchive } from '../types';
-import { Upload, CheckCircle2, AlertCircle, Sparkles, FolderLock, Globe, BookOpen, Layers, ChevronDown, Loader2, Bell, AlertTriangle, Calendar, X } from 'lucide-react';
+import { Upload, CheckCircle2, AlertCircle, Sparkles, FolderLock, Globe, BookOpen, Layers, ChevronDown, Loader2, Bell, AlertTriangle, Calendar, X, List, Grid, Search, FileText, FileImage, Download, Eye, Trash2 } from 'lucide-react';
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
 import { useThemeLanguage } from './ThemeLanguageContext';
@@ -29,6 +29,9 @@ export default function DashboardTeacher({
   onViewTeacherDetails
 }: DashboardTeacherProps) {
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
+  const [archiveTab, setArchiveTab] = useState<'my_submissions' | 'department_materials'>('my_submissions');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [description, setDescription] = useState('');
   const [isDragActive, setIsDragActive] = useState(false);
@@ -64,9 +67,48 @@ export default function DashboardTeacher({
 
   const finalSubject = isNewSubjectForm ? newSubjectText.trim() : selectedSubject;
 
+  const teacherSubjects = (Array.isArray(user?.subjects)
+    ? user.subjects
+    : (user?.subject ? [user.subject] : [])
+  ).filter((sub): sub is string => typeof sub === 'string');
+
   // Filter files
   // 1. My archive (all files uploaded by me)
-  const myUploadedFiles = files.filter(f => f.uploadedBy === user.uid);
+  const myUploadedFiles = files.filter(f => f && f.uploadedBy === user.uid);
+
+  // 2. Department Library (all approved files from my assigned department)
+  const departmentFiles = files.filter(f => 
+    f && 
+    f.isApproved && 
+    typeof f.subject === 'string' && 
+    teacherSubjects.some(sub => typeof sub === 'string' && sub.toLowerCase() === f.subject.toLowerCase())
+  );
+
+  // Active files prior to search
+  const activeTabFiles = archiveTab === 'my_submissions' ? myUploadedFiles : departmentFiles;
+
+  // Filter with search query
+  const currentFilteredFiles = activeTabFiles.filter(file => {
+    if (!file) return false;
+    if (!searchTerm.trim()) return true;
+    const queryStr = searchTerm.toLowerCase();
+    
+    const nameStr = file.fileName || '';
+    const descStr = file.description || '';
+    const chapStr = file.chapter || '';
+    const topicStr = file.topic || '';
+    const itemStr = file.itemType || '';
+    const uploaderStr = file.uploaderName || '';
+
+    return (
+      nameStr.toLowerCase().includes(queryStr) ||
+      descStr.toLowerCase().includes(queryStr) ||
+      chapStr.toLowerCase().includes(queryStr) ||
+      topicStr.toLowerCase().includes(queryStr) ||
+      itemStr.toLowerCase().includes(queryStr) ||
+      uploaderStr.toLowerCase().includes(queryStr)
+    );
+  });
 
   const existingChapters = Array.from(new Set(
     myUploadedFiles
@@ -84,6 +126,7 @@ export default function DashboardTeacher({
   ));
 
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState('');
   const [uploadSuccess, setUploadSuccess] = useState('');
 
@@ -132,8 +175,6 @@ export default function DashboardTeacher({
   // Allowed file extensions
   const ALLOWED_EXTENSIONS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'png', 'jpg', 'jpeg'];
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB SLA Limit
-
-  const teacherSubjects = user.subjects || (user.subject ? [user.subject] : []);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -237,6 +278,7 @@ export default function DashboardTeacher({
     }
 
     try {
+      setUploadProgress(0);
       const parts = selectedFile.name.split('.');
       const fileType = parts[parts.length - 1].toLowerCase();
 
@@ -254,15 +296,32 @@ export default function DashboardTeacher({
         if (r2Response.ok) {
           const r2Data = await r2Response.json();
           // Upload direct byte content to Cloudflare R2 storage using presigned upload PUT URL
-          const uploadRes = await fetch(r2Data.uploadUrl, {
-            method: 'PUT',
-            body: selectedFile,
-            headers: { 'Content-Type': selectedFile.type || 'application/octet-stream' },
-          });
+          await new Promise<void>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('PUT', r2Data.uploadUrl);
+            xhr.setRequestHeader('Content-Type', selectedFile.type || 'application/octet-stream');
 
-          if (!uploadRes.ok) {
-            throw new Error(`R2 direct PUT upload raw fetch failed: ${uploadRes.status}`);
-          }
+            xhr.upload.onprogress = (event) => {
+              if (event.lengthComputable) {
+                const percentComplete = Math.round((event.loaded / event.total) * 100);
+                setUploadProgress(percentComplete);
+              }
+            };
+
+            xhr.onload = () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                resolve();
+              } else {
+                reject(new Error(`R2 direct PUT upload raw fetch failed: ${xhr.status}`));
+              }
+            };
+
+            xhr.onerror = () => {
+              reject(new Error('R2 direct PUT upload network error'));
+            };
+
+            xhr.send(selectedFile);
+          });
 
           downloadUrl = r2Data.fileUrl;
           fileRefPath = r2Data.storagePath;
@@ -272,16 +331,44 @@ export default function DashboardTeacher({
           console.warn('S3 R2 Storage is unconfigured. Defaulting back to client-driven Firebase Storage routing.');
           const fileRefPathFallback = `files/${user.uid}_${Date.now()}_${selectedFile.name}`;
           const storageRef = ref(storage, fileRefPathFallback);
-          const uploadSnapshot = await uploadBytes(storageRef, selectedFile);
-          downloadUrl = await getDownloadURL(uploadSnapshot.ref);
+          const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+          await new Promise<void>((resolve, reject) => {
+            uploadTask.on('state_changed',
+              (snapshot) => {
+                const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+                setUploadProgress(progress);
+              },
+              (error) => {
+                reject(error);
+              },
+              () => {
+                resolve();
+              }
+            );
+          });
+          downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
           fileRefPath = fileRefPathFallback;
         }
       } catch (r2Err: any) {
         console.warn('Cloudflare R2 Direct Upload bypassed because of network/setup error, triggering Firebase Storage fallback: ', r2Err);
         const fileRefPathFallback = `files/${user.uid}_${Date.now()}_${selectedFile.name}`;
         const storageRef = ref(storage, fileRefPathFallback);
-        const uploadSnapshot = await uploadBytes(storageRef, selectedFile);
-        downloadUrl = await getDownloadURL(uploadSnapshot.ref);
+        const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+        await new Promise<void>((resolve, reject) => {
+          uploadTask.on('state_changed',
+            (snapshot) => {
+              const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+              setUploadProgress(progress);
+            },
+            (error) => {
+              reject(error);
+            },
+            () => {
+              resolve();
+            }
+          );
+        });
+        downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
         fileRefPath = fileRefPathFallback;
       }
 
@@ -351,6 +438,7 @@ export default function DashboardTeacher({
         : t("Failed to upload file: ") + exactMsg);
     } finally {
       setLoading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -440,9 +528,24 @@ export default function DashboardTeacher({
           )}
 
           {loading && (
-            <div className="mb-4 flex items-center gap-2.5 p-3.5 bg-blue-50 dark:bg-blue-950/25 text-blue-700 dark:text-blue-400 rounded-lg text-xs leading-relaxed font-semibold border border-blue-105/30 animate-pulse">
-              <Loader2 className="w-4 h-4 shrink-0 text-blue-500 animate-spin" />
-              <span>{t("Securely transferring file archive to Cloudflare R2 pipeline...")}</span>
+            <div className="mb-4 p-3.5 bg-blue-50 dark:bg-blue-950/25 text-blue-700 dark:text-blue-400 rounded-lg text-xs font-semibold border border-blue-105/30 space-y-2">
+              <div className="flex items-center gap-2.5 animate-pulse">
+                <Loader2 className="w-4 h-4 shrink-0 text-blue-500 animate-spin" />
+                <span>
+                  {uploadProgress !== null 
+                    ? `${t("Uploading...")} ${uploadProgress}%` 
+                    : t("Securely transferring file archive to Cloudflare R2 pipeline...")}
+                </span>
+              </div>
+              {uploadProgress !== null && (
+                <div className="w-full bg-blue-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                  <div 
+                    className="bg-brand-500 h-full transition-all duration-300 ease-out"
+                    style={{ width: `${uploadProgress}%` }}
+                    id="upload-progress-bar"
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -730,32 +833,128 @@ export default function DashboardTeacher({
 
         {/* Archives Display segment column */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="space-y-4">
-            <div className="flex justify-between items-center bg-gray-50 dark:bg-slate-800/50 p-4 rounded-xl border border-gray-100 dark:border-slate-800">
-              <span className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-widest pl-1 font-mono">{t("My Submissions")}</span>
-              <span className="text-[10px] bg-brand-100 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 px-2.5 py-0.5 rounded-full font-bold select-none capitalize">
-                {t(user.subject)} {t("Department")}
-              </span>
+          {/* Header Controls for Archives Display */}
+          <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-gray-100 dark:border-slate-800 shadow-xs space-y-4 transition-colors">
+            {/* Tabs & View Modes */}
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 pb-3 border-b border-gray-50 dark:border-slate-800/55">
+              {/* Tabs list */}
+              <div className="flex bg-gray-100 dark:bg-slate-800/60 p-1 rounded-xl w-fit border border-gray-150/40 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setArchiveTab('my_submissions');
+                    setSelectedFileIds([]);
+                  }}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    archiveTab === 'my_submissions'
+                      ? 'bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-100 shadow-xs'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  }`}
+                >
+                  {t("My Submissions")} ({myUploadedFiles.length})
+                </button>
+                {teacherSubjects.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setArchiveTab('department_materials');
+                      setSelectedFileIds([]);
+                    }}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      archiveTab === 'department_materials'
+                        ? 'bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-100 shadow-xs'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                    }`}
+                  >
+                    {t("Department Library")} ({departmentFiles.length})
+                  </button>
+                )}
+              </div>
+
+              {/* View Switchers */}
+              <div className="flex items-center gap-1.5 bg-gray-100 dark:bg-slate-800/60 p-1 rounded-xl w-fit border border-gray-150/40 dark:border-slate-800 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('grid')}
+                  className={`p-2 rounded-lg transition-all cursor-pointer ${
+                    viewMode === 'grid'
+                      ? 'bg-white dark:bg-slate-700 text-[#15803d] dark:text-brand-400 shadow-xs'
+                      : 'text-gray-400 dark:text-gray-500 hover:text-gray-650 dark:hover:text-gray-300'
+                  }`}
+                  title={t("Grid View")}
+                >
+                  <Grid className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('list')}
+                  className={`p-2 rounded-lg transition-all cursor-pointer ${
+                    viewMode === 'list'
+                      ? 'bg-white dark:bg-slate-700 text-[#15803d] dark:text-brand-400 shadow-xs'
+                      : 'text-gray-400 dark:text-gray-500 hover:text-gray-650 dark:hover:text-gray-300'
+                  }`}
+                  title={t("List View")}
+                >
+                  <List className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            {myUploadedFiles.length > 1 && (
-              <div className="flex sm:hidden items-center justify-center gap-1.5 text-[11px] text-brand-605 dark:text-brand-405 mb-3.5 animate-pulse bg-brand-500/5 py-1 px-3 rounded-full border border-brand-500/10">
+            {/* Filter Search Field */}
+            <div className="flex flex-col sm:flex-row items-center gap-4 justify-between">
+              <div className="relative w-full max-w-md">
+                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
+                  <Search className="w-4 h-4 text-gray-450 dark:text-slate-500" />
+                </span>
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder={
+                    archiveTab === 'my_submissions'
+                      ? t("Search my submissions by name, topic...")
+                      : t("Search department files by name, author...")
+                  }
+                  className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-lg focus:outline-none focus:border-[#15803d] dark:focus:border-brand-500 text-xs font-semibold text-gray-700 dark:text-gray-200"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-450 hover:text-gray-600 dark:hover:text-gray-200 text-xs font-bold cursor-pointer"
+                  >
+                    {t("Clear")}
+                  </button>
+                )}
+              </div>
+
+              <div className="text-[10px] bg-brand-100 dark:bg-brand-950/40 text-[#15803d] dark:text-brand-400 px-3 py-1 rounded-full font-bold select-none capitalize border border-[#15803d]/10">
+                {archiveTab === 'my_submissions'
+                  ? `${t("My Submissions")}: ${user.subject || t("General")}`
+                  : `${t("Assigned")}: ${teacherSubjects.join(', ')}`}
+              </div>
+            </div>
+          </div>
+
+          {/* List/Grid Container Segment */}
+          <div className="space-y-4">
+            {currentFilteredFiles.length > 1 && (
+              <div className="flex sm:hidden items-center justify-center gap-1.5 text-[11px] text-brand-605 dark:text-brand-405 mb-2 animate-pulse bg-brand-500/5 py-1 px-3 rounded-full border border-brand-500/10">
                 <span className="font-semibold uppercase tracking-wider">Swipe horizontally</span>
                 <span className="text-sm font-bold">↔</span>
-                <span>to browse {myUploadedFiles.length} files</span>
+                <span>to browse {currentFilteredFiles.length} files</span>
               </div>
             )}
 
-            {myUploadedFiles.length === 0 ? (
+            {currentFilteredFiles.length === 0 ? (
               <div className="bg-white dark:bg-slate-900 rounded-xl p-8 border border-gray-100 dark:border-slate-800 text-center text-xs text-gray-400 dark:text-gray-500">
-                {t("No files found. Clean start!")}
+                {searchTerm ? t("No search results match your parameters.") : t("No files found in this category.")}
               </div>
             ) : (
               <div className="space-y-4">
                 <BatchDownloadBar
                   selectedIds={selectedFileIds}
                   allFiles={files}
-                  currentFilteredFiles={myUploadedFiles}
+                  currentFilteredFiles={currentFilteredFiles}
                   onSelectToggle={(id) => {
                     setSelectedFileIds(prev =>
                       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
@@ -765,26 +964,197 @@ export default function DashboardTeacher({
                   onSelectAll={(ids) => setSelectedFileIds(ids)}
                 />
                 
-                <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 sm:gap-6">
-                  {myUploadedFiles.map((file) => (
-                    <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
-                      <FileCard
-                        file={file}
-                        user={user}
-                        onDownload={onDownload}
-                        onPreview={onPreview}
-                        onDelete={onFileDelete}
-                        isSelected={selectedFileIds.includes(file.id)}
-                        onSelectToggle={(id) => {
-                          setSelectedFileIds(prev =>
-                            prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+                {viewMode === 'grid' ? (
+                  /* GRID VIEW */
+                  <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 sm:gap-6">
+                    {currentFilteredFiles.map((file) => (
+                      <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
+                        <FileCard
+                          file={file}
+                          user={user}
+                          onDownload={onDownload}
+                          onPreview={onPreview}
+                          onDelete={onFileDelete}
+                          isSelected={selectedFileIds.includes(file.id)}
+                          onSelectToggle={(id) => {
+                            setSelectedFileIds(prev =>
+                              prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+                            );
+                          }}
+                          onViewTeacherDetails={onViewTeacherDetails}
+                          allFiles={files}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  /* LIST VIEW (GORGEOUS TABULAR LIST LAYOUT) */
+                  <div className="overflow-x-auto bg-white dark:bg-slate-900 rounded-xl border border-gray-150 dark:border-slate-800 shadow-xs transition-colors">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-gray-50 dark:bg-slate-850/30 text-gray-400 uppercase font-extrabold text-[9px] tracking-wider border-b border-gray-100 dark:border-slate-800">
+                          <th className="py-3 px-4 w-12 text-center">
+                            <input
+                              type="checkbox"
+                              checked={selectedFileIds.length > 0 && selectedFileIds.length === currentFilteredFiles.length}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedFileIds(currentFilteredFiles.map(f => f.id));
+                                } else {
+                                  setSelectedFileIds([]);
+                                }
+                              }}
+                              className="w-4 h-4 rounded border-gray-300 dark:border-slate-700 text-[#15803d] dark:text-[#22c55e] focus:ring-[#15803d] cursor-pointer accent-[#15803d]"
+                            />
+                          </th>
+                          <th className="py-3 px-4">{t("Document")}</th>
+                          <th className="py-3 px-4">{t("Department/Subject")}</th>
+                          <th className="py-3 px-4">{t("Chapter & Topic")}</th>
+                          <th className="py-3 px-4 text-center">{t("Size")}</th>
+                          <th className="py-3 px-4 text-center">{t("Status")}</th>
+                          <th className="py-3 px-4 text-center">{t("Downloads")}</th>
+                          <th className="py-3 px-4 text-right pr-6">{t("Actions")}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-slate-800 font-medium text-gray-700 dark:text-gray-300">
+                        {currentFilteredFiles.map((file) => {
+                          const isDocApproved = file.isApproved;
+                          
+                          // Format helper for bytes inside map
+                          const formatSizeMap = (bytes: number) => {
+                            if (bytes === 0) return '0 B';
+                            const k = 1024;
+                            const sizes = ['B', 'KB', 'MB', 'GB'];
+                            const i = Math.floor(Math.log(bytes) / Math.log(k));
+                            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+                          };
+
+                          return (
+                            <tr key={file.id} className="hover:bg-gray-50/50 dark:hover:bg-slate-850/15 transition-colors">
+                              <td className="py-3 px-4 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedFileIds.includes(file.id)}
+                                  onChange={() => {
+                                    setSelectedFileIds(prev =>
+                                      prev.includes(file.id) ? prev.filter(id => id !== file.id) : [...prev, file.id]
+                                    );
+                                  }}
+                                  className="w-4 h-4 rounded border-gray-300 dark:border-slate-700 text-[#15803d] dark:text-[#22c55e] focus:ring-[#15803d] cursor-pointer accent-[#15803d]"
+                                />
+                              </td>
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="p-1.5 rounded bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-slate-700">
+                                    {(file.fileType || '').toLowerCase() === 'pdf' ? (
+                                      <FileText className="w-4 h-4 text-red-500" />
+                                    ) : ['doc', 'docx'].includes((file.fileType || '').toLowerCase()) ? (
+                                      <FileText className="w-4 h-4 text-blue-500" />
+                                    ) : ['ppt', 'pptx'].includes((file.fileType || '').toLowerCase()) ? (
+                                      <FileText className="w-4 h-4 text-orange-500" />
+                                    ) : ['png', 'jpg', 'jpeg'].includes((file.fileType || '').toLowerCase()) ? (
+                                      <FileImage className="w-4 h-4 text-green-500" />
+                                    ) : (
+                                      <FileText className="w-4 h-4 text-gray-500" />
+                                    )}
+                                  </div>
+                                  <div className="max-w-[200px] sm:max-w-[250px] truncate">
+                                    <p 
+                                      className="font-bold text-gray-800 dark:text-gray-150 truncate hover:text-[#15803d] dark:hover:text-brand-400 cursor-pointer"
+                                      title={file.fileName}
+                                      onClick={() => {
+                                        const isPreviewable = ['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes((file.fileType || '').toLowerCase());
+                                        if (isPreviewable && onPreview) {
+                                          onPreview(file);
+                                        } else {
+                                          onDownload(file);
+                                        }
+                                      }}
+                                    >
+                                      {file.fileName}
+                                    </p>
+                                    {file.description && (
+                                      <p className="text-[10px] text-gray-400 dark:text-gray-500 truncate" title={file.description}>
+                                        {file.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className="text-[10.5px] font-semibold text-gray-650 dark:text-gray-350 bg-gray-100 dark:bg-slate-800 px-2 py-0.5 rounded-sm">
+                                  {t(file.subject)}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4">
+                                <div className="space-y-0.5">
+                                  {file.chapter && (
+                                    <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate max-w-[130px]" title={file.chapter}>
+                                      <span className="font-bold mr-1 text-[8.5px] uppercase tracking-wide opacity-75">{t("Ch:")}</span>
+                                      {file.chapter}
+                                    </p>
+                                  )}
+                                  {file.topic && (
+                                    <p className="text-[10px] text-[#15803d] dark:text-brand-450 font-semibold truncate max-w-[130px]" title={file.topic}>
+                                      <span className="font-bold mr-1 text-[8.5px] uppercase tracking-wide opacity-75">{t("Topic:")}</span>
+                                      {file.topic}
+                                    </p>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-center font-mono text-[11px] text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                                {formatSizeMap(file.fileSize)}
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                {isDocApproved ? (
+                                  <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-650 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-955/20 px-2 py-0.5 rounded-full border border-emerald-100 dark:border-emerald-900/30">
+                                    {t("Approved")}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-955/20 px-2 py-0.5 rounded-full border border-amber-100 dark:border-amber-900/20">
+                                    {t("Pending")}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 text-center font-mono font-bold text-gray-750 dark:text-gray-300">
+                                {file.downloadCount}
+                              </td>
+                              <td className="py-3 px-4 text-right pr-6 whitespace-nowrap">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes((file.fileType || '').toLowerCase()) && (
+                                    <button
+                                      onClick={() => onPreview ? onPreview(file) : onDownload(file)}
+                                      className="p-1.5 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-750 text-gray-600 dark:text-gray-300 rounded border border-gray-150 dark:border-slate-700 cursor-pointer"
+                                      title={t("Preview")}
+                                    >
+                                      <Eye className="w-3.5 h-3.5 text-brand-500" />
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => onDownload(file)}
+                                    className="p-1.5 bg-emerald-50 dark:bg-emerald-955/20 hover:bg-emerald-100/50 dark:hover:bg-emerald-955/40 text-emerald-600 dark:text-[#22c55e] rounded border border-emerald-100 dark:border-emerald-900/40 cursor-pointer"
+                                    title={t("Download")}
+                                  >
+                                    <Download className="w-3.5 h-3.5" />
+                                  </button>
+                                  {file.uploadedBy === user.uid && (
+                                    <button
+                                      onClick={() => onFileDelete(file.id)}
+                                      className="p-1.5 bg-red-50 dark:bg-red-955/20 hover:bg-red-100 dark:hover:bg-red-955/40 text-red-650 dark:text-red-400 rounded border border-red-105 dark:border-red-900/30 cursor-pointer"
+                                      title={t("Delete")}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
                           );
-                        }}
-                        onViewTeacherDetails={onViewTeacherDetails}
-                      />
-                    </div>
-                  ))}
-                </div>
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
           </div>

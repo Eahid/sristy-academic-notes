@@ -40,9 +40,9 @@ export default function DocPreviewModal({ file, isOpen, onClose, onDownload, use
 
   if (!isOpen || !file) return null;
 
-  const isImage = ['png', 'jpg', 'jpeg'].includes(file.fileType.toLowerCase());
-  const isPdf = file.fileType.toLowerCase() === 'pdf';
-  const isOfficeDoc = ['doc', 'docx', 'ppt', 'pptx'].includes(file.fileType.toLowerCase());
+  const isImage = ['png', 'jpg', 'jpeg'].includes((file.fileType || '').toLowerCase());
+  const isPdf = (file.fileType || '').toLowerCase() === 'pdf';
+  const isOfficeDoc = ['doc', 'docx', 'ppt', 'pptx'].includes((file.fileType || '').toLowerCase());
 
   const isApproved = file.isApproved;
   const isSuperOrMaster = user?.role === 'super_admin' || user?.role === 'master_admin';
@@ -132,7 +132,7 @@ export default function DocPreviewModal({ file, isOpen, onClose, onDownload, use
       "Conclusion: Verified study resources made available by Sristy Education Family"
     ];
 
-    const curList = sections[subject.toLowerCase()] || generalList;
+    const curList = sections[(subject || '').toLowerCase()] || generalList;
     return curList;
   };
 

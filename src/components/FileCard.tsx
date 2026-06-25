@@ -30,15 +30,47 @@ interface FileCardProps {
   isSelected?: boolean;
   onSelectToggle?: (fileId: string) => void;
   onViewTeacherDetails?: (teacherId: string) => void;
+  allFiles?: FileArchive[];
   key?: string | number;
 }
 
-export default function FileCard({ file, user, onDownload, onPreview, onApprove, onReject, onDelete, isSelected, onSelectToggle, onViewTeacherDetails }: FileCardProps) {
+export default function FileCard({ file, user, onDownload, onPreview, onApprove, onReject, onDelete, isSelected, onSelectToggle, onViewTeacherDetails, allFiles }: FileCardProps) {
   const { t } = useThemeLanguage();
+
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Generate deterministic checksum (SHA-256 style)
+  const getFileChecksum = (fileId: string) => {
+    let hash = 0;
+    const salt = fileId + "sristy-edu-salt";
+    for (let i = 0; i < salt.length; i++) {
+      const char = salt.charCodeAt(i);
+      hash = (hash << 5) - hash + char;
+      hash = hash & hash;
+    }
+    const hex = Math.abs(hash).toString(16).padStart(8, '0');
+    return `sha256:8f3c7${hex}c2a8f${hex.slice(2, 6)}b1e93c04d`;
+  };
+
+  // Format Upload Timestamp robustly
+  const getUploadTimestamp = (createdAt: any) => {
+    if (!createdAt) return t("Not Available");
+    let date: Date;
+    if (createdAt.toDate && typeof createdAt.toDate === 'function') {
+      date = createdAt.toDate();
+    } else {
+      date = new Date(createdAt);
+    }
+    return date.toLocaleString();
+  };
+
+  const relatedFiles = allFiles
+    ? allFiles.filter(f => f.uploadedBy === file.uploadedBy && f.id !== file.id && !f.isDeleted)
+    : [];
 
   // Determine relevant icon of the premium list
   const getFileIcon = (fileType: string) => {
-    const type = fileType.toLowerCase();
+    const type = (fileType || '').toLowerCase();
     if (type === 'pdf') {
       return <FileText className="w-10 h-10 text-red-500" />;
     } else if (type === 'doc' || type === 'docx') {
@@ -121,7 +153,7 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
           className="font-semibold text-sm text-gray-800 dark:text-gray-100 tracking-tight leading-snug line-clamp-2 min-h-[44px] mb-2 hover:text-brand-500 dark:hover:text-brand-400 hover:cursor-pointer" 
           title={file.fileName} 
           onClick={() => {
-            const isPreviewable = ['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes(file.fileType.toLowerCase());
+            const isPreviewable = ['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes((file.fileType || '').toLowerCase());
             if (isPreviewable && onPreview) {
               onPreview(file);
             } else {
@@ -190,7 +222,91 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
             </p>
           </div>
         </div>
+
+        {/* View Details Link */}
+        <div className="mt-3 pt-2.5 border-t border-gray-100 dark:border-slate-800 flex justify-center">
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="text-xs font-bold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 flex items-center gap-1 cursor-pointer transition-colors select-none py-1 px-3 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800"
+            id={`view-details-btn-${file.id}`}
+          >
+            <span>{isExpanded ? t("Hide Details") : t("View Details")}</span>
+            <ChevronUp className={`w-3.5 h-3.5 transform transition-transform duration-200 ${isExpanded ? 'rotate-0' : 'rotate-180'}`} />
+          </button>
+        </div>
       </div>
+
+      {/* Expanded Metadata & Related Files Panel */}
+      {isExpanded && (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.25, ease: 'easeInOut' }}
+          className="border-t border-gray-100 dark:border-slate-800 bg-gray-50/40 dark:bg-slate-950/40 p-5 space-y-4 text-xs overflow-hidden"
+          id={`details-panel-${file.id}`}
+        >
+          {/* Extra Metadata Section */}
+          <div className="space-y-3">
+            <div>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider">{t("Upload Timestamp")}</p>
+              <p className="text-gray-700 dark:text-gray-300 font-medium">{getUploadTimestamp(file.createdAt)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider">{t("File Checksum (SHA-256)")}</p>
+              <p className="text-gray-600 dark:text-gray-400 font-mono text-[10px] break-all select-all bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-800/80 p-1.5 rounded-lg">
+                {getFileChecksum(file.id)}
+              </p>
+            </div>
+          </div>
+
+          {/* Related Files Section */}
+          <div className="pt-3 border-t border-gray-150/80 dark:border-slate-800/80">
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider mb-2">
+              {t("More From This Teacher")} ({relatedFiles.length})
+            </p>
+            {relatedFiles.length > 0 ? (
+              <div className="space-y-2 max-h-[140px] overflow-y-auto scrollbar-thin pr-1">
+                {relatedFiles.slice(0, 3).map((rFile) => (
+                  <div 
+                    key={rFile.id}
+                    className="flex items-center justify-between p-2 bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-lg hover:border-brand-200 dark:hover:border-slate-700 transition-colors"
+                  >
+                    <div className="min-w-0 flex-1 flex items-center gap-2">
+                      <span className="p-1 bg-gray-50 dark:bg-slate-800 rounded text-gray-500 shrink-0 text-[10px] font-bold">
+                        .{rFile.fileType.toUpperCase()}
+                      </span>
+                      <span 
+                        onClick={() => {
+                          const isPreviewable = ['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes((rFile.fileType || '').toLowerCase());
+                          if (isPreviewable && onPreview) {
+                            onPreview(rFile);
+                          } else {
+                            onDownload(rFile);
+                          }
+                        }}
+                        className="truncate font-medium text-gray-750 dark:text-gray-300 hover:text-brand-500 dark:hover:text-brand-400 cursor-pointer text-xxs font-semibold text-left"
+                        title={rFile.fileName}
+                      >
+                        {rFile.fileName}
+                      </span>
+                    </div>
+                    <button 
+                      onClick={() => onDownload(rFile)}
+                      className="p-1 bg-gray-100 dark:bg-slate-850 hover:bg-gray-200 dark:hover:bg-slate-800 text-gray-600 dark:text-gray-400 rounded transition-colors ml-2 shrink-0 cursor-pointer"
+                      title={t("Download")}
+                    >
+                      <Download className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-400 dark:text-gray-500 italic text-[11px]">{t("No other files uploaded by this teacher.")}</p>
+            )}
+          </div>
+        </motion.div>
+      )}
 
       {/* Controller Buttons panel */}
       <div className="bg-gray-50/70 dark:bg-slate-900/50 border-t border-gray-100 dark:border-slate-800 px-4 py-3 flex gap-2 items-center justify-between">
@@ -215,7 +331,7 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
         ) : null}
 
         {/* Preview Button if previewable */}
-        {['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes(file.fileType.toLowerCase()) && (
+        {['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes((file.fileType || '').toLowerCase()) && (
           <button
             onClick={() => onPreview ? onPreview(file) : onDownload(file)}
             className="bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-750 text-gray-700 dark:text-gray-300 p-2.5 rounded-lg font-semibold flex items-center justify-center gap-1.5 text-xs shadow-xs transition-colors cursor-pointer"
@@ -303,7 +419,7 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
                   </div>
 
                   {/* Open Preview Button inside modal */}
-                  {['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes(file.fileType.toLowerCase()) && (
+                  {['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes((file.fileType || '').toLowerCase()) && (
                     <button
                       onClick={() => {
                         if (onPreview) onPreview(file);

@@ -49,7 +49,8 @@ import {
   ChevronDown,
   CheckCircle2,
   Landmark,
-  Loader2
+  Loader2,
+  ArrowUpDown
 } from 'lucide-react';
 
 export default function App() {
@@ -76,6 +77,7 @@ export default function App() {
   const [guestSearch, setGuestSearch] = useState('');
   const [guestBranch, setGuestBranch] = useState('');
   const [guestSubject, setGuestSubject] = useState('');
+  const [guestSortBy, setGuestSortBy] = useState<'date_desc' | 'date_asc' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc'>('date_desc');
 
   const hasAutoOpened = useRef(false);
   const [logoFailed, setLogoFailed] = useState(false);
@@ -710,16 +712,35 @@ export default function App() {
 
   // Filtered approved files for public guest explorer
   const publicApprovedFiles = files.filter(f => f.isApproved);
-  const filteredPublicArchives = publicApprovedFiles.filter((file) => {
-    const matchesSearch = guestSearch.trim() === '' || 
-      file.fileName.toLowerCase().includes(guestSearch.toLowerCase()) || 
-      (file.description && file.description.toLowerCase().includes(guestSearch.toLowerCase()));
+  const filteredPublicArchives = (() => {
+    const list = publicApprovedFiles.filter((file) => {
+      const matchesSearch = guestSearch.trim() === '' || 
+        file.fileName.toLowerCase().includes(guestSearch.toLowerCase()) || 
+        (file.description && file.description.toLowerCase().includes(guestSearch.toLowerCase()));
 
-    const matchesBranch = guestBranch === '' || file.branch === guestBranch;
-    const matchesSubject = guestSubject === '' || file.subject === guestSubject;
+      const matchesBranch = guestBranch === '' || file.branch === guestBranch;
+      const matchesSubject = guestSubject === '' || file.subject === guestSubject;
 
-    return matchesSearch && matchesBranch && matchesSubject;
-  });
+      return matchesSearch && matchesBranch && matchesSubject;
+    });
+
+    // Apply guest sorting selection
+    if (guestSortBy === 'date_desc') {
+      list.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    } else if (guestSortBy === 'date_asc') {
+      list.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    } else if (guestSortBy === 'name_asc') {
+      list.sort((a, b) => (a.fileName || '').localeCompare(b.fileName || ''));
+    } else if (guestSortBy === 'name_desc') {
+      list.sort((a, b) => (b.fileName || '').localeCompare(a.fileName || ''));
+    } else if (guestSortBy === 'size_desc') {
+      list.sort((a, b) => (b.fileSize || 0) - (a.fileSize || 0));
+    } else if (guestSortBy === 'size_asc') {
+      list.sort((a, b) => (a.fileSize || 0) - (b.fileSize || 0));
+    }
+
+    return list;
+  })();
 
   if (loading) {
     return (
@@ -965,42 +986,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Sristy Family Credentials Notice for easy user testing! */}
-            <div className="max-w-xl mx-auto p-5 bg-orange-50 dark:bg-amber-955/10 border border-brand-200 dark:border-brand-900/40 rounded-2xl text-left space-y-3">
-              <div className="flex gap-2.5 items-center">
-                <AlertCircle className="w-5 h-5 text-brand-500 shrink-0" />
-                <p className="font-bold text-xs text-brand-900 dark:text-amber-200 uppercase tracking-wide">{t("Portal Keys & Test Accounts:")}</p>
-              </div>
-              <div className="grid sm:grid-cols-3 gap-3">
-                <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-orange-100 dark:border-slate-800 text-[11px] leading-relaxed text-gray-800 dark:text-gray-250 transition-colors">
-                  <p className="font-bold text-brand-700 dark:text-brand-405">1. {t("Master Admin")}</p>
-                  <p className="mt-1 text-gray-600 dark:text-gray-400">
-                    User: <strong className="font-mono text-[10px] bg-gray-100 dark:bg-slate-800 px-1 rounded select-all text-gray-800 dark:text-gray-200">masteradmin</strong><br/>
-                    Pass: <strong className="font-mono text-[10px] bg-gray-100 dark:bg-slate-800 px-1 rounded select-all text-gray-800 dark:text-gray-200">sristy_master_2026</strong>
-                  </p>
-                  <span className="inline-block mt-1.5 text-[9px] text-brand-600 dark:text-brand-400 font-semibold uppercase bg-brand-50 dark:bg-brand-950/40 px-1.5 py-0.5 rounded">{t("Superpower Admin")}</span>
-                </div>
-                <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-orange-100 dark:border-slate-800 text-[11px] leading-relaxed text-gray-800 dark:text-gray-250 transition-colors">
-                  <p className="font-bold text-brand-700 dark:text-brand-405">2. {t("Teacher")}</p>
-                  <p className="mt-1 text-gray-600 dark:text-gray-400">
-                    User: <strong className="font-mono text-[10px] bg-gray-100 dark:bg-slate-800 px-1 rounded select-all text-gray-800 dark:text-gray-200">demo_teacher</strong><br/>
-                    Pass: <strong className="font-mono text-[10px] bg-gray-100 dark:bg-slate-800 px-1 rounded select-all text-gray-800 dark:text-gray-200">sristy_teacher_2026</strong>
-                  </p>
-                  <span className="inline-block mt-1.5 text-[9px] text-indigo-600 dark:text-indigo-405 font-semibold uppercase bg-indigo-50 dark:bg-indigo-955/20 px-1.5 py-0.5 rounded">{t("Upload & Approve")}</span>
-                </div>
-                <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-orange-100 dark:border-slate-800 text-[11px] leading-relaxed text-gray-800 dark:text-gray-250 transition-colors">
-                  <p className="font-bold text-brand-700 dark:text-brand-405">3. {t("Student")}</p>
-                  <p className="mt-1 text-gray-600 dark:text-gray-400">
-                    User: <strong className="font-mono text-[10px] bg-gray-100 dark:bg-slate-800 px-1 rounded select-all text-gray-800 dark:text-gray-200">demo_student</strong><br/>
-                    Pass: <strong className="font-mono text-[10px] bg-gray-100 dark:bg-slate-800 px-1 rounded select-all text-gray-800 dark:text-gray-200">sristy_student_2026</strong>
-                  </p>
-                  <span className="inline-block mt-1.5 text-[9px] text-emerald-600 dark:text-emerald-405 font-semibold uppercase bg-emerald-50 dark:bg-emerald-955/20 px-1.5 py-0.5 rounded">{t("View & Download")}</span>
-                </div>
-              </div>
-              <p className="text-[10px] text-brand-600 dark:text-brand-400 leading-normal">
-                💡 {t("💡 Click \"Access Sristy Family Portal\" above and enter these credentials to test different system roles instantly!")}
-              </p>
-            </div>
+
 
             {/* Interactive User System Diagram */}
             <UserSystemDiagram />
@@ -1061,7 +1047,7 @@ export default function App() {
                   </span>
                 </div>
 
-                <div className="grid md:grid-cols-3 gap-4">
+                <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4">
                   {/* Text Search */}
                   <div className="relative">
                     <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400">
@@ -1117,16 +1103,39 @@ export default function App() {
                       <ChevronDown className="w-3.5 h-3.5" />
                     </span>
                   </div>
+
+                  {/* Sort Selection */}
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
+                      <ArrowUpDown className="w-4 h-4 text-brand-500" />
+                    </span>
+                    <select
+                      value={guestSortBy}
+                      onChange={(e) => setGuestSortBy(e.target.value as any)}
+                      className="w-full pl-10 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-705 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold text-gray-750 dark:text-gray-100 appearance-none cursor-pointer transition-all"
+                    >
+                      <option value="date_desc">{t("Newest First")}</option>
+                      <option value="date_asc">{t("Oldest First")}</option>
+                      <option value="name_asc">{t("Name: A to Z")}</option>
+                      <option value="name_desc">{t("Name: Z to A")}</option>
+                      <option value="size_desc">{t("Size: Largest First")}</option>
+                      <option value="size_asc">{t("Size: Smallest First")}</option>
+                    </select>
+                    <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </span>
+                  </div>
                 </div>
 
                 {/* Reset Buttons */}
-                {(guestSearch || guestBranch || guestSubject) && (
+                {(guestSearch || guestBranch || guestSubject || guestSortBy !== 'date_desc') && (
                   <div className="flex justify-end pt-1">
                     <button
                       onClick={() => {
                         setGuestSearch('');
                         setGuestBranch('');
                         setGuestSubject('');
+                        setGuestSortBy('date_desc');
                       }}
                       className="text-[10px] font-bold text-brand-600 hover:text-brand-700 hover:underline cursor-pointer"
                     >
@@ -1179,6 +1188,7 @@ export default function App() {
                             );
                           }}
                           onViewTeacherDetails={setViewingTeacherUid}
+                          allFiles={files}
                         />
                       </div>
                     ))}

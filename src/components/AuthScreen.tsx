@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { collection, query, where, getDocs, doc, setDoc, getDoc, serverTimestamp, limit } from 'firebase/firestore';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { db, auth, handleFirestoreError, OperationType } from '../firebase';
+import { db, auth, handleFirestoreError, OperationType, createSecondaryUser } from '../firebase';
 import { safeLocalStorage } from '../utils';
 import { UserProfile, UserRole } from '../types';
 import { BRANCHES, SUBJECTS } from '../constants';
@@ -30,161 +30,38 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
   const [logoFailed, setLogoFailed] = useState(false);
   const { t } = useThemeLanguage();
 
-  const handleBypassLogin = async (role: UserRole) => {
-    setErrorMsg('');
-    setSuccessMsg('');
-    setLoading(true);
-    
-    // Hardcoded corresponding real demo account parameters
-    let demoEmail = '';
-    let demoPassword = '';
-    let demoUsername = '';
-    let demoFullName = '';
-    let demoBranch = '';
-    let demoSubject = '';
-    let demoSubjects: string[] = [];
-
-    if (role === 'super_admin') {
-      demoEmail = 'admin@sristyfamily.com';
-      demoPassword = 'sristy_master_2026';
-      demoUsername = 'superadmin';
-      demoFullName = 'Sristy Super Admin';
-    } else if (role === 'master_admin') {
-      demoEmail = 'admin@sristyfamily.com';
-      demoPassword = 'sristy_master_2026';
-      demoUsername = 'masteradmin';
-      demoFullName = 'Sristy Master Admin';
-    } else if (role === 'admin') {
-      demoEmail = 'branchadmin@sristyfamily.com';
-      demoPassword = 'sristy_admin_2026';
-      demoUsername = 'demo_branch_admin';
-      demoFullName = 'Sristy Branch Administrator';
-      demoBranch = 'Sristy Academic School, Tangail';
-    } else if (role === 'file_approver') {
-      demoEmail = 'approver@sristyfamily.com';
-      demoPassword = 'sristy_approver_2026';
-      demoUsername = 'demo_approver';
-      demoFullName = 'Sristy File Approver';
-      demoBranch = 'Sristy College of Tangail';
-    } else if (role === 'teacher') {
-      demoEmail = 'teacher@sristyfamily.com';
-      demoPassword = 'sristy_teacher_2026';
-      demoUsername = 'demo_teacher';
-      demoFullName = 'Sristy Demo Teacher';
-      demoBranch = 'Sristy Academic School, Tangail';
-      demoSubject = 'Bangla 1st Paper';
-      demoSubjects = ['Bangla 1st Paper', 'Bangla 2nd Paper', 'History'];
-    } else {
-      demoEmail = 'student@sristyfamily.com';
-      demoPassword = 'sristy_student_2026';
-      demoUsername = 'demo_student';
-      demoFullName = 'Sristy Demo Student';
-      demoBranch = 'Sristy College of Tangail';
-    }
-
-    try {
-      // 1. Create Firebase Auth credential on-the-fly if not initialized yet
+  React.useEffect(() => {
+    const seedSuperAdmin = async () => {
       try {
-        await createUserWithEmailAndPassword(auth, demoEmail, demoPassword);
-      } catch (authErr: any) {
-        if (authErr.code !== 'auth/email-already-in-use') {
-          console.warn("Preseeded demo auto-registration bypassed:", authErr);
+        const superAdminEmail = 'superadmin@sristynotes.com';
+        const superAdminPass = 'Hello@2026';
+        
+        const q = query(collection(db, 'users'), where('email', '==', superAdminEmail), limit(1));
+        const snap = await getDocs(q);
+        
+        if (snap.empty) {
+          console.log("Seeding super admin account...");
+          const uid = await createSecondaryUser(superAdminEmail, superAdminPass);
+          
+          await setDoc(doc(db, 'users', uid), {
+            uid,
+            username: 'superadmin',
+            fullName: 'Sristy Super Admin',
+            email: superAdminEmail,
+            role: 'super_admin',
+            status: 'active',
+            password: superAdminPass,
+            bio: 'Global Root Supervisor of Sristy Education Family Storage.',
+            createdAt: serverTimestamp(),
+          });
+          console.log("Super admin seeded successfully.");
         }
+      } catch (e) {
+        console.warn("Seeding super admin check/create finished or caught expected error:", e);
       }
-
-      // 2. Unlink any previous offline cache to prevent login conflicts
-      safeLocalStorage.removeItem('sristy_local_user');
-
-      // 3. Initiate real Firebase Auth sign-in
-      const userCredential = await signInWithEmailAndPassword(auth, demoEmail, demoPassword);
-      const userObj = userCredential.user;
-
-      // 4. Align or create target dynamic document mapping under /users/{uid}
-      const userDocRef = doc(db, 'users', userObj.uid);
-      const userDocSnap = await getDoc(userDocRef);
-
-      let targetUser: UserProfile;
-
-      if (userDocSnap.exists()) {
-        const data = userDocSnap.data();
-        targetUser = {
-          uid: userObj.uid,
-          username: data.username || demoUsername,
-          fullName: data.fullName || demoFullName,
-          email: userObj.email || demoEmail,
-          role: data.role as UserRole,
-          branch: data.branch || demoBranch,
-          subject: data.subject || demoSubject,
-          subjects: data.subjects || demoSubjects,
-          status: data.status,
-          profilePic: data.profilePic,
-          bio: data.bio,
-          createdAt: data.createdAt?.toDate() || new Date(),
-        };
-      } else {
-        targetUser = {
-          uid: userObj.uid,
-          username: demoUsername,
-          fullName: demoFullName,
-          email: demoEmail,
-          role: role,
-          branch: demoBranch,
-          subject: demoSubject,
-          subjects: demoSubjects,
-          status: 'active',
-          bio: role === 'super_admin' ? 'Ultimate Owner and Portal Overseer.' : 'Preseeded Sristy staff credentials on-the-fly.',
-          createdAt: new Date(),
-        };
-
-        const payload: any = {
-          uid: targetUser.uid,
-          username: targetUser.username,
-          fullName: targetUser.fullName,
-          email: targetUser.email,
-          role: targetUser.role,
-          status: targetUser.status,
-          bio: targetUser.bio,
-          createdAt: serverTimestamp(),
-        };
-        if (targetUser.branch) payload.branch = targetUser.branch;
-        if (targetUser.subject) payload.subject = targetUser.subject;
-        if (targetUser.subjects) payload.subjects = targetUser.subjects;
-
-        await setDoc(userDocRef, payload);
-      }
-
-      setLoading(false);
-      setSuccessMsg(t("Welcome back") + ` (Authenticated Gateway), ${targetUser.fullName}!`);
-      setTimeout(() => {
-        onAuthSuccess(targetUser);
-      }, 800);
-
-    } catch (e: any) {
-      console.warn("Direct Firebase authentication failed. Falling back to Local Sandbox Bypass:", e);
-
-      // Graceful offline fallback if Firebase connection fails or is blocked
-      let fallbackUser: UserProfile = {
-        uid: `local_${role}_uid`,
-        username: demoUsername,
-        fullName: `${demoFullName} (Local Sandbox)`,
-        email: demoEmail,
-        role: role,
-        status: 'active',
-        bio: 'Local Sandbox Session (Firebase Connection Offline).',
-        createdAt: new Date(),
-      };
-      if (demoBranch) fallbackUser.branch = demoBranch;
-      if (demoSubject) fallbackUser.subject = demoSubject;
-      if (demoSubjects.length > 0) fallbackUser.subjects = demoSubjects;
-
-      safeLocalStorage.setItem('sristy_local_user', JSON.stringify(fallbackUser));
-      setLoading(false);
-      setSuccessMsg(t("Welcome back") + ` (Local Sandbox Bypass), ${fallbackUser.fullName}!`);
-      setTimeout(() => {
-        onAuthSuccess(fallbackUser);
-      }, 800);
-    }
-  };
+    };
+    seedSuperAdmin();
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -201,27 +78,14 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
       let targetEmail = username.trim().toLowerCase();
       let lookedUpUsername = '';
 
-      // Handlers for instant pre-seeded demo accounts
-      const lowerInput = username.trim().toLowerCase();
-      if (lowerInput === 'masteradmin' || lowerInput === 'admin@sristyfamily.com') {
-        targetEmail = 'admin@sristyfamily.com';
-        lookedUpUsername = 'masteradmin';
-      } else if (lowerInput === 'demo_branch_admin' || lowerInput === 'branchadmin@sristyfamily.com') {
-        targetEmail = 'branchadmin@sristyfamily.com';
-        lookedUpUsername = 'demo_branch_admin';
-      } else if (lowerInput === 'demo_approver' || lowerInput === 'approver@sristyfamily.com') {
-        targetEmail = 'approver@sristyfamily.com';
-        lookedUpUsername = 'demo_approver';
-      } else if (lowerInput === 'demo_teacher' || lowerInput === 'teacher@sristyfamily.com') {
-        targetEmail = 'teacher@sristyfamily.com';
-        lookedUpUsername = 'demo_teacher';
-      } else if (lowerInput === 'demo_student' || lowerInput === 'student@sristyfamily.com') {
-        targetEmail = 'student@sristyfamily.com';
-        lookedUpUsername = 'demo_student';
+      // Direct mapping for superadmin to bypass Firestore lookup on seed/first-run
+      if (targetEmail === 'superadmin' || targetEmail === 'superadmin@sristynotes.com') {
+        targetEmail = 'superadmin@sristynotes.com';
+        lookedUpUsername = 'superadmin';
       }
 
       // If it doesn't look like an email pattern, resolve it from the users collection
-      if (!targetEmail.includes('@')) {
+      if (targetEmail.indexOf('@') === -1) {
         const usersRef = collection(db, 'users');
         const q = query(usersRef, where('username', '==', targetEmail), limit(1));
         const snap = await getDocs(q);
@@ -248,51 +112,22 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
         }
       }
 
-      // Automated on-the-fly registration fallback for the Master Admin and Demo credentials if they aren't initialized under standard Auth yet
-      if (targetEmail === 'admin@sristyfamily.com' && password === 'sristy_master_2026') {
-        try {
-          await createUserWithEmailAndPassword(auth, targetEmail, password);
-        } catch (authErr: any) {
-          if (authErr.code !== 'auth/email-already-in-use') {
-            console.warn("Bootstrap Master Admin register bypass:", authErr);
+      // Try actual official Firebase Auth validation with dynamic registration fallback
+      let userCredential;
+      try {
+        userCredential = await signInWithEmailAndPassword(auth, targetEmail, password);
+      } catch (signInErr: any) {
+        // If it is the designated superadmin credentials, register on-the-fly if not found
+        if (targetEmail === 'superadmin@sristynotes.com' && password === 'Hello@2026') {
+          try {
+            userCredential = await createUserWithEmailAndPassword(auth, targetEmail, password);
+          } catch (createErr) {
+            throw signInErr;
           }
-        }
-      } else if (targetEmail === 'branchadmin@sristyfamily.com' && password === 'sristy_admin_2026') {
-        try {
-          await createUserWithEmailAndPassword(auth, targetEmail, password);
-        } catch (authErr: any) {
-          if (authErr.code !== 'auth/email-already-in-use') {
-            console.warn("Bootstrap Branch Admin register bypass:", authErr);
-          }
-        }
-      } else if (targetEmail === 'approver@sristyfamily.com' && password === 'sristy_approver_2026') {
-        try {
-          await createUserWithEmailAndPassword(auth, targetEmail, password);
-        } catch (authErr: any) {
-          if (authErr.code !== 'auth/email-already-in-use') {
-            console.warn("Bootstrap Approver register bypass:", authErr);
-          }
-        }
-      } else if (targetEmail === 'teacher@sristyfamily.com' && password === 'sristy_teacher_2026') {
-        try {
-          await createUserWithEmailAndPassword(auth, targetEmail, password);
-        } catch (authErr: any) {
-          if (authErr.code !== 'auth/email-already-in-use') {
-            console.warn("Bootstrap Demo Teacher register bypass:", authErr);
-          }
-        }
-      } else if (targetEmail === 'student@sristyfamily.com' && password === 'sristy_student_2026') {
-        try {
-          await createUserWithEmailAndPassword(auth, targetEmail, password);
-        } catch (authErr: any) {
-          if (authErr.code !== 'auth/email-already-in-use') {
-            console.warn("Bootstrap Demo Student register bypass:", authErr);
-          }
+        } else {
+          throw signInErr;
         }
       }
-
-      // Try actual official Firebase Auth validation
-      const userCredential = await signInWithEmailAndPassword(auth, targetEmail, password);
       const userObj = userCredential.user;
 
       // Fetch official fields from user document profile
@@ -323,7 +158,30 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
         };
       }
 
-      if (!matchedUser && (userObj.email === 'eahidhasan@gmail.com' || userObj.email === 'admin@sristyfamily.com')) {
+      if (!matchedUser && userObj.email === 'superadmin@sristynotes.com') {
+        // Fallback or automatic creation of Super Admin profile
+        matchedUser = {
+          uid: userObj.uid,
+          username: 'superadmin',
+          fullName: 'Sristy Super Admin',
+          email: 'superadmin@sristynotes.com',
+          role: 'super_admin',
+          status: 'active',
+          bio: 'Global Root Supervisor of Sristy Education Family Storage.',
+          createdAt: new Date(),
+        };
+        await setDoc(userDocRef, {
+          uid: matchedUser.uid,
+          username: matchedUser.username,
+          fullName: matchedUser.fullName,
+          email: matchedUser.email,
+          role: matchedUser.role,
+          status: matchedUser.status,
+          password: 'Hello@2026',
+          bio: matchedUser.bio,
+          createdAt: serverTimestamp(),
+        });
+      } else if (!matchedUser && (userObj.email === 'eahidhasan@gmail.com' || userObj.email === 'admin@sristyfamily.com')) {
         // Fallback or automatic creation of Master Admin profile
         const isOwner = userObj.email === 'eahidhasan@gmail.com';
         matchedUser = {
@@ -464,81 +322,15 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
     } catch (err: any) {
       console.error("Firebase Login Error Cascade: ", err);
 
-      const lowerInput = username.trim().toLowerCase();
-      const isDemoMaster = (lowerInput === 'masteradmin' || lowerInput === 'admin@sristyfamily.com') && password === 'sristy_master_2026';
-      const isDemoBranchAdmin = (lowerInput === 'demo_branch_admin' || lowerInput === 'branchadmin@sristyfamily.com') && password === 'sristy_admin_2026';
-      const isDemoTeacher = (lowerInput === 'demo_teacher' || lowerInput === 'teacher@sristyfamily.com') && password === 'sristy_teacher_2026';
-      const isDemoStudent = (lowerInput === 'demo_student' || lowerInput === 'student@sristyfamily.com') && password === 'sristy_student_2026';
-
-      if (isDemoMaster || isDemoBranchAdmin || isDemoTeacher || isDemoStudent) {
-        let fallbackUser: UserProfile;
-        if (isDemoMaster) {
-          fallbackUser = {
-            uid: 'local_master_admin_uid',
-            username: 'masteradmin',
-            fullName: 'Sristy Master Admin (Demo Bypass)',
-            email: 'admin@sristyfamily.com',
-            role: 'master_admin',
-            status: 'active',
-            bio: 'Root supervisor of Sristy Education Family Storage (Demo Local Session).',
-            createdAt: new Date(),
-          };
-        } else if (isDemoBranchAdmin) {
-          fallbackUser = {
-            uid: 'local_branch_admin_uid',
-            username: 'demo_branch_admin',
-            fullName: 'Sristy Branch Administrator (Demo Bypass)',
-            email: 'branchadmin@sristyfamily.com',
-            role: 'admin',
-            branch: 'Sristy Academic School, Tangail',
-            status: 'active',
-            bio: 'Branch Administrator for Sristy Academic School (Demo Local Session).',
-            createdAt: new Date(),
-          };
-        } else if (isDemoTeacher) {
-          fallbackUser = {
-            uid: 'local_demo_teacher_uid',
-            username: 'demo_teacher',
-            fullName: 'Sristy Demo Teacher (Demo Bypass)',
-            email: 'teacher@sristyfamily.com',
-            role: 'teacher',
-            branch: 'Sristy Academic School, Tangail',
-            subject: 'ICT',
-            status: 'active',
-            bio: 'Verified Professional Educator at Sristy Education Family (Demo Local Session).',
-            createdAt: new Date(),
-          };
-        } else {
-          fallbackUser = {
-            uid: 'local_demo_student_uid',
-            username: 'demo_student',
-            fullName: 'Sristy Demo Student (Demo Bypass)',
-            email: 'student@sristyfamily.com',
-            role: 'viewer',
-            branch: 'Sristy College of Tangail',
-            status: 'active',
-            bio: 'Enthusiastic Student representative of Sristy Education Family (Demo Local Session).',
-            createdAt: new Date(),
-          };
-        }
-
-        safeLocalStorage.setItem('sristy_local_user', JSON.stringify(fallbackUser));
-        setSuccessMsg(t("Welcome back") + ` (Local Bypass), ${fallbackUser.fullName}!`);
-        setTimeout(() => {
-          onAuthSuccess(fallbackUser);
-        }, 800);
-        return;
-      }
-
       const rawErrStr = String(err.message || err.code || err);
       if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
         setErrorMsg(t("Authentication failed: Invalid credentials / incorrect key parameters."));
       } else if (err.code === 'auth/operation-not-allowed') {
-        setErrorMsg(`${t("Email/Password credential registry is disabled in your Firebase console. Please go to your Firebase Console > Authentication > Sign-in method and enable the Email/Password provider. Alternatively, use our dynamic Local Bypass buttons below!")}`);
+        setErrorMsg(`${t("Email/Password credential registry is disabled in your Firebase console. Please go to your Firebase Console > Authentication > Sign-in method and enable the Email/Password provider.")}`);
       } else if (rawErrStr.toLowerCase().includes('network') || rawErrStr.toLowerCase().includes('failed-to-get-redirect') || rawErrStr.toLowerCase().includes('network-request-failed')) {
-        setErrorMsg(`${t("Failed to complete sign in due to network blockages. Please verify your internet/proxy settings, or alternatively click any 'Quick Sandbox / Demo Bypass Login' button below to explore the file portal layout offline instantly!")}`);
+        setErrorMsg(`${t("Failed to complete sign in due to network blockages. Please verify your internet/proxy settings.")}`);
       } else {
-        setErrorMsg(`${t("Failed to complete sign in. Please verify network settings or try again. Or click any 'Quick Sandbox / Demo Bypass Login' button below to log in offline instantly! Error detail:")} ${rawErrStr}`);
+        setErrorMsg(`${t("Failed to complete sign in. Please verify network settings or try again. Error detail:")} ${rawErrStr}`);
       }
     } finally {
       setLoading(false);
@@ -897,66 +689,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
             </form>
           )}
 
-          {/* Quick Sandbox / Demo Bypass Options */}
-          <div className="mt-6 pt-5 border-t border-gray-150 dark:border-slate-800">
-            <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2 text-center flex items-center justify-center gap-1">
-              <Sparkles className="w-3 h-3 text-brand-500 animate-pulse" />
-              <span>{t("Quick Sandbox / Demo Bypass Login")}</span>
-            </p>
-            <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-3 text-center leading-normal">
-              {t("Having trouble with network configuration or Firebase Auth? Access test profiles instantly:")}
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5 pt-1">
-              <button
-                type="button"
-                onClick={() => handleBypassLogin('super_admin')}
-                className="px-1 py-1.5 bg-[#ca8a04]/10 hover:bg-[#ca8a04]/20 border border-[#ca8a04]/20 text-[#ca8a04] dark:text-[#fde047] rounded-lg text-[10px] font-bold text-center transition-all cursor-pointer truncate"
-                title="Super Admin"
-              >
-                {t("Super Admin")}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleBypassLogin('master_admin')}
-                className="px-1 py-1.5 bg-[#eab308]/10 hover:bg-[#eab308]/20 border border-[#eab308]/20 text-[#a16207] dark:text-[#fef08a] rounded-lg text-[10px] font-bold text-center transition-all cursor-pointer truncate"
-                title="Master Admin"
-              >
-                {t("Master Admin")}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleBypassLogin('admin')}
-                className="px-1 py-1.5 bg-[#15803d]/10 hover:bg-[#15803d]/20 border border-[#15803d]/20 text-[#15803d] dark:text-[#4ade80] rounded-lg text-[10px] font-bold text-center transition-all cursor-pointer truncate"
-                title="Branch Admin"
-              >
-                {t("Branch Admin")}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleBypassLogin('file_approver')}
-                className="px-1 py-1.5 bg-[#15803d]/10 hover:bg-[#15803d]/20 border border-[#15803d]/20 text-[#15803d] dark:text-[#4ade80] rounded-lg text-[10px] font-bold text-center transition-all cursor-pointer truncate"
-                title="File Approver"
-              >
-                {t("File Approver")}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleBypassLogin('teacher')}
-                className="px-1 py-1.5 bg-[#15803d]/10 hover:bg-[#15803d]/20 border border-[#15803d]/20 text-[#15803d] dark:text-[#4ade80] rounded-lg text-[10px] font-bold text-center transition-all cursor-pointer truncate"
-                title="Teacher / Educator"
-              >
-                {t("Teacher")}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleBypassLogin('viewer')}
-                className="px-1 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] font-bold text-center transition-all cursor-pointer truncate"
-                title="Student / Viewer"
-              >
-                {t("Student")}
-              </button>
-            </div>
-          </div>
+
         </div>
       </div>
     </div>

@@ -33,7 +33,13 @@ import {
   FileX,
   AlertTriangle,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Sliders,
+  TrendingUp,
+  HardDrive,
+  X,
+  Calendar,
+  ArrowUpDown
 } from 'lucide-react';
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
@@ -93,8 +99,113 @@ export default function DashboardMasterAdmin({
   const [newPasswordVal, setNewPasswordVal] = useState('');
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'admins' | 'all_files' | 'trash_bin' | 'activity_logs' | 'database_backups' | 'rejection_history'>('admins');
+  const [activeTab, setActiveTab] = useState<'admins' | 'all_files' | 'trash_bin' | 'activity_logs' | 'database_backups' | 'rejection_history' | 'teacher_rankings' | 'quota_planner'>('admins');
   const { t } = useThemeLanguage();
+
+  // Master Admin dedicated search and filter states for Storage
+  const [masterSearch, setMasterSearch] = useState('');
+  const [masterTeacher, setMasterTeacher] = useState('');
+  const [masterFileType, setMasterFileType] = useState('');
+  const [masterStartDate, setMasterStartDate] = useState('');
+  const [masterEndDate, setMasterEndDate] = useState('');
+  const [masterBranch, setMasterBranch] = useState('');
+  const [masterStatusFilter, setMasterStatusFilter] = useState<'all' | 'pending' | 'approved'>('all');
+  const [masterSortBy, setMasterSortBy] = useState<'date_desc' | 'date_asc' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc'>('date_desc');
+
+  const displayFiles = (() => {
+    let list = [...files];
+
+    // Status Filter (All, Pending, Approved)
+    if (masterStatusFilter === 'pending') {
+      list = list.filter(f => !f.isApproved && !f.isDeleted);
+    } else if (masterStatusFilter === 'approved') {
+      list = list.filter(f => f.isApproved && !f.isDeleted);
+    } else {
+      list = list.filter(f => !f.isDeleted);
+    }
+
+    // Branch filter
+    if (masterBranch !== '') {
+      list = list.filter(f => f.branch === masterBranch);
+    }
+
+    // Search query (file name, topic, description, chapter)
+    if (masterSearch.trim() !== '') {
+      const queryStr = masterSearch.toLowerCase();
+      list = list.filter(f => 
+        (f.fileName || '').toLowerCase().includes(queryStr) ||
+        (f.topic || '').toLowerCase().includes(queryStr) ||
+        (f.chapter || '').toLowerCase().includes(queryStr) ||
+        (f.description || '').toLowerCase().includes(queryStr)
+      );
+    }
+
+    // Teacher name filter
+    if (masterTeacher.trim() !== '') {
+      const teacherStr = masterTeacher.toLowerCase();
+      list = list.filter(f => 
+        (f.uploaderName || '').toLowerCase().includes(teacherStr)
+      );
+    }
+
+    // File Type filter
+    if (masterFileType !== '') {
+      const type = masterFileType;
+      list = list.filter(f => {
+        const ext = (f.fileType || '').toLowerCase();
+        if (type === 'pdf') return ext === 'pdf';
+        if (type === 'doc') return ['doc', 'docx'].includes(ext);
+        if (type === 'ppt') return ['ppt', 'pptx'].includes(ext);
+        if (type === 'image') return ['png', 'jpg', 'jpeg', 'webp'].includes(ext);
+        return true;
+      });
+    }
+
+    // Date Range filter
+    if (masterStartDate !== '') {
+      const start = new Date(masterStartDate);
+      start.setHours(0, 0, 0, 0);
+      list = list.filter(f => {
+        const fDate = f.createdAt?.toDate ? f.createdAt.toDate() : (f.createdAt ? new Date(f.createdAt) : null);
+        return fDate && fDate >= start;
+      });
+    }
+
+    if (masterEndDate !== '') {
+      const end = new Date(masterEndDate);
+      end.setHours(23, 59, 59, 999);
+      list = list.filter(f => {
+        const fDate = f.createdAt?.toDate ? f.createdAt.toDate() : (f.createdAt ? new Date(f.createdAt) : null);
+        return fDate && fDate <= end;
+      });
+    }
+
+    // Apply sorting selection
+    if (masterSortBy === 'date_desc') {
+      list.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    } else if (masterSortBy === 'date_asc') {
+      list.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    } else if (masterSortBy === 'name_asc') {
+      list.sort((a, b) => (a.fileName || '').localeCompare(b.fileName || ''));
+    } else if (masterSortBy === 'name_desc') {
+      list.sort((a, b) => (b.fileName || '').localeCompare(a.fileName || ''));
+    } else if (masterSortBy === 'size_desc') {
+      list.sort((a, b) => (b.fileSize || 0) - (a.fileSize || 0));
+    } else if (masterSortBy === 'size_asc') {
+      list.sort((a, b) => (a.fileSize || 0) - (b.fileSize || 0));
+    }
+
+    return list;
+  })();
+
+  // Quota Planner state parameters
+  const [quotaMonthlyFiles, setQuotaMonthlyFiles] = useState<number>(15);
+  const [quotaAvgSizeMB, setQuotaAvgSizeMB] = useState<number>(4);
+  const [quotaDurationMonths, setQuotaDurationMonths] = useState<number>(12);
+
+  // Rankings sort parameter
+  const [rankingsSortBy, setRankingsSortBy] = useState<'uploads' | 'approved' | 'size'>('uploads');
+  const [showAllRankings, setShowAllRankings] = useState(false);
 
   const { branches, subjects, addBranch, addSubject, removeBranch, removeSubject } = useBranchSubject();
   const [newBranchName, setNewBranchName] = useState('');
@@ -918,7 +1029,7 @@ export default function DashboardMasterAdmin({
   };
 
   return (
-    <div className="space-y-8" id="master-admin-dashboard">
+    <div className="space-y-8 pb-20 sm:pb-24" id="master-admin-dashboard">
       {/* Banner */}
       <div className="relative overflow-hidden bg-[#15803d] rounded-2xl p-6 sm:p-8 text-white shadow-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -995,206 +1106,348 @@ export default function DashboardMasterAdmin({
       )}
 
       {/* Bento Grid Section Navigation */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5 mb-8" id="master-bento-menu">
-        {/* Admins / Members option */}
+      <div className="grid grid-cols-2 gap-4 mb-8" id="master-bento-menu">
+        {/* Teacher Rankings option */}
         <button
-          onClick={() => setActiveTab('admins')}
+          onClick={() => setActiveTab('teacher_rankings')}
           className={`group text-left p-4 rounded-xl border transition-all duration-300 cursor-pointer flex items-center gap-3.5 ${
-            activeTab === 'admins'
-              ? 'bg-[#15803d]/5 dark:bg-[#15803d]/10 border-[#15803d] shadow-md ring-1 ring-[#15803d]/20 scale-[1.01]'
-              : 'bg-white dark:bg-slate-900 border-gray-150 dark:border-slate-800/80 hover:border-[#15803d]/40 hover:shadow-xs'
-          }`}
-        >
-          <div className={`p-2.5 rounded-lg transition-all duration-300 ${
-            activeTab === 'admins'
-              ? 'bg-[#15803d] text-white shadow-sm'
-              : 'bg-gray-100 dark:bg-slate-800 text-gray-550 dark:text-gray-400 group-hover:bg-[#15803d]/10 group-hover:text-[#15803d]'
-          }`}>
-            <Users className="w-4.5 h-4.5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className={`font-bold text-[9px] tracking-wider uppercase leading-tight ${
-              activeTab === 'admins' ? 'text-[#15803d] dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
-            }`}>{t("System")}</p>
-            <h4 className="font-extrabold text-xs text-gray-800 dark:text-gray-150 mt-1 leading-snug">
-              {(user.role === 'super_admin' || user.role === 'master_admin') ? t("Members") : t("Admins")}
-            </h4>
-          </div>
-        </button>
-
-        {/* Storage Assets option */}
-        <button
-          onClick={() => setActiveTab('all_files')}
-          className={`group text-left p-4 rounded-xl border transition-all duration-300 cursor-pointer flex items-center gap-3.5 ${
-            activeTab === 'all_files'
+            activeTab === 'teacher_rankings'
               ? 'bg-[#15803d]/5 dark:bg-[#15803d]/10 border-[#15803d] shadow-md ring-1 ring-[#15803d]/20 scale-[1.01]'
               : 'bg-white dark:bg-slate-900 border-gray-150 dark:border-slate-800/80 hover:border-[#15803d]/40 hover:shadow-xs'
           }`}
         >
           <div className={`p-2.5 rounded-lg transition-all duration-300 relative ${
-            activeTab === 'all_files'
+            activeTab === 'teacher_rankings'
               ? 'bg-[#15803d] text-white shadow-sm'
               : 'bg-gray-100 dark:bg-slate-800 text-gray-550 dark:text-gray-400 group-hover:bg-[#15803d]/10 group-hover:text-[#15803d]'
           }`}>
-            <FileText className="w-4.5 h-4.5" />
-            {pendingFiles.length > 0 ? (
-              <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[8px] font-bold h-3.5 w-3.5 flex items-center justify-center rounded-full border border-white dark:border-slate-900 animate-pulse">
-                {pendingFiles.length}
-              </span>
-            ) : (
-              files.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-[#15803d] text-white text-[8px] font-bold h-3.5 w-3.5 flex items-center justify-center rounded-full border border-white dark:border-slate-900">
-                  {files.length}
-                </span>
-              )
-            )}
+            <Award className="w-4.5 h-4.5" />
           </div>
           <div className="flex-1 min-w-0">
             <p className={`font-bold text-[9px] tracking-wider uppercase leading-tight ${
-              activeTab === 'all_files' ? 'text-[#15803d] dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
-            }`}>{t("Assets")}</p>
+              activeTab === 'teacher_rankings' ? 'text-[#15803d] dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
+            }`}>{t("Performance")}</p>
             <h4 className="font-extrabold text-xs text-gray-800 dark:text-gray-150 mt-1 leading-snug">
-              {t("Storage")} {pendingFiles.length > 0 ? `(${pendingFiles.length} ${t("Pending")})` : `(${files.length})`}
+              {t("Teacher Rankings")}
             </h4>
           </div>
         </button>
 
-        {/* Trash Recycle option */}
+        {/* Campus Storage Quota Planner option */}
         <button
-          onClick={() => setActiveTab('trash_bin')}
+          onClick={() => setActiveTab('quota_planner')}
           className={`group text-left p-4 rounded-xl border transition-all duration-300 cursor-pointer flex items-center gap-3.5 ${
-            activeTab === 'trash_bin'
+            activeTab === 'quota_planner'
               ? 'bg-[#15803d]/5 dark:bg-[#15803d]/10 border-[#15803d] shadow-md ring-1 ring-[#15803d]/20 scale-[1.01]'
               : 'bg-white dark:bg-slate-900 border-gray-150 dark:border-slate-800/80 hover:border-[#15803d]/40 hover:shadow-xs'
           }`}
         >
           <div className={`p-2.5 rounded-lg transition-all duration-300 relative ${
-            activeTab === 'trash_bin'
+            activeTab === 'quota_planner'
               ? 'bg-[#15803d] text-white shadow-sm'
               : 'bg-gray-100 dark:bg-slate-800 text-gray-550 dark:text-gray-400 group-hover:bg-[#15803d]/10 group-hover:text-[#15803d]'
           }`}>
-            <Trash2 className="w-4.5 h-4.5" />
-            {deletedFiles.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-[#15803d] text-white text-[8px] font-bold h-3.5 w-3.5 flex items-center justify-center rounded-full border border-white dark:border-slate-900">
-                {deletedFiles.length}
-              </span>
-            )}
+            <Sliders className="w-4.5 h-4.5" />
           </div>
           <div className="flex-1 min-w-0">
             <p className={`font-bold text-[9px] tracking-wider uppercase leading-tight ${
-              activeTab === 'trash_bin' ? 'text-[#15803d] dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
-            }`}>{t("Recycled")}</p>
+              activeTab === 'quota_planner' ? 'text-[#15803d] dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
+            }`}>{t("Planning")}</p>
             <h4 className="font-extrabold text-xs text-gray-800 dark:text-gray-150 mt-1 leading-snug">
-              {t("Trash Bin")}
-            </h4>
-          </div>
-        </button>
-
-        {/* System Logs option */}
-        <button
-          onClick={() => setActiveTab('activity_logs')}
-          className={`group text-left p-4 rounded-xl border transition-all duration-300 cursor-pointer flex items-center gap-3.5 ${
-            activeTab === 'activity_logs'
-              ? 'bg-[#15803d]/5 dark:bg-[#15803d]/10 border-[#15803d] shadow-md ring-1 ring-[#15803d]/20 scale-[1.01]'
-              : 'bg-white dark:bg-slate-900 border-gray-150 dark:border-slate-800/80 hover:border-[#15803d]/40 hover:shadow-xs'
-          }`}
-        >
-          <div className={`p-2.5 rounded-lg transition-all duration-300 relative ${
-            activeTab === 'activity_logs'
-              ? 'bg-[#15803d] text-white shadow-sm'
-              : 'bg-gray-100 dark:bg-slate-800 text-gray-550 dark:text-gray-400 group-hover:bg-[#15803d]/10 group-hover:text-[#15803d]'
-          }`}>
-            <History className="w-4.5 h-4.5" />
-            {logsList.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-[#15803d] text-white text-[8px] font-bold h-3.5 w-3.5 flex items-center justify-center rounded-full border border-white dark:border-slate-900">
-                {logsList.length}
-              </span>
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className={`font-bold text-[9px] tracking-wider uppercase leading-tight ${
-              activeTab === 'activity_logs' ? 'text-[#15803d] dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
-            }`}>{t("Telemetry")}</p>
-            <h4 className="font-extrabold text-xs text-gray-800 dark:text-gray-150 mt-1 leading-snug">
-              {t("System Logs")}
-            </h4>
-          </div>
-        </button>
-
-        {/* Database Backups option */}
-        <button
-          onClick={() => setActiveTab('database_backups')}
-          className={`group text-left p-4 rounded-xl border transition-all duration-300 cursor-pointer flex items-center gap-3.5 ${
-            activeTab === 'database_backups'
-              ? 'bg-[#15803d]/5 dark:bg-[#15803d]/10 border-[#15803d] shadow-md ring-1 ring-[#15803d]/20 scale-[1.01]'
-              : 'bg-white dark:bg-slate-900 border-gray-150 dark:border-slate-800/80 hover:border-[#15803d]/40 hover:shadow-xs'
-          }`}
-        >
-          <div className={`p-2.5 rounded-lg transition-all duration-300 ${
-            activeTab === 'database_backups'
-              ? 'bg-[#15803d] text-white shadow-sm'
-              : 'bg-gray-100 dark:bg-slate-800 text-gray-550 dark:text-gray-400 group-hover:bg-[#15803d]/10 group-hover:text-[#15803d]'
-          }`}>
-            <Database className="w-4.5 h-4.5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className={`font-bold text-[9px] tracking-wider uppercase leading-tight ${
-              activeTab === 'database_backups' ? 'text-[#15803d] dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
-            }`}>{t("Recovery")}</p>
-            <h4 className="font-extrabold text-xs text-gray-800 dark:text-gray-150 mt-1 leading-snug">
-              {t("Backups")}
-            </h4>
-          </div>
-        </button>
-
-        {/* Rejection History option */}
-        <button
-          onClick={() => setActiveTab('rejection_history')}
-          className={`group text-left p-4 rounded-xl border transition-all duration-300 cursor-pointer flex items-center gap-3.5 ${
-            activeTab === 'rejection_history'
-              ? 'bg-[#15803d]/5 dark:bg-[#15803d]/10 border-[#15803d] shadow-md ring-1 ring-[#15803d]/20 scale-[1.01]'
-              : 'bg-white dark:bg-slate-900 border-gray-150 dark:border-slate-800/80 hover:border-[#15803d]/40 hover:shadow-xs'
-          }`}
-        >
-          <div className={`p-2.5 rounded-lg transition-all duration-300 relative ${
-            activeTab === 'rejection_history'
-              ? 'bg-[#15803d] text-white shadow-sm'
-              : 'bg-gray-100 dark:bg-slate-800 text-gray-550 dark:text-gray-400 group-hover:bg-[#15803d]/10 group-hover:text-[#15803d]'
-          }`}>
-            <FileX className="w-4.5 h-4.5" />
-            {rejectionLogs.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold h-3.5 w-3.5 flex items-center justify-center rounded-full border border-white dark:border-slate-900 animate-pulse">
-                {rejectionLogs.length}
-              </span>
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className={`font-bold text-[9px] tracking-wider uppercase leading-tight ${
-              activeTab === 'rejection_history' ? 'text-[#15803d] dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
-            }`}>{t("Oversight")}</p>
-            <h4 className="font-extrabold text-xs text-gray-800 dark:text-gray-150 mt-1 leading-snug">
-              {t("Rejections")}
+              {t("Quota Planner")}
             </h4>
           </div>
         </button>
       </div>
 
-      {/* bKash/Pathao Style Ultra-Elegant Bottom Tab Navigator for Mobile View */}
+      {/* Real-time System Oversight & Platform Metrics Section */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-gray-150 dark:border-slate-800 shadow-xs transition-colors mb-8 space-y-6 animate-in fade-in duration-300" id="system-oversight-dashboard">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-100 dark:border-slate-800 pb-4">
+          <div>
+            <h3 className="text-xs font-extrabold text-gray-800 dark:text-gray-150 uppercase tracking-wider flex items-center gap-2 select-none">
+              <Shield className="w-4 h-4 text-[#15803d]" />
+              <span>{t("System Oversight & Quick Analytics")}</span>
+            </h3>
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium mt-0.5">
+              {t("Real-time telemetry, branch distribution, and educator lifecycle operations")}
+            </p>
+          </div>
+          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase flex items-center gap-1 border ${
+            isShutDownActive
+              ? 'bg-red-50 text-red-600 dark:bg-red-955/20 dark:text-red-400 border-red-100 dark:border-red-900/30'
+              : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-955/20 dark:text-emerald-450 border-emerald-100 dark:border-emerald-900/30'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${isShutDownActive ? 'bg-red-500 animate-ping' : 'bg-emerald-500 animate-pulse'}`} />
+            {isShutDownActive ? t("System Lockdown Active") : t("Core Portal Online")}
+          </span>
+        </div>
+
+        {/* Dynamic Metrics Grid */}
+        {(() => {
+          const totalFiles = files.length;
+          const approvedFilesCount = files.filter(f => f.isApproved && !f.isDeleted).length;
+          const pendingFilesCount = files.filter(f => !f.isApproved && !f.isDeleted).length;
+
+          const teachersOnly = adminsList.filter(u => u.role === 'teacher');
+          const totalTeachers = teachersOnly.length;
+          const activeTeachers = teachersOnly.filter(u => u.status !== 'inactive').length;
+          const suspendedTeachers = totalTeachers - activeTeachers;
+
+          const branchAdmins = adminsList.filter(u => u.role === 'admin').length;
+
+          const totalStorageUsed = files.reduce((acc, f) => acc + (f.fileSize || 0), 0);
+          const avgFileSize = totalFiles > 0 ? totalStorageUsed / totalFiles : 0;
+          const totalDownloadsCount = files.reduce((acc, f) => acc + (f.downloadCount || 0), 0);
+
+          const formatSizeLocal = (bytes: number) => {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+          };
+
+          return (
+            <>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Metric Card 1: Registered Teachers */}
+                <div className="bg-gray-50/50 dark:bg-slate-850/20 p-4 rounded-xl border border-gray-100 dark:border-slate-800/60 flex items-center gap-4 hover:shadow-xs transition-all duration-200">
+                  <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 shrink-0">
+                    <Users className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="block text-[8px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">{t("Active Educators")}</span>
+                    <span className="font-mono text-base font-extrabold text-gray-800 dark:text-gray-150 leading-tight">
+                      {activeTeachers} / {totalTeachers}
+                    </span>
+                    <span className="block text-[9px] text-gray-400 dark:text-gray-500 mt-0.5">
+                      {suspendedTeachers} {t("suspended accounts")}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Metric Card 2: Note Repository */}
+                <div className="bg-gray-50/50 dark:bg-slate-850/20 p-4 rounded-xl border border-gray-100 dark:border-slate-800/60 flex items-center gap-4 hover:shadow-xs transition-all duration-200">
+                  <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 shrink-0">
+                    <BookOpen className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="block text-[8px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">{t("Repository Archive")}</span>
+                    <span className="font-mono text-base font-extrabold text-gray-800 dark:text-gray-150 leading-tight">
+                      {totalFiles} {t("Notes")}
+                    </span>
+                    <span className="block text-[9px] text-gray-400 dark:text-gray-500 mt-0.5">
+                      {approvedFilesCount} {t("Approved")} | {pendingFilesCount} {t("Pending")}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Metric Card 3: Storage Occupancy */}
+                <div className="bg-gray-50/50 dark:bg-slate-850/20 p-4 rounded-xl border border-gray-100 dark:border-slate-800/60 flex items-center gap-4 hover:shadow-xs transition-all duration-200">
+                  <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 shrink-0">
+                    <HardDrive className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="block text-[8px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">{t("R2 Storage Occupied")}</span>
+                    <span className="font-mono text-base font-extrabold text-gray-800 dark:text-gray-150 leading-tight">
+                      {formatSizeLocal(totalStorageUsed)}
+                    </span>
+                    <span className="block text-[9px] text-gray-400 dark:text-gray-500 mt-0.5">
+                      Avg file: {formatSizeLocal(avgFileSize)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Metric Card 4: Access Telemetry */}
+                <div className="bg-gray-50/50 dark:bg-slate-850/20 p-4 rounded-xl border border-gray-100 dark:border-slate-800/60 flex items-center gap-4 hover:shadow-xs transition-all duration-200">
+                  <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 shrink-0">
+                    <DownloadCloud className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="block text-[8px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">{t("Global Downloads")}</span>
+                    <span className="font-mono text-base font-extrabold text-gray-800 dark:text-gray-150 leading-tight">
+                      {totalDownloadsCount} {t("times")}
+                    </span>
+                    <span className="block text-[9px] text-gray-400 dark:text-gray-500 mt-0.5">
+                      {t("High-integrity delivery")}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Advanced Bento Row */}
+              <div className="grid lg:grid-cols-12 gap-6 pt-2">
+                {/* Column Left: Branch Workload & Quota Utilization */}
+                <div className="lg:col-span-7 bg-gray-50/20 dark:bg-slate-900/10 rounded-xl p-5 border border-gray-100 dark:border-slate-800/60 flex flex-col justify-between space-y-4">
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <h4 className="font-extrabold text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <Building className="w-3.5 h-3.5 text-gray-400" />
+                        <span>{t("Branch Upload Share & Workload")}</span>
+                      </h4>
+                      <span className="text-[9px] font-semibold text-gray-400 dark:text-gray-500">
+                        {branchAdmins} {t("Branch Admins active")}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                      {t("Live percentage workload distribution of study notes hosted across educational campuses.")}
+                    </p>
+                  </div>
+
+                  <div className="space-y-3.5">
+                    {(() => {
+                      const branchFileMap: Record<string, number> = {};
+                      files.forEach(f => {
+                        if (f.branch) {
+                          branchFileMap[f.branch] = (branchFileMap[f.branch] || 0) + 1;
+                        }
+                      });
+
+                      const sortedBranches = Object.entries(branchFileMap).sort((a, b) => b[1] - a[1]);
+
+                      if (sortedBranches.length === 0) {
+                        return (
+                          <div className="text-center py-6 text-gray-400 dark:text-gray-500 text-[10.5px]">
+                            {t("No educational branch documents indexed yet.")}
+                          </div>
+                        );
+                      }
+
+                      return sortedBranches.slice(0, 4).map(([bName, bCount]) => {
+                        const pct = Math.round((bCount / Math.max(totalFiles, 1)) * 100);
+                        return (
+                          <div key={bName} className="space-y-1">
+                            <div className="flex justify-between items-center text-[11px] font-semibold">
+                              <span className="text-gray-700 dark:text-gray-200 truncate pr-2">{bName}</span>
+                              <span className="font-mono text-gray-450 dark:text-gray-400 shrink-0">
+                                {bCount} {t("files")} <span className="text-[9.5px] text-gray-450 font-normal">({pct}%)</span>
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-100 dark:bg-slate-850 rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className="bg-[#15803d] h-full rounded-full transition-all duration-500"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+
+                {/* Column Right: Interactive Educator Status Control */}
+                <div className="lg:col-span-5 bg-gray-50/20 dark:bg-slate-900/10 rounded-xl p-5 border border-gray-100 dark:border-slate-800/60 flex flex-col justify-between space-y-4">
+                  <div>
+                    <h4 className="font-extrabold text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                      <Award className="w-3.5 h-3.5 text-gray-400" />
+                      <span>{t("Educator Lifecycle Quick Panel")}</span>
+                    </h4>
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+                      {t("Verify, suspend, or reactivate registered teachers instantly to regulate access.")}
+                    </p>
+                  </div>
+
+                  <div className="divide-y divide-gray-100/60 dark:divide-slate-800/60">
+                    {teachersOnly.slice(0, 3).map((teacher) => {
+                      const isActive = teacher.status !== 'inactive';
+                      return (
+                        <div key={teacher.uid} className="py-2 flex items-center justify-between gap-3 text-xs first:pt-0 last:pb-0">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-slate-800 flex items-center justify-center font-bold text-gray-600 dark:text-gray-300 shrink-0">
+                              {teacher.fullName.charAt(0)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-bold text-gray-800 dark:text-gray-200 truncate leading-tight">{teacher.fullName}</p>
+                              <p className="text-[9.5px] text-gray-400 dark:text-gray-500 truncate mt-0.5">{teacher.branch}</p>
+                            </div>
+                          </div>
+                          
+                          <button
+                            onClick={() => handleToggleUserStatus(teacher.uid, teacher.status || 'active')}
+                            className={`px-2.5 py-1 rounded-md text-[9.5px] font-extrabold uppercase transition-all border cursor-pointer hover:shadow-xs active:scale-95 ${
+                              isActive
+                                ? 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100/50 dark:bg-emerald-950/20 dark:text-emerald-450 dark:border-emerald-900/30'
+                                : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100/50 dark:bg-red-955/15 dark:text-red-450 dark:border-red-900/30'
+                            }`}
+                          >
+                            {isActive ? t("Active") : t("Suspended")}
+                          </button>
+                        </div>
+                      );
+                    })}
+                    {teachersOnly.length === 0 && (
+                      <div className="text-center py-6 text-gray-400 dark:text-gray-500 text-[10.5px]">
+                        {t("No registered educators found.")}
+                      </div>
+                    )}
+                  </div>
+
+                  {teachersOnly.length > 3 && (
+                    <button
+                      onClick={() => setActiveTab('admins')}
+                      className="text-[9.5px] font-bold text-[#15803d] dark:text-emerald-450 hover:underline cursor-pointer text-center block w-full focus:outline-none"
+                    >
+                      {t("Manage all {{count}} educators in Members Tab").replace('{{count}}', String(totalTeachers))} &rarr;
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Recent Security Logs telemetry row */}
+              {logsList.length > 0 && (
+                <div className="border-t border-gray-100 dark:border-slate-800/80 pt-4">
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="font-extrabold text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+                      <Terminal className="w-3.5 h-3.5 text-gray-400" />
+                      <span>{t("Recent Core Activity Telemetry")}</span>
+                    </h4>
+                    <button
+                      onClick={() => setActiveTab('activity_logs')}
+                      className="text-[9.5px] font-bold text-gray-400 hover:text-gray-650 cursor-pointer flex items-center gap-0.5 focus:outline-none"
+                    >
+                      <span>{t("Full Audit Logs")}</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <div className="grid md:grid-cols-3 gap-3">
+                    {logsList.slice(0, 3).map((log, index) => {
+                      const logDateStr = log.timestamp?.toDate ? log.timestamp.toDate().toLocaleTimeString() : (log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : '');
+                      return (
+                        <div key={log.id || index} className="bg-gray-50/40 dark:bg-slate-900/20 p-2.5 rounded-lg border border-gray-100 dark:border-slate-800/40 text-[10px] space-y-1">
+                          <div className="flex justify-between items-center text-gray-400">
+                            <span className="font-mono">{logDateStr || t("Just now")}</span>
+                            <span className="font-semibold text-[8px] bg-gray-100 dark:bg-slate-800 px-1 py-0.2 rounded-xs uppercase tracking-wider">{log.action || t("Activity")}</span>
+                          </div>
+                          <p className="text-gray-700 dark:text-gray-300 font-medium truncate">{log.details || log.description || t("System operation performed")}</p>
+                          <p className="text-gray-400 text-[8.5px] truncate">{t("Actor")}: {log.operatorName || log.operatorEmail || t("System")}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
+      </div>
+
+      {/* bKash/Pathao Style Ultra-Elegant Bottom Tab Navigator for Mobile & Desktop Views */}
       {ReactDOM.createPortal(
-        <div className="sm:hidden fixed bottom-0 left-0 right-0 w-full z-[9999] bg-white dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800 transition-colors" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <div className="flex justify-around items-center h-12 px-1">
+        <div className="fixed bottom-0 sm:bottom-4 left-0 sm:left-1/2 sm:-translate-x-1/2 w-full sm:w-auto sm:max-w-2xl sm:rounded-2xl bg-white dark:bg-slate-950 border-t sm:border border-gray-200 dark:border-slate-800 transition-all shadow-lg z-[9999]" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="flex justify-around items-center h-12 sm:h-14 px-2 sm:px-6 gap-1 sm:gap-4">
           <button
             onClick={() => setActiveTab('admins')}
-            className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
+            className="flex flex-col items-center justify-center flex-1 sm:flex-initial sm:px-4 py-0.5 focus:outline-none relative cursor-pointer group"
           >
             <div className={`transition-all duration-300 ${
               activeTab === 'admins' 
                 ? 'text-[#15803d]' 
                 : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
             }`}>
-              <Users className="w-4.5 h-4.5" />
+              <Users className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
             </div>
-            <span className={`text-[8px] font-bold tracking-tight transition-all duration-300 ${
+            <span className={`text-[8px] sm:text-[10px] font-bold tracking-tight transition-all duration-300 ${
               activeTab === 'admins' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
             }`}>
               {t("Members")}
@@ -1206,27 +1459,27 @@ export default function DashboardMasterAdmin({
 
           <button
             onClick={() => setActiveTab('all_files')}
-            className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
+            className="flex flex-col items-center justify-center flex-1 sm:flex-initial sm:px-4 py-0.5 focus:outline-none relative cursor-pointer group"
           >
             <div className={`transition-all duration-300 relative ${
               activeTab === 'all_files' 
                 ? 'text-[#15803d]' 
                 : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
             }`}>
-              <FileText className="w-4.5 h-4.5" />
+              <FileText className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
               {pendingFiles.length > 0 ? (
-                <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[8px] font-bold h-3 w-3 flex items-center justify-center rounded-full border border-white dark:border-slate-900 animate-pulse">
+                <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[8px] font-bold h-3.5 w-3.5 flex items-center justify-center rounded-full border border-white dark:border-slate-900 animate-pulse">
                   {pendingFiles.length}
                 </span>
               ) : (
                 files.length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-[#15803d] text-white text-[8px] font-bold h-3 w-3 flex items-center justify-center rounded-full border border-white dark:border-slate-900">
+                  <span className="absolute -top-1 -right-1 bg-[#15803d] text-white text-[8px] font-bold h-3.5 w-3.5 flex items-center justify-center rounded-full border border-white dark:border-slate-900">
                     {files.length}
                   </span>
                 )
               )}
             </div>
-            <span className={`text-[8px] font-bold tracking-tight transition-all duration-300 ${
+            <span className={`text-[8px] sm:text-[10px] font-bold tracking-tight transition-all duration-300 ${
               activeTab === 'all_files' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
             }`}>
               {t("Storage")}
@@ -1238,21 +1491,21 @@ export default function DashboardMasterAdmin({
 
           <button
             onClick={() => setActiveTab('trash_bin')}
-            className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
+            className="flex flex-col items-center justify-center flex-1 sm:flex-initial sm:px-4 py-0.5 focus:outline-none relative cursor-pointer group"
           >
             <div className={`transition-all duration-300 relative ${
               activeTab === 'trash_bin' 
                 ? 'text-[#15803d]' 
                 : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
             }`}>
-              <Trash2 className="w-4.5 h-4.5" />
+              <Trash2 className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
               {deletedFiles.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-[#15803d] text-white text-[8px] font-bold h-3 w-3 flex items-center justify-center rounded-full border border-white dark:border-slate-900">
+                <span className="absolute -top-1 -right-1 bg-[#15803d] text-white text-[8px] font-bold h-3.5 w-3.5 flex items-center justify-center rounded-full border border-white dark:border-slate-900">
                   {deletedFiles.length}
                 </span>
               )}
             </div>
-            <span className={`text-[8px] font-bold tracking-tight transition-all duration-300 ${
+            <span className={`text-[8px] sm:text-[10px] font-bold tracking-tight transition-all duration-300 ${
               activeTab === 'trash_bin' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
             }`}>
               {t("Trash")}
@@ -1264,16 +1517,16 @@ export default function DashboardMasterAdmin({
 
           <button
             onClick={() => setActiveTab('activity_logs')}
-            className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
+            className="flex flex-col items-center justify-center flex-1 sm:flex-initial sm:px-4 py-0.5 focus:outline-none relative cursor-pointer group"
           >
             <div className={`transition-all duration-300 relative ${
               activeTab === 'activity_logs' 
                 ? 'text-[#15803d]' 
                 : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
             }`}>
-              <History className="w-4.5 h-4.5" />
+              <History className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
             </div>
-            <span className={`text-[8px] font-bold tracking-tight transition-all duration-300 ${
+            <span className={`text-[8px] sm:text-[10px] font-bold tracking-tight transition-all duration-300 ${
               activeTab === 'activity_logs' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
             }`}>
               {t("Logs")}
@@ -1285,21 +1538,21 @@ export default function DashboardMasterAdmin({
 
           <button
             onClick={() => setActiveTab('rejection_history')}
-            className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
+            className="flex flex-col items-center justify-center flex-1 sm:flex-initial sm:px-4 py-0.5 focus:outline-none relative cursor-pointer group"
           >
             <div className={`transition-all duration-300 relative ${
               activeTab === 'rejection_history' 
                 ? 'text-[#15803d]' 
                 : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
             }`}>
-              <FileX className="w-4.5 h-4.5" />
+              <FileX className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
               {rejectionLogs.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold h-3 w-3 flex items-center justify-center rounded-full border border-white dark:border-slate-900">
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold h-3.5 w-3.5 flex items-center justify-center rounded-full border border-white dark:border-slate-900">
                   {rejectionLogs.length}
                 </span>
               )}
             </div>
-            <span className={`text-[8px] font-bold tracking-tight transition-all duration-300 ${
+            <span className={`text-[8px] sm:text-[10px] font-bold tracking-tight transition-all duration-300 ${
               activeTab === 'rejection_history' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
             }`}>
               {t("Rejections")}
@@ -1311,16 +1564,16 @@ export default function DashboardMasterAdmin({
 
           <button
             onClick={() => setActiveTab('database_backups')}
-            className="flex flex-col items-center justify-center flex-1 py-0.5 focus:outline-none relative cursor-pointer"
+            className="flex flex-col items-center justify-center flex-1 sm:flex-initial sm:px-4 py-0.5 focus:outline-none relative cursor-pointer group"
           >
             <div className={`transition-all duration-300 relative ${
               activeTab === 'database_backups' 
                 ? 'text-[#15803d]' 
                 : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'
             }`}>
-              <Database className="w-4.5 h-4.5" />
+              <Database className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
             </div>
-            <span className={`text-[8px] font-bold tracking-tight transition-all duration-300 ${
+            <span className={`text-[8px] sm:text-[10px] font-bold tracking-tight transition-all duration-300 ${
               activeTab === 'database_backups' ? 'text-[#15803d]' : 'text-gray-550 dark:text-gray-400'
             }`}>
               {t("Backups")}
@@ -2270,20 +2523,213 @@ export default function DashboardMasterAdmin({
             <div className="flex sm:hidden items-center justify-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-450 mb-3.5 animate-pulse bg-amber-500/5 py-1 px-3 rounded-full border border-amber-500/10">
               <span className="font-semibold uppercase tracking-wider">Swipe horizontally</span>
               <span className="text-sm font-bold">↔</span>
-              <span>to browse {files.length} documents</span>
+              <span>to browse {displayFiles.length} documents</span>
             </div>
           )}
+
+          {/* Dedicated Search and Filter Panel (Similar to Public Explorer) */}
+          <div className="bg-gray-50 dark:bg-slate-950 p-4 rounded-xl border border-gray-150 dark:border-slate-800/80 mb-6 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
+              {/* Search input (File Name, Topic, Chapter, etc.) */}
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 dark:text-gray-505">
+                  <Search className="w-4 h-4" />
+                </span>
+                <input
+                  type="text"
+                  value={masterSearch}
+                  onChange={(e) => setMasterSearch(e.target.value)}
+                  placeholder={t("Search name, topic...")}
+                  className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-gray-750 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#15803d]"
+                />
+              </div>
+
+              {/* Teacher Name filter */}
+              <div className="relative">
+                <input
+                  type="text"
+                  value={masterTeacher}
+                  onChange={(e) => setMasterTeacher(e.target.value)}
+                  placeholder={t("Filter by teacher name...")}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-gray-750 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#15803d]"
+                />
+              </div>
+
+              {/* Branch filter */}
+              <div className="relative">
+                <select
+                  value={masterBranch}
+                  onChange={(e) => setMasterBranch(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-gray-750 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-[#15803d] appearance-none cursor-pointer"
+                >
+                  <option value="">{t("All Branches")}</option>
+                  {branches.map((b: string) => (
+                    <option key={b} value={b}>{t(b)}</option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400 dark:text-gray-505">
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </div>
+              </div>
+
+              {/* Status filter */}
+              <div className="relative">
+                <select
+                  value={masterStatusFilter}
+                  onChange={(e) => setMasterStatusFilter(e.target.value as any)}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-gray-750 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-[#15803d] appearance-none cursor-pointer"
+                >
+                  <option value="all">{t("All Statuses")}</option>
+                  <option value="approved">{t("Approved Only")}</option>
+                  <option value="pending">{t("Pending Only")}</option>
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400 dark:text-gray-505">
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </div>
+              </div>
+
+              {/* File Type filter */}
+              <div className="relative">
+                <select
+                  value={masterFileType}
+                  onChange={(e) => setMasterFileType(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-gray-750 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-[#15803d] appearance-none cursor-pointer"
+                >
+                  <option value="">{t("All File Types")}</option>
+                  <option value="pdf">PDF</option>
+                  <option value="doc">DOC / DOCX</option>
+                  <option value="ppt">PPT / PPTX</option>
+                  <option value="image">{t("Images (PNG/JPG)")}</option>
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400 dark:text-gray-505">
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </div>
+              </div>
+
+              {/* Start Date */}
+              <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-2 py-1.5">
+                <span className="text-[10px] text-gray-400 font-bold shrink-0">{t("From")}:</span>
+                <input
+                  type="date"
+                  value={masterStartDate}
+                  onChange={(e) => setMasterStartDate(e.target.value)}
+                  className="w-full bg-transparent border-none text-xs font-semibold text-gray-750 dark:text-gray-100 focus:outline-none focus:ring-0 cursor-pointer"
+                />
+              </div>
+
+              {/* End Date */}
+              <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-2 py-1.5">
+                <span className="text-[10px] text-gray-400 font-bold shrink-0">{t("To")}:</span>
+                <input
+                  type="date"
+                  value={masterEndDate}
+                  onChange={(e) => setMasterEndDate(e.target.value)}
+                  className="w-full bg-transparent border-none text-xs font-semibold text-gray-750 dark:text-gray-100 focus:outline-none focus:ring-0 cursor-pointer"
+                />
+              </div>
+
+              {/* Sort Selection */}
+              <div className="relative">
+                <select
+                  value={masterSortBy}
+                  onChange={(e) => setMasterSortBy(e.target.value as any)}
+                  className="w-full pl-9 pr-8 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-xs font-bold text-[#15803d] dark:text-emerald-400 focus:outline-none focus:ring-1 focus:ring-[#15803d] appearance-none cursor-pointer"
+                >
+                  <option value="date_desc">{t("Newest First")}</option>
+                  <option value="date_asc">{t("Oldest First")}</option>
+                  <option value="name_asc">{t("Name: A to Z")}</option>
+                  <option value="name_desc">{t("Name: Z to A")}</option>
+                  <option value="size_desc">{t("Size: Largest First")}</option>
+                  <option value="size_asc">{t("Size: Smallest First")}</option>
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400 dark:text-gray-505">
+                  <ArrowUpDown className="w-3.5 h-3.5" />
+                </div>
+              </div>
+            </div>
+
+            {/* Active Filters Summary & Reset */}
+            {(masterSearch || masterTeacher || masterBranch || masterStatusFilter !== 'all' || masterFileType || masterStartDate || masterEndDate || masterSortBy !== 'date_desc') && (
+              <div className="flex items-center justify-between border-t border-gray-100 dark:border-slate-800/60 pt-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xxs font-bold text-gray-400 uppercase tracking-wider">{t("Active Filters")}:</span>
+                  {masterSearch && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#15803d]/10 text-[#15803d] dark:text-emerald-400 text-xxs font-bold rounded-full animate-fade-in">
+                      Query: {masterSearch}
+                      <button onClick={() => setMasterSearch('')} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  {masterTeacher && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#15803d]/10 text-[#15803d] dark:text-emerald-400 text-xxs font-bold rounded-full animate-fade-in">
+                      Teacher: {masterTeacher}
+                      <button onClick={() => setMasterTeacher('')} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  {masterBranch && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#15803d]/10 text-[#15803d] dark:text-emerald-400 text-xxs font-bold rounded-full animate-fade-in">
+                      Branch: {masterBranch}
+                      <button onClick={() => setMasterBranch('')} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  {masterStatusFilter !== 'all' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#15803d]/10 text-[#15803d] dark:text-emerald-400 text-xxs font-bold rounded-full animate-fade-in">
+                      Status: {masterStatusFilter.toUpperCase()}
+                      <button onClick={() => setMasterStatusFilter('all')} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  {masterFileType && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#15803d]/10 text-[#15803d] dark:text-emerald-400 text-xxs font-bold rounded-full animate-fade-in">
+                      Type: {masterFileType.toUpperCase()}
+                      <button onClick={() => setMasterFileType('')} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  {(masterStartDate || masterEndDate) && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#15803d]/10 text-[#15803d] dark:text-emerald-400 text-xxs font-bold rounded-full animate-fade-in">
+                      Date Range
+                      <button onClick={() => { setMasterStartDate(''); setMasterEndDate(''); }} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  {masterSortBy !== 'date_desc' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#15803d]/10 text-[#15803d] dark:text-emerald-400 text-xxs font-bold rounded-full animate-fade-in">
+                      {t("Sorted")}
+                      <button onClick={() => setMasterSortBy('date_desc')} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    setMasterSearch('');
+                    setMasterTeacher('');
+                    setMasterBranch('');
+                    setMasterStatusFilter('all');
+                    setMasterFileType('');
+                    setMasterStartDate('');
+                    setMasterEndDate('');
+                    setMasterSortBy('date_desc');
+                  }}
+                  className="inline-flex items-center gap-1 text-xxs font-bold text-red-500 hover:text-red-650 cursor-pointer dark:text-red-400 dark:hover:text-red-300"
+                >
+                  <X className="w-3 h-3" />
+                  {t("Clear All Filters")}
+                </button>
+              </div>
+            )}
+          </div>
 
           {files.length === 0 ? (
             <div className="text-center py-12 text-gray-400 dark:text-gray-500 text-xs">
               {t("No files found. Clean start!")}
+            </div>
+          ) : displayFiles.length === 0 ? (
+            <div className="text-center py-12 text-gray-450 dark:text-gray-500 text-xs font-semibold bg-gray-50/50 dark:bg-slate-900/50 border border-dashed border-gray-200 dark:border-slate-850 rounded-xl">
+              {t("No archives match your search criteria. Please adjust your filters above.")}
             </div>
           ) : (
             <div className="space-y-4">
               <BatchDownloadBar
                 selectedIds={selectedFileIds}
                 allFiles={files}
-                currentFilteredFiles={files}
+                currentFilteredFiles={displayFiles}
                 onSelectToggle={(id) => {
                   setSelectedFileIds(prev =>
                     prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
@@ -2294,7 +2740,7 @@ export default function DashboardMasterAdmin({
               />
 
               <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 sm:gap-6">
-                {files.map((file) => (
+                {displayFiles.map((file) => (
                   <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
                     <FileCard
                       file={file}
@@ -2311,6 +2757,7 @@ export default function DashboardMasterAdmin({
                         );
                       }}
                       onViewTeacherDetails={onViewTeacherDetails}
+                      allFiles={files}
                     />
                   </div>
                 ))}
@@ -2614,7 +3061,7 @@ export default function DashboardMasterAdmin({
                         <td className="py-4 px-6">
                           <div>
                             <p className="font-bold text-gray-800 dark:text-gray-100">{file.fileName}</p>
-                            <p className="text-[10px] text-gray-400 font-mono mt-0.5">{(file.fileSize / (1024 * 1024)).toFixed(2)} MB • {file.fileType.toUpperCase()}</p>
+                            <p className="text-[10px] text-gray-400 font-mono mt-0.5">{(file.fileSize / (1024 * 1024)).toFixed(2)} MB • {(file.fileType || '').toUpperCase()}</p>
                           </div>
                         </td>
                         <td className="py-4 px-6">
@@ -2666,7 +3113,7 @@ export default function DashboardMasterAdmin({
                     {/* Header: Name & size */}
                     <div>
                       <h4 className="font-bold text-xs text-gray-800 dark:text-gray-100 break-all leading-tight">{file.fileName}</h4>
-                      <p className="text-[10px] text-gray-400 font-mono mt-0.5">{(file.fileSize / (1024 * 1024)).toFixed(2)} MB • {file.fileType.toUpperCase()}</p>
+                      <p className="text-[10px] text-gray-400 font-mono mt-0.5">{(file.fileSize / (1024 * 1024)).toFixed(2)} MB • {(file.fileType || '').toUpperCase()}</p>
                     </div>
 
                     {/* Tags & info */}
@@ -3265,6 +3712,586 @@ R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'teacher_rankings' && (
+        <div className="space-y-6 animate-in fade-in duration-200" id="teacher-rankings-dashboard">
+          {/* Header Card */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-xs border border-gray-100 dark:border-slate-800 transition-colors">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-50 dark:border-slate-800/50 pb-4 mb-6">
+              <div>
+                <h3 className="font-bold text-base text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase flex items-center gap-2">
+                  <Award className="w-5 h-5 text-amber-500 animate-pulse" />
+                  <span>{t("Professional Educator Performance & Rankings")}</span>
+                </h3>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                  {t("Real-time system-wide analysis of teacher upload metrics, material approvals, and contributions across branches.")}
+                </p>
+              </div>
+              
+              {/* Sort selector */}
+              <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-slate-800/50 p-1 rounded-lg border border-gray-150 dark:border-slate-800 self-start sm:self-center">
+                <button
+                  onClick={() => setRankingsSortBy('uploads')}
+                  className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all cursor-pointer ${
+                    rankingsSortBy === 'uploads'
+                      ? 'bg-[#15803d] text-white shadow-xs'
+                      : 'text-gray-550 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  }`}
+                >
+                  {t("Total Uploads")}
+                </button>
+                <button
+                  onClick={() => setRankingsSortBy('approved')}
+                  className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all cursor-pointer ${
+                    rankingsSortBy === 'approved'
+                      ? 'bg-[#15803d] text-white shadow-xs'
+                      : 'text-gray-550 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  }`}
+                >
+                  {t("Approved Files")}
+                </button>
+                <button
+                  onClick={() => setRankingsSortBy('size')}
+                  className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all cursor-pointer ${
+                    rankingsSortBy === 'size'
+                      ? 'bg-[#15803d] text-white shadow-xs'
+                      : 'text-gray-550 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  }`}
+                >
+                  {t("Storage Used")}
+                </button>
+              </div>
+            </div>
+
+            {(() => {
+              // Get all teachers from adminsList
+              const teachersOnly = adminsList.filter(u => u.role === 'teacher');
+              
+              // Map metrics
+              const ratedTeachers = teachersOnly.map(teacher => {
+                const uFiles = files.filter(f => f.uploadedBy === teacher.uid);
+                const approvedFiles = uFiles.filter(f => f.isApproved);
+                const totalBytes = uFiles.reduce((acc, f) => acc + f.fileSize, 0);
+                const totalDl = uFiles.reduce((acc, f) => acc + f.downloadCount, 0);
+                
+                return {
+                  ...teacher,
+                  totalUploads: uFiles.length,
+                  totalApproved: approvedFiles.length,
+                  totalBytes,
+                  totalDl
+                };
+              });
+
+              // Sort based on selection
+              ratedTeachers.sort((a, b) => {
+                if (rankingsSortBy === 'approved') {
+                  return b.totalApproved - a.totalApproved || b.totalUploads - a.totalUploads;
+                } else if (rankingsSortBy === 'size') {
+                  return b.totalBytes - a.totalBytes;
+                } else {
+                  return b.totalUploads - a.totalUploads;
+                }
+              });
+
+              // Format helper for bytes
+              const formatSize = (bytes: number) => {
+                if (bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+              };
+
+              if (ratedTeachers.length === 0) {
+                return (
+                  <div className="p-8 text-center bg-gray-50 dark:bg-slate-900 rounded-2xl border border-dashed border-gray-200 dark:border-slate-800">
+                    <Users className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+                    <p className="text-gray-500 dark:text-gray-400 font-medium text-xs">{t("No educators registered in the system yet.")}</p>
+                  </div>
+                );
+              }
+
+              // Group teachers by Branch for branch-wise teacher lists
+              const branchWiseMap: { [branch: string]: typeof ratedTeachers } = {};
+              ratedTeachers.forEach(t => {
+                const bName = t.branch || t("Independent / Unassigned");
+                if (!branchWiseMap[bName]) {
+                  branchWiseMap[bName] = [];
+                }
+                branchWiseMap[bName].push(t);
+              });
+
+              const displayedTeachers = showAllRankings ? ratedTeachers : ratedTeachers.slice(0, 5);
+
+              return (
+                <div className="space-y-8">
+                  {/* Complete Rankings List Section */}
+                  <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-150 dark:border-slate-800 overflow-hidden shadow-xs">
+                    <div className="px-5 py-4 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center bg-gray-50/20 dark:bg-slate-850/10">
+                      <h4 className="font-bold text-xs text-gray-800 dark:text-gray-150 uppercase tracking-wider">{t("System-Wide Educator Leaderboard")}</h4>
+                      <span className="text-[9px] font-bold bg-[#15803d]/10 text-[#15803d] px-2.5 py-0.5 rounded-full uppercase">
+                        {ratedTeachers.length} {t("Verified Teachers")}
+                      </span>
+                    </div>
+
+                    {/* Desktop Table (hidden on mobile) */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-gray-50 dark:bg-slate-850/30 text-gray-400 uppercase font-extrabold text-[9px] tracking-wider border-b border-gray-100 dark:border-slate-800">
+                            <th className="py-3.5 px-4 text-center w-12">{t("Rank")}</th>
+                            <th className="py-3.5 px-4">{t("Educator")}</th>
+                            <th className="py-3.5 px-4">{t("Assigned Subjects")}</th>
+                            <th className="py-3.5 px-4 text-center">{t("Files Uploaded")}</th>
+                            <th className="py-3.5 px-4 text-center">{t("Approved Notes")}</th>
+                            <th className="py-3.5 px-4 text-center">{t("Downloads")}</th>
+                            <th className="py-3.5 px-4 text-center">{t("Storage Allocated")}</th>
+                            <th className="py-3.5 px-4 text-center">{t("Status")}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                          {displayedTeachers.map((teacher, index) => {
+                            const isTop3 = index < 3;
+                            const medalColors = [
+                              'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200',
+                              'bg-slate-100 text-slate-700 dark:bg-slate-800/60 dark:text-slate-300 border-slate-200',
+                              'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400 border-orange-200'
+                            ];
+                            const medals = ["🥇", "🥈", "🥉"];
+
+                            return (
+                              <tr key={teacher.uid} className="hover:bg-gray-50/50 dark:hover:bg-slate-850/15 transition-colors">
+                                <td className="py-3 px-4 text-center font-mono font-bold">
+                                  {isTop3 ? (
+                                    <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm ${medalColors[index]} border font-sans`}>
+                                      {medals[index]}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400">
+                                      {index + 1}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-slate-800 flex items-center justify-center font-bold text-gray-600 dark:text-gray-300">
+                                      {teacher.fullName.charAt(0)}
+                                    </div>
+                                    <div>
+                                      <p className="font-extrabold text-gray-800 dark:text-gray-150">{teacher.fullName}</p>
+                                      <p className="text-[10px] text-gray-400 dark:text-gray-500">{teacher.branch}</p>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4 max-w-[180px] truncate">
+                                  <span className="text-[10.5px] font-semibold text-gray-650 dark:text-gray-350 bg-gray-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-xs">
+                                    {teacher.subjects && teacher.subjects.length > 0
+                                      ? teacher.subjects.join(', ')
+                                      : teacher.subject || t("General Curriculum")}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 text-center font-mono font-bold text-gray-700 dark:text-gray-300">
+                                  {teacher.totalUploads}
+                                </td>
+                                <td className="py-3 px-4 text-center font-mono font-bold text-emerald-655 dark:text-emerald-400">
+                                  {teacher.totalApproved}
+                                </td>
+                                <td className="py-3 px-4 text-center font-mono font-bold text-gray-700 dark:text-gray-300">
+                                  {teacher.totalDl}
+                                </td>
+                                <td className="py-3 px-4 text-center font-mono text-gray-600 dark:text-gray-400">
+                                  {formatSize(teacher.totalBytes)}
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                                    teacher.status === 'inactive'
+                                      ? 'bg-red-50 text-red-600 dark:bg-red-955/20 dark:text-red-400 border border-red-100'
+                                      : 'bg-emerald-50 text-emerald-650 dark:bg-emerald-955/20 dark:text-emerald-400 border border-emerald-100'
+                                  }`}>
+                                    {teacher.status === 'inactive' ? t("Suspended") : t("Active")}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile Stacked Cards Layout (hidden on desktop) */}
+                    <div className="md:hidden divide-y divide-gray-100 dark:divide-slate-850/80">
+                      {displayedTeachers.map((teacher, index) => {
+                        const isTop3 = index < 3;
+                        const medalColors = [
+                          'bg-amber-50 text-amber-700 dark:bg-amber-955/20 dark:text-amber-400 border-amber-100',
+                          'bg-slate-50 text-slate-700 dark:bg-slate-800/30 dark:text-slate-300 border-slate-100',
+                          'bg-orange-50 text-orange-700 dark:bg-orange-955/20 dark:text-orange-400 border-orange-100'
+                        ];
+                        const medals = ["🥇", "🥈", "🥉"];
+
+                        return (
+                          <div key={teacher.uid} className="p-4 flex flex-col gap-3 hover:bg-gray-50/50 dark:hover:bg-slate-850/10 transition-colors">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                {isTop3 ? (
+                                  <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs ${medalColors[index]} border font-sans`}>
+                                    {medals[index]}
+                                  </span>
+                                ) : (
+                                  <span className="font-mono font-bold text-gray-400 w-7 text-center">
+                                    #{index + 1}
+                                  </span>
+                                )}
+                                <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-slate-800 flex items-center justify-center font-bold text-gray-650 dark:text-gray-300">
+                                  {teacher.fullName.charAt(0)}
+                                </div>
+                                <div>
+                                  <p className="font-extrabold text-xs text-gray-800 dark:text-gray-150 leading-tight">{teacher.fullName}</p>
+                                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{teacher.branch}</p>
+                                </div>
+                              </div>
+                              <span className={`inline-block px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase ${
+                                teacher.status === 'inactive'
+                                  ? 'bg-red-50 text-red-600 dark:bg-red-955/20 dark:text-red-400 border border-red-100'
+                                  : 'bg-emerald-50 text-emerald-650 dark:bg-emerald-955/20 dark:text-emerald-400 border border-emerald-100'
+                              }`}>
+                                {teacher.status === 'inactive' ? t("Suspended") : t("Active")}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-4 gap-2 pt-2 border-t border-gray-100/60 dark:border-slate-800/60 text-center bg-gray-50/30 dark:bg-slate-900/40 p-2 rounded-lg">
+                              <div>
+                                <p className="text-[7.5px] font-bold text-gray-400 uppercase tracking-wider">{t("Uploads")}</p>
+                                <p className="font-mono font-bold text-[10.5px] text-gray-700 dark:text-gray-300 mt-0.5">{teacher.totalUploads}</p>
+                              </div>
+                              <div>
+                                <p className="text-[7.5px] font-bold text-gray-400 uppercase tracking-wider">{t("Approved")}</p>
+                                <p className="font-mono font-bold text-[10.5px] text-emerald-650 dark:text-emerald-450 mt-0.5">{teacher.totalApproved}</p>
+                              </div>
+                              <div>
+                                <p className="text-[7.5px] font-bold text-gray-400 uppercase tracking-wider">{t("Downloads")}</p>
+                                <p className="font-mono font-bold text-[10.5px] text-gray-700 dark:text-gray-300 mt-0.5">{teacher.totalDl}</p>
+                              </div>
+                              <div>
+                                <p className="text-[7.5px] font-bold text-gray-400 uppercase tracking-wider">{t("Storage")}</p>
+                                <p className="font-mono text-[9.5px] font-bold text-gray-700 dark:text-gray-300 mt-0.5 truncate">{formatSize(teacher.totalBytes)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* View More / Show Less Button */}
+                    {ratedTeachers.length > 5 && (
+                      <div className="px-5 py-3 border-t border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-850/10 flex justify-center">
+                        <button
+                          onClick={() => setShowAllRankings(!showAllRankings)}
+                          className="text-xs font-bold text-[#15803d] dark:text-emerald-400 hover:underline cursor-pointer flex items-center gap-1 focus:outline-none"
+                        >
+                          {showAllRankings ? t("Show Less") : `${t("View More")} (${ratedTeachers.length - 5} ${t("more educators")})`}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Branch-wise Teacher List Accordion View */}
+                  <div className="space-y-4">
+                    <h4 className="font-extrabold text-xs text-gray-800 dark:text-gray-150 uppercase tracking-wider">{t("Branch-Wise Coordinator & Educator Registers")}</h4>
+                    
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {Object.keys(branchWiseMap).map(bName => (
+                        <div key={bName} className="bg-white dark:bg-slate-900 rounded-xl border border-gray-150 dark:border-slate-800 overflow-hidden shadow-xs">
+                          <div className="px-4 py-3 bg-gray-50 dark:bg-slate-850/40 border-b border-gray-150 dark:border-slate-800 flex justify-between items-center">
+                            <span className="font-bold text-xs text-gray-800 dark:text-gray-150 flex items-center gap-1.5 truncate">
+                              <Building className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                              <span className="truncate">{bName}</span>
+                            </span>
+                            <span className="font-mono text-[10px] font-extrabold bg-[#15803d]/10 text-[#15803d] px-2 py-0.5 rounded-full uppercase shrink-0">
+                              {branchWiseMap[bName].length} {t("Teachers")}
+                            </span>
+                          </div>
+                          
+                          <div className="divide-y divide-gray-100 dark:divide-slate-800 max-h-[300px] overflow-y-auto">
+                            {branchWiseMap[bName].map(tObj => (
+                              <div key={tObj.uid} className="p-4 flex items-center justify-between gap-3 hover:bg-gray-50/20">
+                                <div className="space-y-1">
+                                  <p className="font-extrabold text-xs text-gray-800 dark:text-gray-150 leading-none">{tObj.fullName}</p>
+                                  <p className="text-[10px] text-gray-400 dark:text-gray-500">{tObj.email}</p>
+                                  <div className="flex gap-1.5 flex-wrap pt-1">
+                                    <span className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-xs leading-none">
+                                      {tObj.subjects && tObj.subjects.length > 0 ? tObj.subjects[0] : tObj.subject || t("General")}
+                                    </span>
+                                    {tObj.subjects && tObj.subjects.length > 1 && (
+                                      <span className="bg-gray-105 dark:bg-slate-800 text-gray-550 dark:text-gray-400 text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-xs leading-none">
+                                        +{tObj.subjects.length - 1} {t("More")}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-right shrink-0 font-mono">
+                                  <p className="text-xs font-bold text-gray-700 dark:text-gray-200">{tObj.totalUploads} {t("files")}</p>
+                                  <p className="text-[9.5px] font-bold text-emerald-600 dark:text-emerald-450">{tObj.totalApproved} {t("approved")}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'quota_planner' && (
+        <div className="space-y-6 animate-in fade-in duration-200" id="quota-planner-dashboard">
+          {/* Header Card */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-xs border border-gray-100 dark:border-slate-800 transition-colors">
+            <div className="border-b border-gray-50 dark:border-slate-800/50 pb-4 mb-6">
+              <h3 className="font-bold text-base text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase flex items-center gap-2">
+                <Sliders className="w-5 h-5 text-emerald-600 animate-pulse" />
+                <span>{t("Campus File Archive Storage Quota Planner")}</span>
+              </h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                {t("Dynamically model, project, and allocate storage quotas based on educator density and month-over-month archive expansion rates.")}
+              </p>
+            </div>
+
+            {(() => {
+              // Current active system stats
+              const totalActiveFiles = files.length;
+              const totalDeletedFiles = deletedFiles.length;
+              const activeBytes = files.reduce((acc, f) => acc + f.fileSize, 0);
+              const deletedBytes = deletedFiles.reduce((acc, f) => acc + f.fileSize, 0);
+              
+              const totalTeachersCount = adminsList.filter(u => u.role === 'teacher').length;
+              const totalBranchCount = branches.length || 5;
+
+              // Format helper for bytes
+              const formatSize = (bytes: number) => {
+                if (bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+              };
+
+              // Calculations for Projection
+              // Projected new files = totalTeachersCount * monthlyFilesPerTeacher * durationMonths
+              const projectedNewFiles = totalTeachersCount * quotaMonthlyFiles * quotaDurationMonths;
+              // Projected additional storage in Bytes = projectedNewFiles * avgSizeMB * 1024 * 1024
+              const projectedBytes = projectedNewFiles * quotaAvgSizeMB * 1024 * 1024;
+              const grandTotalBytes = activeBytes + projectedBytes;
+
+              // Setup baseline thresholds (e.g. 50 GB default limit for Sandbox)
+              const sandboxMaxBytes = 50 * 1024 * 1024 * 1024; // 50 GB
+              const usagePercent = Math.min((grandTotalBytes / sandboxMaxBytes) * 100, 100);
+
+              let statusLabel = t("OPTIMAL");
+              let statusColor = "bg-emerald-500 text-white";
+              let statusDesc = t("Recommended. Grand projected total sits safely below the system-wide indexing capability thresholds.");
+
+              if (usagePercent > 80) {
+                statusLabel = t("THRESHOLD EXHAUSTED");
+                statusColor = "bg-red-500 text-white animate-pulse";
+                statusDesc = t("Urgent! Projected growth approaches index cap thresholds. Action needed to optimize formats or compress documents.");
+              } else if (usagePercent > 50) {
+                statusLabel = t("MODERATE GROWTH");
+                statusColor = "bg-amber-500 text-white";
+                statusDesc = t("Acceptable. System capacity supports this pace, but localized optimizations can restore overhead space.");
+              }
+
+              return (
+                <div className="space-y-6">
+                  {/* Current Active Baseline Stats Grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-gray-50/50 dark:bg-slate-800/15 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/50">
+                      <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">{t("Active Archive Volume")}</span>
+                      <p className="font-extrabold text-lg text-gray-800 dark:text-gray-150 font-mono leading-none">{formatSize(activeBytes)}</p>
+                      <span className="text-[9px] font-bold text-[#15803d] dark:text-brand-400 mt-1.5 inline-block">{totalActiveFiles} {t("indexed files")}</span>
+                    </div>
+
+                    <div className="bg-gray-50/50 dark:bg-slate-800/15 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/50">
+                      <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">{t("Pending Trash Bin Size")}</span>
+                      <p className="font-extrabold text-lg text-gray-800 dark:text-gray-150 font-mono leading-none">{formatSize(deletedBytes)}</p>
+                      <span className="text-[9px] font-bold text-red-500 mt-1.5 inline-block">{totalDeletedFiles} {t("reclaimable items")}</span>
+                    </div>
+
+                    <div className="bg-gray-50/50 dark:bg-slate-800/15 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/50">
+                      <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">{t("Faculty Count")}</span>
+                      <p className="font-extrabold text-lg text-gray-800 dark:text-gray-150 font-mono leading-none">{totalTeachersCount}</p>
+                      <span className="text-[9px] font-bold text-gray-400 mt-1.5 inline-block uppercase">{t("Registered Educators")}</span>
+                    </div>
+
+                    <div className="bg-gray-50/50 dark:bg-slate-800/15 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/50">
+                      <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">{t("Campuses & Branches")}</span>
+                      <p className="font-extrabold text-lg text-gray-800 dark:text-gray-150 font-mono leading-none">{totalBranchCount}</p>
+                      <span className="text-[9px] font-bold text-gray-400 mt-1.5 inline-block uppercase">{t("Allocated Sites")}</span>
+                    </div>
+                  </div>
+
+                  {/* Modelling Panel */}
+                  <div className="grid lg:grid-cols-12 gap-8 pt-4">
+                    {/* Controls Column (5 Cols) */}
+                    <div className="lg:col-span-5 space-y-6 bg-gray-50/50 dark:bg-slate-900/30 p-5 rounded-2xl border border-gray-150 dark:border-slate-800">
+                      <h4 className="font-extrabold text-xs text-[#15803d] dark:text-brand-405 uppercase tracking-wider flex items-center gap-1.5 mb-2">
+                        <Sliders className="w-4 h-4" />
+                        <span>{t("Growth Variables Configuration")}</span>
+                      </h4>
+
+                      {/* Slider 1: Monthly uploads */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <label className="font-bold text-gray-700 dark:text-gray-300">{t("Uploads Per Teacher/Month")}</label>
+                          <span className="font-mono bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-gray-100 dark:border-slate-700 font-bold text-gray-800 dark:text-gray-200">
+                            {quotaMonthlyFiles} {t("files")}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="1"
+                          max="100"
+                          value={quotaMonthlyFiles}
+                          onChange={(e) => setQuotaMonthlyFiles(parseInt(e.target.value))}
+                          className="w-full accent-[#15803d] h-1.5 bg-gray-200 dark:bg-slate-800 rounded-lg cursor-pointer"
+                        />
+                      </div>
+
+                      {/* Slider 2: Average File Size */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <label className="font-bold text-gray-700 dark:text-gray-300">{t("Average Note/Material Size")}</label>
+                          <span className="font-mono bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-gray-100 dark:border-slate-700 font-bold text-gray-800 dark:text-gray-200">
+                            {quotaAvgSizeMB} MB
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="1"
+                          max="50"
+                          value={quotaAvgSizeMB}
+                          onChange={(e) => setQuotaAvgSizeMB(parseInt(e.target.value))}
+                          className="w-full accent-[#15803d] h-1.5 bg-gray-200 dark:bg-slate-800 rounded-lg cursor-pointer"
+                        />
+                      </div>
+
+                      {/* Slider 3: Duration */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <label className="font-bold text-gray-700 dark:text-gray-300">{t("Planning Horizon (Duration)")}</label>
+                          <span className="font-mono bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-gray-100 dark:border-slate-700 font-bold text-gray-800 dark:text-gray-200">
+                            {quotaDurationMonths} {t("months")}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="1"
+                          max="36"
+                          value={quotaDurationMonths}
+                          onChange={(e) => setQuotaDurationMonths(parseInt(e.target.value))}
+                          className="w-full accent-[#15803d] h-1.5 bg-gray-200 dark:bg-slate-800 rounded-lg cursor-pointer"
+                        />
+                      </div>
+
+                      <div className="p-3 bg-blue-50/50 dark:bg-slate-800/20 text-[10.5px] leading-relaxed text-blue-800 dark:text-blue-300 rounded-xl border border-blue-100/40 dark:border-slate-800 font-medium">
+                        💡 <strong>{t("Projection model math:")}</strong> {t("Estimates that each of Sristy's registered teachers uploads the configured number of notes monthly, utilizing modern indexing architectures.")}
+                      </div>
+                    </div>
+
+                    {/* Results Column (7 Cols) */}
+                    <div className="lg:col-span-7 space-y-6">
+                      <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-gray-150 dark:border-slate-800 space-y-5">
+                        <h4 className="font-extrabold text-xs text-gray-850 dark:text-white uppercase tracking-wider">{t("Simulated Expansion Forecast")}</h4>
+
+                        {/* Forecast metrics cards */}
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="p-4 bg-gray-50/50 dark:bg-slate-850/20 rounded-xl border border-gray-100 dark:border-slate-800">
+                            <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">{t("Estimated New Uploads")}</span>
+                            <span className="font-mono text-lg font-extrabold text-gray-800 dark:text-gray-200">+{projectedNewFiles}</span>
+                            <span className="block text-[9.5px] text-gray-400 mt-1">{t("Additional PDF/PPT notes")}</span>
+                          </div>
+
+                          <div className="p-4 bg-gray-50/50 dark:bg-slate-850/20 rounded-xl border border-gray-100 dark:border-slate-800">
+                            <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">{t("Additional Storage Demand")}</span>
+                            <span className="font-mono text-lg font-extrabold text-[#15803d] dark:text-brand-405">+{formatSize(projectedBytes)}</span>
+                            <span className="block text-[9.5px] text-gray-400 mt-1">{t("Projected bytes growth")}</span>
+                          </div>
+                        </div>
+
+                        {/* Projection Gauge bar */}
+                        <div className="space-y-2 pt-2">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-bold text-gray-700 dark:text-gray-300">{t("Total Projected Load (Grand Total)")}</span>
+                            <span className="font-mono font-bold text-gray-800 dark:text-gray-200">
+                              {formatSize(grandTotalBytes)} / 50 GB
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden flex">
+                            {/* Current utilized section */}
+                            <div 
+                              style={{ width: `${Math.min((activeBytes / sandboxMaxBytes) * 100, 100)}%` }}
+                              className="bg-emerald-600 h-full"
+                              title="Current Active Storage"
+                            />
+                            {/* Projected growth section */}
+                            <div 
+                              style={{ width: `${Math.min((projectedBytes / sandboxMaxBytes) * 100, 100)}%` }}
+                              className="bg-blue-500 h-full opacity-80"
+                              title="Projected Storage Growth"
+                            />
+                          </div>
+                          <div className="flex justify-between text-[9px] font-bold text-gray-400 uppercase tracking-wider pt-0.5">
+                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-xs bg-emerald-600" /> {t("Current Active")} ({formatSize(activeBytes)})</span>
+                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-xs bg-blue-500" /> {t("Projected Growth")} ({formatSize(projectedBytes)})</span>
+                          </div>
+                        </div>
+
+                        {/* Status Recommendation Flag */}
+                        <div className="p-4 rounded-xl flex gap-3 bg-gray-50/50 dark:bg-slate-850/30 border border-gray-100 dark:border-slate-800">
+                          <div className={`px-2.5 py-1.5 rounded-lg text-center font-bold text-[10px] uppercase h-fit ${statusColor}`}>
+                            {statusLabel}
+                          </div>
+                          <div className="space-y-1">
+                            <p className="font-bold text-xs text-gray-800 dark:text-gray-150">{t("Administrative Advice & Impact Summary")}</p>
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
+                              {statusDesc}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Quota optimization instructions */}
+                      <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-gray-150 dark:border-slate-800 space-y-3">
+                        <h4 className="font-extrabold text-xs text-gray-850 dark:text-white uppercase tracking-wider">{t("Proactive Optimization Checklist")}</h4>
+                        
+                        <div className="divide-y divide-gray-100 dark:divide-slate-800 text-[11px] font-medium text-gray-600 dark:text-gray-300">
+                          <div className="py-2.5 flex items-start gap-2.5">
+                            <span className="h-4.5 w-4.5 rounded-full bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-brand-400 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">✓</span>
+                            <p>{t("Empty pending Trash Bin items immediately to reclaim up to")} <strong>{formatSize(deletedBytes)}</strong> {t("of direct physical R2 cloud storage space instantly.")}</p>
+                          </div>
+                          <div className="py-2.5 flex items-start gap-2.5">
+                            <span className="h-4.5 w-4.5 rounded-full bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-brand-400 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">✓</span>
+                            <p>{t("Enforce maximum limits of 10MB per PDF/PPT notes file directly on branch members using the standard user roles control panels.")}</p>
+                          </div>
+                          <div className="py-2.5 flex items-start gap-2.5">
+                            <span className="h-4.5 w-4.5 rounded-full bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-brand-400 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">✓</span>
+                            <p>{t("Conduct routine manual SQL compression runs on archived blobs directly from the Sristy Family Central backups manager panel.")}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               );

@@ -352,7 +352,7 @@ export default function TeacherDetailsModal({
                           </span>
 
                           <div className="flex items-center gap-1.5">
-                            {['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes(f.fileType.toLowerCase()) && onPreview && (
+                            {['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes((f.fileType || '').toLowerCase()) && onPreview && (
                               <button
                                 onClick={() => onPreview(f)}
                                 className="p-1.5 bg-white dark:bg-slate-800 hover:bg-gray-100 text-brand-500 border border-gray-200 dark:border-slate-700 rounded-lg transition-colors cursor-pointer"

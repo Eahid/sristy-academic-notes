@@ -448,10 +448,12 @@ export const ThemeLanguageProvider: React.FC<{ children: React.ReactNode }> = ({
     // Locked to light theme as requested, no-op
   };
 
-  const t = (text: string): string => {
-    if (!text) return '';
+  const t = (text: any): string => {
+    if (text === null || text === undefined) return '';
+    const textStr = String(text);
+    if (!textStr) return '';
     
-    const trimmed = text.trim();
+    const trimmed = textStr.trim();
     let bangla = '';
 
     if (translations[trimmed]) {
