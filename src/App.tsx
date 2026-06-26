@@ -912,6 +912,7 @@ export default function App() {
                 onFileReject={handleRejectFile}
                 onFileDelete={handleDeleteFile}
                 onFileRestore={handleRestoreFile}
+                onFileHardDelete={handleHardDeleteFile}
                 onDownload={handleDownloadAttempt}
                 onPreview={handlePreviewAttempt}
                 onViewTeacherDetails={setViewingTeacherUid}

@@ -657,6 +657,47 @@ export default function DashboardMasterAdmin({
     }
   };
 
+  const handlePurgeAllFiles = async () => {
+    if (!window.confirm(t("Are you sure you want to delete ALL files from the database? This is IRREVERSIBLE and cannot be undone! User accounts and system settings will remain safe, but all academic archives and trash documents will be purged immediately."))) {
+      return;
+    }
+    
+    const token = window.prompt(t("FINAL CONFIRMATION: Type 'PURGE' to proceed with deleting all system files and trash."));
+    if (token !== 'PURGE') {
+      alert(t("Purge cancelled. Typo or incorrect validation string."));
+      return;
+    }
+    
+    setIsZipping(true);
+    try {
+      const filesSnap = await getDocs(collection(db, 'files'));
+      let count = 0;
+      for (const d of filesSnap.docs) {
+        const fileData = d.data();
+        if (fileData.storagePath) {
+          try {
+            await fetch('/api/r2/delete', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ storagePath: fileData.storagePath }),
+            });
+          } catch (r2Err) {
+            console.warn("Failed to delete from R2 for storagePath:", fileData.storagePath, r2Err);
+          }
+        }
+        await deleteDoc(doc(db, 'files', d.id));
+        count++;
+      }
+      alert(`${count} files successfully purged. The system is now starting from zero!`);
+      window.location.reload();
+    } catch (err: any) {
+      console.error("Purge failed: ", err);
+      alert(t("Failed to purge files: ") + err.message);
+    } finally {
+      setIsZipping(false);
+    }
+  };
+
   // Download Full ZIP Archive Backup (Active Files + backup_info.json)
   const handleDownloadFullBackupZip = async () => {
     setIsZipping(true);
@@ -1209,7 +1250,7 @@ export default function DashboardMasterAdmin({
 
           return (
             <>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid sm:grid-cols-3 gap-4">
                 {/* Metric Card 1: Registered Teachers */}
                 <div className="bg-gray-50/50 dark:bg-slate-850/20 p-4 rounded-xl border border-gray-100 dark:border-slate-800/60 flex items-center gap-4 hover:shadow-xs transition-all duration-200">
                   <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 shrink-0">
@@ -1242,23 +1283,7 @@ export default function DashboardMasterAdmin({
                   </div>
                 </div>
 
-                {/* Metric Card 3: Storage Occupancy */}
-                <div className="bg-gray-50/50 dark:bg-slate-850/20 p-4 rounded-xl border border-gray-100 dark:border-slate-800/60 flex items-center gap-4 hover:shadow-xs transition-all duration-200">
-                  <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 shrink-0">
-                    <HardDrive className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="block text-[8px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">{t("R2 Storage Occupied")}</span>
-                    <span className="font-mono text-base font-extrabold text-gray-800 dark:text-gray-150 leading-tight">
-                      {formatSizeLocal(totalStorageUsed)}
-                    </span>
-                    <span className="block text-[9px] text-gray-400 dark:text-gray-500 mt-0.5">
-                      Avg file: {formatSizeLocal(avgFileSize)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Metric Card 4: Access Telemetry */}
+                {/* Metric Card 3: Access Telemetry */}
                 <div className="bg-gray-50/50 dark:bg-slate-850/20 p-4 rounded-xl border border-gray-100 dark:border-slate-800/60 flex items-center gap-4 hover:shadow-xs transition-all duration-200">
                   <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 shrink-0">
                     <DownloadCloud className="w-5 h-5" />
@@ -3088,7 +3113,7 @@ export default function DashboardMasterAdmin({
                               <span>{t("Restore")}</span>
                             </button>
                             
-                            {user.role === 'super_admin' && (
+                            {(user.role === 'super_admin' || user.role === 'master_admin') && (
                               <button
                                 onClick={() => onFileHardDelete(file.id)}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/25 dark:hover:bg-red-950/45 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/30 rounded-lg text-xs font-bold transition-all cursor-pointer"
@@ -3144,7 +3169,7 @@ export default function DashboardMasterAdmin({
                         <span>{t("Restore")}</span>
                       </button>
                       
-                      {user.role === 'super_admin' && (
+                      {(user.role === 'super_admin' || user.role === 'master_admin') && (
                         <button
                           onClick={() => onFileHardDelete(file.id)}
                           className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-105 dark:bg-red-955/20 dark:hover:bg-red-955/35 text-red-600 dark:text-red-400 border border-red-105 dark:border-red-900/30 rounded-lg text-xs font-bold transition-all cursor-pointer flex-1"
@@ -3275,6 +3300,27 @@ export default function DashboardMasterAdmin({
 
             {showAdvanced && (
               <div className="p-6 border-t border-gray-100 dark:border-slate-800 space-y-6 animate-in slide-in-from-top-4 duration-200">
+                {/* System Reset & Purge Panel */}
+                <div className="bg-red-500/5 dark:bg-red-950/10 border border-red-150/20 dark:border-red-900/30 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <h4 className="font-extrabold text-xs text-red-650 dark:text-red-400 uppercase tracking-tight flex items-center gap-1.5">
+                      <Trash2 className="w-3.5 h-3.5 text-red-550" />
+                      <span>{t("Purge All System Files")}</span>
+                    </h4>
+                    <p className="text-xxs text-gray-500 dark:text-gray-400 font-medium leading-relaxed max-w-xl">
+                      {t("This action will completely and irreversibly clear all academic resource files and trash from the database, allowing you to start fresh from zero. User accounts, branch setups, and logs are preserved.")}
+                    </p>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={handlePurgeAllFiles}
+                    className="bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold text-xxs px-4 py-2.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0 shadow-sm"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{t("Purge Files & Start from Zero")}</span>
+                  </button>
+                </div>
+
                 {/* Connection validation banner */}
                 <div className="bg-gray-50/50 dark:bg-slate-850/10 border border-gray-100 dark:border-slate-800 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="space-y-1">

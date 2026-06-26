@@ -41,6 +41,7 @@ interface DashboardAdminProps {
   onFileReject: (fileId: string) => void;
   onFileDelete: (fileId: string, bypassConfirm?: boolean) => void;
   onFileRestore: (fileId: string) => void;
+  onFileHardDelete: (fileId: string) => void;
   onDownload: (file: FileArchive) => void;
   onPreview?: (file: FileArchive) => void;
   onViewTeacherDetails?: (teacherUid: string) => void;
@@ -54,6 +55,7 @@ export default function DashboardAdmin({
   onFileReject,
   onFileDelete,
   onFileRestore,
+  onFileHardDelete,
   onDownload,
   onPreview,
   onViewTeacherDetails
@@ -1722,13 +1724,24 @@ export default function DashboardAdmin({
                             </div>
                           </td>
                           <td className="py-4 px-6 text-right">
-                            <button
-                              onClick={() => onFileRestore(file.id)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/20 dark:hover:bg-brand-950/40 text-brand-605 dark:text-brand-400 border border-brand-100 dark:border-brand-900/30 rounded-lg text-xs font-bold transition-all cursor-pointer animate-pulse"
-                            >
-                              <RotateCcw className="w-3.5 h-3.5 animate-spin-slow" />
-                              <span>{t("Restore")}</span>
-                            </button>
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => onFileRestore(file.id)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/20 dark:hover:bg-brand-950/40 text-brand-605 dark:text-brand-400 border border-brand-100 dark:border-brand-900/30 rounded-lg text-xs font-bold transition-all cursor-pointer animate-pulse"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5 animate-spin-slow" />
+                                <span>{t("Restore")}</span>
+                              </button>
+                              
+                              <button
+                                onClick={() => onFileHardDelete(file.id)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/25 dark:hover:bg-red-950/45 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/30 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                                title={t("Permanently delete file and physical storage contents permanently.")}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>{t("Delete Permanently")}</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -1765,13 +1778,21 @@ export default function DashboardAdmin({
                       </div>
                     </div>
 
-                    <div className="pt-1.5 flex justify-end">
+                    <div className="pt-1.5 flex justify-end gap-2">
                       <button
                         onClick={() => onFileRestore(file.id)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/20 dark:hover:bg-brand-950/40 text-brand-605 dark:text-brand-400 border border-brand-100 dark:border-brand-900/30 rounded-lg text-xs font-bold transition-all cursor-pointer animate-pulse"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/20 dark:hover:bg-brand-950/40 text-brand-605 dark:text-brand-400 border border-brand-100 dark:border-brand-900/30 rounded-lg text-xs font-bold transition-all cursor-pointer animate-pulse flex-1 justify-center"
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
                         <span>{t("Restore")}</span>
+                      </button>
+
+                      <button
+                        onClick={() => onFileHardDelete(file.id)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/25 dark:hover:bg-red-950/45 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/30 rounded-lg text-xs font-bold transition-all cursor-pointer flex-1 justify-center"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>{t("Delete")}</span>
                       </button>
                     </div>
                   </div>
