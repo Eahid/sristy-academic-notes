@@ -84,6 +84,17 @@ export default function App() {
   const { t } = useThemeLanguage();
 
   useEffect(() => {
+    if (authModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [authModalOpen]);
+
+  useEffect(() => {
     const unsub = onSnapshot(doc(db, 'system_config', 'status'), (docSnap) => {
       if (docSnap.exists()) {
         setIsSystemShutDown(!!docSnap.data().isShutDown);
@@ -910,11 +921,11 @@ export default function App() {
         </div>
         <AnimatePresence>
           {authModalOpen && (
-            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto relative p-6 border border-gray-100 dark:border-slate-800">
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-start sm:items-center justify-center p-4 overflow-y-auto">
+              <div className="relative w-full max-w-md my-auto">
                 <button
                   onClick={() => setAuthModalOpen(false)}
-                  className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-white font-bold text-sm cursor-pointer"
+                  className="absolute top-4 right-4 z-50 p-2 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
                 >
                   ✕
                 </button>
@@ -1366,13 +1377,13 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto"
+            className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto"
           >
             <motion.div 
               initial={{ scale: 0.95 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.95 }}
-              className="relative w-full max-w-md"
+              className="relative w-full max-w-md my-auto"
             >
               {/* Close Button on background */}
               <button 
