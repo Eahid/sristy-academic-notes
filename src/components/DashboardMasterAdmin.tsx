@@ -15,6 +15,7 @@ import {
   Key, 
   Users, 
   FileText, 
+  FileSpreadsheet,
   CheckCircle2, 
   ShieldAlert, 
   Award,
@@ -54,6 +55,7 @@ interface DashboardMasterAdminProps {
   onFileDelete: (fileId: string) => void;
   onFileRestore: (fileId: string) => void;
   onFileHardDelete: (fileId: string) => void;
+  onEmptyTrash?: (fileIds?: string[]) => void;
   onDownload: (file: FileArchive) => void;
   onRefreshData?: () => void;
   onPreview?: (file: FileArchive) => void;
@@ -69,6 +71,7 @@ export default function DashboardMasterAdmin({
   onFileDelete,
   onFileRestore,
   onFileHardDelete,
+  onEmptyTrash,
   onDownload,
   onPreview,
   onViewTeacherDetails,
@@ -99,7 +102,7 @@ export default function DashboardMasterAdmin({
   const [newPasswordVal, setNewPasswordVal] = useState('');
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'admins' | 'all_files' | 'trash_bin' | 'activity_logs' | 'database_backups' | 'rejection_history' | 'teacher_rankings' | 'quota_planner'>('admins');
+  const [activeTab, setActiveTab] = useState<'admins' | 'all_files' | 'trash_bin' | 'activity_logs' | 'database_backups' | 'rejection_history' | 'teacher_rankings'>('admins');
   const { t } = useThemeLanguage();
 
   // Master Admin dedicated search and filter states for Storage
@@ -657,6 +660,59 @@ export default function DashboardMasterAdmin({
     }
   };
 
+  const handleExportLogsCSV = () => {
+    const filteredLogs = logsList.filter(log => {
+      const mSearch = !logSearchQuery.trim() || 
+        log.actorName?.toLowerCase().includes(logSearchQuery.toLowerCase()) ||
+        log.fileName?.toLowerCase().includes(logSearchQuery.toLowerCase()) ||
+        log.fileSubject?.toLowerCase().includes(logSearchQuery.toLowerCase()) ||
+        log.fileBranch?.toLowerCase().includes(logSearchQuery.toLowerCase());
+      const mAction = !logActionFilter || log.action === logActionFilter;
+      return mSearch && mAction;
+    });
+
+    const csvRows = [
+      ["Timestamp", "Actor Name", "Actor Role", "Actor Branch", "Action", "File Name", "Subject", "File Branch", "Rejection Reason"].map(h => `"${h.replace(/"/g, '""')}"`).join(',')
+    ];
+
+    filteredLogs.forEach(log => {
+      const timestamp = log.createdAt ? (log.createdAt instanceof Date ? log.createdAt.toLocaleString() : String(log.createdAt)) : "just now";
+      const actorName = log.actorName || "";
+      const actorRole = log.actorRole || "";
+      const actorBranch = log.actorBranch || "";
+      const action = log.action || "";
+      const fileName = log.fileName || "";
+      const subject = log.fileSubject || "";
+      const fileBranch = log.fileBranch || "";
+      const rejectionReason = log.rejectionReason || "";
+
+      const row = [
+        timestamp,
+        actorName,
+        actorRole,
+        actorBranch,
+        action,
+        fileName,
+        subject,
+        fileBranch,
+        rejectionReason
+      ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(',');
+
+      csvRows.push(row);
+    });
+
+    const csvContent = "\uFEFF" + csvRows.join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `sristy_audit_logs_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const handlePurgeAllFiles = async () => {
     if (!window.confirm(t("Are you sure you want to delete ALL files from the database? This is IRREVERSIBLE and cannot be undone! User accounts and system settings will remain safe, but all academic archives and trash documents will be purged immediately."))) {
       return;
@@ -1170,32 +1226,6 @@ export default function DashboardMasterAdmin({
             }`}>{t("Performance")}</p>
             <h4 className="font-extrabold text-xs text-gray-800 dark:text-gray-150 mt-1 leading-snug">
               {t("Teacher Rankings")}
-            </h4>
-          </div>
-        </button>
-
-        {/* Campus Storage Quota Planner option */}
-        <button
-          onClick={() => setActiveTab('quota_planner')}
-          className={`group text-left p-4 rounded-xl border transition-all duration-300 cursor-pointer flex items-center gap-3.5 ${
-            activeTab === 'quota_planner'
-              ? 'bg-[#15803d]/5 dark:bg-[#15803d]/10 border-[#15803d] shadow-md ring-1 ring-[#15803d]/20 scale-[1.01]'
-              : 'bg-white dark:bg-slate-900 border-gray-150 dark:border-slate-800/80 hover:border-[#15803d]/40 hover:shadow-xs'
-          }`}
-        >
-          <div className={`p-2.5 rounded-lg transition-all duration-300 relative ${
-            activeTab === 'quota_planner'
-              ? 'bg-[#15803d] text-white shadow-sm'
-              : 'bg-gray-100 dark:bg-slate-800 text-gray-550 dark:text-gray-400 group-hover:bg-[#15803d]/10 group-hover:text-[#15803d]'
-          }`}>
-            <Sliders className="w-4.5 h-4.5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className={`font-bold text-[9px] tracking-wider uppercase leading-tight ${
-              activeTab === 'quota_planner' ? 'text-[#15803d] dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
-            }`}>{t("Planning")}</p>
-            <h4 className="font-extrabold text-xs text-gray-800 dark:text-gray-150 mt-1 leading-snug">
-              {t("Quota Planner")}
             </h4>
           </div>
         </button>
@@ -2827,6 +2857,16 @@ export default function DashboardMasterAdmin({
                 <option value="file_approved">{t("Admin Approval")}</option>
                 <option value="file_deleted">{t("File Deletion")}</option>
               </select>
+
+              <button
+                type="button"
+                onClick={handleExportLogsCSV}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs"
+                title={t("Export currently filtered logs as a standard CSV spreadsheet format")}
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span>{t("Export CSV")}</span>
+              </button>
             </div>
           </div>
 
@@ -3049,17 +3089,30 @@ export default function DashboardMasterAdmin({
       {activeTab === 'trash_bin' && (
         /* Recycle Bin display */
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-xs border border-gray-100 dark:border-slate-800 transition-colors animate-in fade-in duration-200">
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="bg-red-50 dark:bg-red-950/30 text-red-750 dark:text-red-400 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5">
-                <ShieldAlert className="w-3.5 h-3.5" />
-                <span>{t("Secure Trash Bin Module")}</span>
-              </span>
+          <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="bg-red-50 dark:bg-red-950/30 text-red-750 dark:text-red-400 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5">
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  <span>{t("Secure Trash Bin Module")}</span>
+                </span>
+              </div>
+              <h3 className="font-bold text-base text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase">{t("Global Recycle Bin / 30-Day Recovery Slot")}</h3>
+              <p className="text-xs text-gray-455 dark:text-gray-500 mt-1 leading-normal animate-pulse">
+                {t("Super Admin / Master Admin rules: You can restore any deleted files from any branch below within 30-days. Permanent physical deletion (Hard Delete) is restricted strictly to Super Administrators.")}
+              </p>
             </div>
-            <h3 className="font-bold text-base text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase">{t("Global Recycle Bin / 30-Day Recovery Slot")}</h3>
-            <p className="text-xs text-gray-455 dark:text-gray-500 mt-1 leading-normal animate-pulse">
-              {t("Super Admin / Master Admin rules: You can restore any deleted files from any branch below within 30-days. Permanent physical deletion (Hard Delete) is restricted strictly to Super Administrators.")}
-            </p>
+
+            {deletedFiles.length > 0 && onEmptyTrash && (
+              <button
+                type="button"
+                onClick={() => onEmptyTrash()}
+                className="inline-flex items-center justify-center gap-2 px-4.5 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-extrabold text-xs rounded-xl shadow-sm hover:shadow-md transition-all cursor-pointer self-start md:self-center"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{t("Empty Trash")}</span>
+              </button>
+            )}
           </div>
 
           {deletedFiles.length === 0 ? (
@@ -4101,250 +4154,6 @@ R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
         </div>
       )}
 
-      {activeTab === 'quota_planner' && (
-        <div className="space-y-6 animate-in fade-in duration-200" id="quota-planner-dashboard">
-          {/* Header Card */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-xs border border-gray-100 dark:border-slate-800 transition-colors">
-            <div className="border-b border-gray-50 dark:border-slate-800/50 pb-4 mb-6">
-              <h3 className="font-bold text-base text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase flex items-center gap-2">
-                <Sliders className="w-5 h-5 text-emerald-600 animate-pulse" />
-                <span>{t("Campus File Archive Storage Quota Planner")}</span>
-              </h3>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                {t("Dynamically model, project, and allocate storage quotas based on educator density and month-over-month archive expansion rates.")}
-              </p>
-            </div>
-
-            {(() => {
-              // Current active system stats
-              const totalActiveFiles = files.length;
-              const totalDeletedFiles = deletedFiles.length;
-              const activeBytes = files.reduce((acc, f) => acc + f.fileSize, 0);
-              const deletedBytes = deletedFiles.reduce((acc, f) => acc + f.fileSize, 0);
-              
-              const totalTeachersCount = adminsList.filter(u => u.role === 'teacher').length;
-              const totalBranchCount = branches.length || 5;
-
-              // Format helper for bytes
-              const formatSize = (bytes: number) => {
-                if (bytes === 0) return '0 B';
-                const k = 1024;
-                const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-                const i = Math.floor(Math.log(bytes) / Math.log(k));
-                return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-              };
-
-              // Calculations for Projection
-              // Projected new files = totalTeachersCount * monthlyFilesPerTeacher * durationMonths
-              const projectedNewFiles = totalTeachersCount * quotaMonthlyFiles * quotaDurationMonths;
-              // Projected additional storage in Bytes = projectedNewFiles * avgSizeMB * 1024 * 1024
-              const projectedBytes = projectedNewFiles * quotaAvgSizeMB * 1024 * 1024;
-              const grandTotalBytes = activeBytes + projectedBytes;
-
-              // Setup baseline thresholds (e.g. 50 GB default limit for Sandbox)
-              const sandboxMaxBytes = 50 * 1024 * 1024 * 1024; // 50 GB
-              const usagePercent = Math.min((grandTotalBytes / sandboxMaxBytes) * 100, 100);
-
-              let statusLabel = t("OPTIMAL");
-              let statusColor = "bg-emerald-500 text-white";
-              let statusDesc = t("Recommended. Grand projected total sits safely below the system-wide indexing capability thresholds.");
-
-              if (usagePercent > 80) {
-                statusLabel = t("THRESHOLD EXHAUSTED");
-                statusColor = "bg-red-500 text-white animate-pulse";
-                statusDesc = t("Urgent! Projected growth approaches index cap thresholds. Action needed to optimize formats or compress documents.");
-              } else if (usagePercent > 50) {
-                statusLabel = t("MODERATE GROWTH");
-                statusColor = "bg-amber-500 text-white";
-                statusDesc = t("Acceptable. System capacity supports this pace, but localized optimizations can restore overhead space.");
-              }
-
-              return (
-                <div className="space-y-6">
-                  {/* Current Active Baseline Stats Grid */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-gray-50/50 dark:bg-slate-800/15 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/50">
-                      <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">{t("Active Archive Volume")}</span>
-                      <p className="font-extrabold text-lg text-gray-800 dark:text-gray-150 font-mono leading-none">{formatSize(activeBytes)}</p>
-                      <span className="text-[9px] font-bold text-[#15803d] dark:text-brand-400 mt-1.5 inline-block">{totalActiveFiles} {t("indexed files")}</span>
-                    </div>
-
-                    <div className="bg-gray-50/50 dark:bg-slate-800/15 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/50">
-                      <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">{t("Pending Trash Bin Size")}</span>
-                      <p className="font-extrabold text-lg text-gray-800 dark:text-gray-150 font-mono leading-none">{formatSize(deletedBytes)}</p>
-                      <span className="text-[9px] font-bold text-red-500 mt-1.5 inline-block">{totalDeletedFiles} {t("reclaimable items")}</span>
-                    </div>
-
-                    <div className="bg-gray-50/50 dark:bg-slate-800/15 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/50">
-                      <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">{t("Faculty Count")}</span>
-                      <p className="font-extrabold text-lg text-gray-800 dark:text-gray-150 font-mono leading-none">{totalTeachersCount}</p>
-                      <span className="text-[9px] font-bold text-gray-400 mt-1.5 inline-block uppercase">{t("Registered Educators")}</span>
-                    </div>
-
-                    <div className="bg-gray-50/50 dark:bg-slate-800/15 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/50">
-                      <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">{t("Campuses & Branches")}</span>
-                      <p className="font-extrabold text-lg text-gray-800 dark:text-gray-150 font-mono leading-none">{totalBranchCount}</p>
-                      <span className="text-[9px] font-bold text-gray-400 mt-1.5 inline-block uppercase">{t("Allocated Sites")}</span>
-                    </div>
-                  </div>
-
-                  {/* Modelling Panel */}
-                  <div className="grid lg:grid-cols-12 gap-8 pt-4">
-                    {/* Controls Column (5 Cols) */}
-                    <div className="lg:col-span-5 space-y-6 bg-gray-50/50 dark:bg-slate-900/30 p-5 rounded-2xl border border-gray-150 dark:border-slate-800">
-                      <h4 className="font-extrabold text-xs text-[#15803d] dark:text-brand-405 uppercase tracking-wider flex items-center gap-1.5 mb-2">
-                        <Sliders className="w-4 h-4" />
-                        <span>{t("Growth Variables Configuration")}</span>
-                      </h4>
-
-                      {/* Slider 1: Monthly uploads */}
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center text-xs">
-                          <label className="font-bold text-gray-700 dark:text-gray-300">{t("Uploads Per Teacher/Month")}</label>
-                          <span className="font-mono bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-gray-100 dark:border-slate-700 font-bold text-gray-800 dark:text-gray-200">
-                            {quotaMonthlyFiles} {t("files")}
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="1"
-                          max="100"
-                          value={quotaMonthlyFiles}
-                          onChange={(e) => setQuotaMonthlyFiles(parseInt(e.target.value))}
-                          className="w-full accent-[#15803d] h-1.5 bg-gray-200 dark:bg-slate-800 rounded-lg cursor-pointer"
-                        />
-                      </div>
-
-                      {/* Slider 2: Average File Size */}
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center text-xs">
-                          <label className="font-bold text-gray-700 dark:text-gray-300">{t("Average Note/Material Size")}</label>
-                          <span className="font-mono bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-gray-100 dark:border-slate-700 font-bold text-gray-800 dark:text-gray-200">
-                            {quotaAvgSizeMB} MB
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="1"
-                          max="50"
-                          value={quotaAvgSizeMB}
-                          onChange={(e) => setQuotaAvgSizeMB(parseInt(e.target.value))}
-                          className="w-full accent-[#15803d] h-1.5 bg-gray-200 dark:bg-slate-800 rounded-lg cursor-pointer"
-                        />
-                      </div>
-
-                      {/* Slider 3: Duration */}
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center text-xs">
-                          <label className="font-bold text-gray-700 dark:text-gray-300">{t("Planning Horizon (Duration)")}</label>
-                          <span className="font-mono bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-gray-100 dark:border-slate-700 font-bold text-gray-800 dark:text-gray-200">
-                            {quotaDurationMonths} {t("months")}
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="1"
-                          max="36"
-                          value={quotaDurationMonths}
-                          onChange={(e) => setQuotaDurationMonths(parseInt(e.target.value))}
-                          className="w-full accent-[#15803d] h-1.5 bg-gray-200 dark:bg-slate-800 rounded-lg cursor-pointer"
-                        />
-                      </div>
-
-                      <div className="p-3 bg-blue-50/50 dark:bg-slate-800/20 text-[10.5px] leading-relaxed text-blue-800 dark:text-blue-300 rounded-xl border border-blue-100/40 dark:border-slate-800 font-medium">
-                        💡 <strong>{t("Projection model math:")}</strong> {t("Estimates that each of Sristy's registered teachers uploads the configured number of notes monthly, utilizing modern indexing architectures.")}
-                      </div>
-                    </div>
-
-                    {/* Results Column (7 Cols) */}
-                    <div className="lg:col-span-7 space-y-6">
-                      <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-gray-150 dark:border-slate-800 space-y-5">
-                        <h4 className="font-extrabold text-xs text-gray-850 dark:text-white uppercase tracking-wider">{t("Simulated Expansion Forecast")}</h4>
-
-                        {/* Forecast metrics cards */}
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="p-4 bg-gray-50/50 dark:bg-slate-850/20 rounded-xl border border-gray-100 dark:border-slate-800">
-                            <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">{t("Estimated New Uploads")}</span>
-                            <span className="font-mono text-lg font-extrabold text-gray-800 dark:text-gray-200">+{projectedNewFiles}</span>
-                            <span className="block text-[9.5px] text-gray-400 mt-1">{t("Additional PDF/PPT notes")}</span>
-                          </div>
-
-                          <div className="p-4 bg-gray-50/50 dark:bg-slate-850/20 rounded-xl border border-gray-100 dark:border-slate-800">
-                            <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">{t("Additional Storage Demand")}</span>
-                            <span className="font-mono text-lg font-extrabold text-[#15803d] dark:text-brand-405">+{formatSize(projectedBytes)}</span>
-                            <span className="block text-[9.5px] text-gray-400 mt-1">{t("Projected bytes growth")}</span>
-                          </div>
-                        </div>
-
-                        {/* Projection Gauge bar */}
-                        <div className="space-y-2 pt-2">
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="font-bold text-gray-700 dark:text-gray-300">{t("Total Projected Load (Grand Total)")}</span>
-                            <span className="font-mono font-bold text-gray-800 dark:text-gray-200">
-                              {formatSize(grandTotalBytes)} / 50 GB
-                            </span>
-                          </div>
-                          <div className="w-full bg-gray-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden flex">
-                            {/* Current utilized section */}
-                            <div 
-                              style={{ width: `${Math.min((activeBytes / sandboxMaxBytes) * 100, 100)}%` }}
-                              className="bg-emerald-600 h-full"
-                              title="Current Active Storage"
-                            />
-                            {/* Projected growth section */}
-                            <div 
-                              style={{ width: `${Math.min((projectedBytes / sandboxMaxBytes) * 100, 100)}%` }}
-                              className="bg-blue-500 h-full opacity-80"
-                              title="Projected Storage Growth"
-                            />
-                          </div>
-                          <div className="flex justify-between text-[9px] font-bold text-gray-400 uppercase tracking-wider pt-0.5">
-                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-xs bg-emerald-600" /> {t("Current Active")} ({formatSize(activeBytes)})</span>
-                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-xs bg-blue-500" /> {t("Projected Growth")} ({formatSize(projectedBytes)})</span>
-                          </div>
-                        </div>
-
-                        {/* Status Recommendation Flag */}
-                        <div className="p-4 rounded-xl flex gap-3 bg-gray-50/50 dark:bg-slate-850/30 border border-gray-100 dark:border-slate-800">
-                          <div className={`px-2.5 py-1.5 rounded-lg text-center font-bold text-[10px] uppercase h-fit ${statusColor}`}>
-                            {statusLabel}
-                          </div>
-                          <div className="space-y-1">
-                            <p className="font-bold text-xs text-gray-800 dark:text-gray-150">{t("Administrative Advice & Impact Summary")}</p>
-                            <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
-                              {statusDesc}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Quota optimization instructions */}
-                      <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-gray-150 dark:border-slate-800 space-y-3">
-                        <h4 className="font-extrabold text-xs text-gray-850 dark:text-white uppercase tracking-wider">{t("Proactive Optimization Checklist")}</h4>
-                        
-                        <div className="divide-y divide-gray-100 dark:divide-slate-800 text-[11px] font-medium text-gray-600 dark:text-gray-300">
-                          <div className="py-2.5 flex items-start gap-2.5">
-                            <span className="h-4.5 w-4.5 rounded-full bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-brand-400 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">✓</span>
-                            <p>{t("Empty pending Trash Bin items immediately to reclaim up to")} <strong>{formatSize(deletedBytes)}</strong> {t("of direct physical R2 cloud storage space instantly.")}</p>
-                          </div>
-                          <div className="py-2.5 flex items-start gap-2.5">
-                            <span className="h-4.5 w-4.5 rounded-full bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-brand-400 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">✓</span>
-                            <p>{t("Enforce maximum limits of 10MB per PDF/PPT notes file directly on branch members using the standard user roles control panels.")}</p>
-                          </div>
-                          <div className="py-2.5 flex items-start gap-2.5">
-                            <span className="h-4.5 w-4.5 rounded-full bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-brand-400 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">✓</span>
-                            <p>{t("Conduct routine manual SQL compression runs on archived blobs directly from the Sristy Family Central backups manager panel.")}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

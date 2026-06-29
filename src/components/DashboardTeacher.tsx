@@ -32,7 +32,10 @@ export default function DashboardTeacher({
   const [archiveTab, setArchiveTab] = useState<'my_submissions' | 'department_materials'>('my_submissions');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [fileValidationErrors, setFileValidationErrors] = useState<{ [fileName: string]: string }>({});
+  const [fileProgresses, setFileProgresses] = useState<{ [fileName: string]: number }>({});
+  const [fileStatuses, setFileStatuses] = useState<{ [fileName: string]: 'pending' | 'uploading' | 'success' | 'error' }>({});
   const [description, setDescription] = useState('');
   const [isDragActive, setIsDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -189,47 +192,92 @@ export default function DashboardTeacher({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragActive(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) {
-      validateAndSetFile(file);
+    if (loading) return;
+    const filesList = e.dataTransfer.files;
+    if (filesList && filesList.length > 0) {
+      validateAndAddFiles(Array.from(filesList));
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      validateAndSetFile(file);
+    if (loading) return;
+    const filesList = e.target.files;
+    if (filesList && filesList.length > 0) {
+      validateAndAddFiles(Array.from(filesList));
     }
   };
 
-  const validateAndSetFile = (file: File) => {
+  const validateAndAddFiles = (filesList: File[]) => {
     setUploadError('');
     setUploadSuccess('');
-
-    // Suffix check
-    const parts = file.name.split('.');
-    const ext = parts[parts.length - 1].toLowerCase();
     
-    if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      setUploadError(t("Invalid file extension. Only PDF, DOC/DOCX, PPT/PPTX and images are allowed."));
-      setSelectedFile(null);
-      return;
-    }
+    const newValidFiles: File[] = [];
+    const newErrors = { ...fileValidationErrors };
 
-    // Size check
-    if (file.size > MAX_FILE_SIZE) {
-      setUploadError(t("File exceeds SLA limit of 10MB (Contract Clause 11.2). Please compress your resource file."));
-      setSelectedFile(null);
-      return;
-    }
+    filesList.forEach(file => {
+      const parts = file.name.split('.');
+      const ext = parts[parts.length - 1].toLowerCase();
+      
+      if (!ALLOWED_EXTENSIONS.includes(ext)) {
+        newErrors[file.name] = t("Invalid file extension. Only PDF, DOC/DOCX, PPT/PPTX and images are allowed.");
+        return;
+      }
 
-    setSelectedFile(file);
+      if (file.size > MAX_FILE_SIZE) {
+        newErrors[file.name] = t("File exceeds SLA limit of 10MB (Contract Clause 11.2). Please compress your resource file.");
+        return;
+      }
+
+      // Check for duplicates in current selection
+      if (selectedFiles.some(f => f.name === file.name && f.size === file.size)) {
+        return; // Skip duplicate
+      }
+
+      newValidFiles.push(file);
+      // Clean up previous error if any
+      delete newErrors[file.name];
+    });
+
+    if (newValidFiles.length > 0) {
+      setSelectedFiles(prev => [...prev, ...newValidFiles]);
+      setFileStatuses(prev => {
+        const next = { ...prev };
+        newValidFiles.forEach(f => {
+          next[f.name] = 'pending';
+        });
+        return next;
+      });
+    }
+    setFileValidationErrors(newErrors);
+  };
+
+  const handleRemoveFile = (index: number) => {
+    if (loading) return;
+    const fileToRemove = selectedFiles[index];
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+    if (fileToRemove) {
+      setFileProgresses(prev => {
+        const next = { ...prev };
+        delete next[fileToRemove.name];
+        return next;
+      });
+      setFileStatuses(prev => {
+        const next = { ...prev };
+        delete next[fileToRemove.name];
+        return next;
+      });
+      setFileValidationErrors(prev => {
+        const next = { ...prev };
+        delete next[fileToRemove.name];
+        return next;
+      });
+    }
   };
 
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedFile) {
-      setUploadError(t("Please choose or drag-and-drop a file note first."));
+    if (selectedFiles.length === 0) {
+      setUploadError(t("Please choose or drag-and-drop educational files first."));
       return;
     }
 
@@ -277,66 +325,92 @@ export default function DashboardTeacher({
       return;
     }
 
-    try {
-      setUploadProgress(0);
-      const parts = selectedFile.name.split('.');
-      const fileType = parts[parts.length - 1].toLowerCase();
+    let successCount = 0;
+    const failedFiles: File[] = [];
+    const newErrors = { ...fileValidationErrors };
 
-      // Hybrid Upload: Attempt Cloudflare R2 Upload; Fallback to default Firebase Storage on credentials error
-      let downloadUrl = '';
-      let fileRefPath = '';
+    for (const file of selectedFiles) {
+      setFileStatuses(prev => ({ ...prev, [file.name]: 'uploading' }));
+      setFileProgresses(prev => ({ ...prev, [file.name]: 0 }));
 
       try {
-        const r2Response = await fetch('/api/r2/presigned-upload-url', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileName: selectedFile.name, fileType: selectedFile.type }),
-        });
+        const parts = file.name.split('.');
+        const fileType = parts[parts.length - 1].toLowerCase();
 
-        if (r2Response.ok) {
-          const r2Data = await r2Response.json();
-          // Upload direct byte content to Cloudflare R2 storage using presigned upload PUT URL
-          await new Promise<void>((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open('PUT', r2Data.uploadUrl);
-            xhr.setRequestHeader('Content-Type', selectedFile.type || 'application/octet-stream');
+        let downloadUrl = '';
+        let fileRefPath = '';
 
-            xhr.upload.onprogress = (event) => {
-              if (event.lengthComputable) {
-                const percentComplete = Math.round((event.loaded / event.total) * 100);
-                setUploadProgress(percentComplete);
-              }
-            };
-
-            xhr.onload = () => {
-              if (xhr.status >= 200 && xhr.status < 300) {
-                resolve();
-              } else {
-                reject(new Error(`R2 direct PUT upload raw fetch failed: ${xhr.status}`));
-              }
-            };
-
-            xhr.onerror = () => {
-              reject(new Error('R2 direct PUT upload network error'));
-            };
-
-            xhr.send(selectedFile);
+        try {
+          const r2Response = await fetch('/api/r2/presigned-upload-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileName: file.name, fileType: file.type }),
           });
 
-          downloadUrl = r2Data.fileUrl;
-          fileRefPath = r2Data.storagePath;
-          console.log('Secure Direct R2 upload pipeline complete:', fileRefPath);
-        } else {
-          // If server reports unconfigured, fallback automatically
-          console.warn('S3 R2 Storage is unconfigured. Defaulting back to client-driven Firebase Storage routing.');
-          const fileRefPathFallback = `files/${user.uid}_${Date.now()}_${selectedFile.name}`;
+          if (r2Response.ok) {
+            const r2Data = await r2Response.json();
+            await new Promise<void>((resolve, reject) => {
+              const xhr = new XMLHttpRequest();
+              xhr.open('PUT', r2Data.uploadUrl);
+              xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+
+              xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable) {
+                  const percentComplete = Math.round((event.loaded / event.total) * 100);
+                  setFileProgresses(prev => ({ ...prev, [file.name]: percentComplete }));
+                }
+              };
+
+              xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                  resolve();
+                } else {
+                  reject(new Error(`R2 direct PUT upload raw fetch failed: ${xhr.status}`));
+                }
+              };
+
+              xhr.onerror = () => {
+                reject(new Error('R2 direct PUT upload network error'));
+              };
+
+              xhr.send(file);
+            });
+
+            downloadUrl = r2Data.fileUrl;
+            fileRefPath = r2Data.storagePath;
+            console.log('Secure Direct R2 upload pipeline complete:', fileRefPath);
+          } else {
+            console.warn('S3 R2 Storage is unconfigured. Defaulting back to client-driven Firebase Storage routing.');
+            const fileRefPathFallback = `files/${user.uid}_${Date.now()}_${file.name}`;
+            const storageRef = ref(storage, fileRefPathFallback);
+            const uploadTask = uploadBytesResumable(storageRef, file);
+            await new Promise<void>((resolve, reject) => {
+              uploadTask.on('state_changed',
+                (snapshot) => {
+                  const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+                  setFileProgresses(prev => ({ ...prev, [file.name]: progress }));
+                },
+                (error) => {
+                  reject(error);
+                },
+                () => {
+                  resolve();
+                }
+              );
+            });
+            downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+            fileRefPath = fileRefPathFallback;
+          }
+        } catch (r2Err: any) {
+          console.warn('Cloudflare R2 Direct Upload bypassed because of network/setup error, triggering Firebase Storage fallback: ', r2Err);
+          const fileRefPathFallback = `files/${user.uid}_${Date.now()}_${file.name}`;
           const storageRef = ref(storage, fileRefPathFallback);
-          const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+          const uploadTask = uploadBytesResumable(storageRef, file);
           await new Promise<void>((resolve, reject) => {
             uploadTask.on('state_changed',
               (snapshot) => {
                 const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-                setUploadProgress(progress);
+                setFileProgresses(prev => ({ ...prev, [file.name]: progress }));
               },
               (error) => {
                 reject(error);
@@ -349,76 +423,70 @@ export default function DashboardTeacher({
           downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
           fileRefPath = fileRefPathFallback;
         }
-      } catch (r2Err: any) {
-        console.warn('Cloudflare R2 Direct Upload bypassed because of network/setup error, triggering Firebase Storage fallback: ', r2Err);
-        const fileRefPathFallback = `files/${user.uid}_${Date.now()}_${selectedFile.name}`;
-        const storageRef = ref(storage, fileRefPathFallback);
-        const uploadTask = uploadBytesResumable(storageRef, selectedFile);
-        await new Promise<void>((resolve, reject) => {
-          uploadTask.on('state_changed',
-            (snapshot) => {
-              const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-              setUploadProgress(progress);
-            },
-            (error) => {
-              reject(error);
-            },
-            () => {
-              resolve();
-            }
-          );
-        });
-        downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-        fileRefPath = fileRefPathFallback;
+
+        const payload: any = {
+          fileName: file.name,
+          fileType,
+          fileSize: file.size,
+          fileUrl: downloadUrl,
+          storagePath: fileRefPath,
+          description: description.trim(),
+          uploadedBy: user.uid,
+          uploaderName: user.fullName,
+          uploaderRole: 'teacher',
+          branch: user.branch || 'Sristy Academic School, Tangail',
+          subject: finalSub,
+          chapter: finalCh,
+          topic: finalTopic,
+          itemType: finalItemType,
+          isApproved: false,
+          downloadCount: 0,
+          createdAt: serverTimestamp(),
+        };
+
+        const docRef = await addDoc(collection(db, 'files'), payload);
+
+        try {
+          await addDoc(collection(db, 'activity_logs'), {
+            action: 'file_uploaded',
+            actorId: user.uid,
+            actorName: user.fullName,
+            actorRole: user.role,
+            actorBranch: user.branch || '',
+            fileId: docRef.id,
+            fileName: payload.fileName,
+            fileSubject: payload.subject,
+            fileBranch: payload.branch,
+            createdAt: serverTimestamp()
+          });
+        } catch (logErr) {
+          console.warn("Failed to write activity upload log:", logErr);
+        }
+
+        successCount++;
+        setFileStatuses(prev => ({ ...prev, [file.name]: 'success' }));
+        setFileProgresses(prev => ({ ...prev, [file.name]: 100 }));
+      } catch (err: any) {
+        console.error(`Firebase Storage Upload Error for ${file.name}:`, err);
+        const exactMsg = err?.message || String(err);
+        newErrors[file.name] = exactMsg.includes("permissions") 
+          ? t("Missing or insufficient Firestore database permissions. Try logging out and back in to refresh your teacher credentials.") 
+          : t("Failed to upload file: ") + exactMsg;
+        setFileStatuses(prev => ({ ...prev, [file.name]: 'error' }));
+        failedFiles.push(file);
       }
+    }
 
-      // 2. Draft target database payload
-      const payload: any = {
-        fileName: selectedFile.name,
-        fileType,
-        fileSize: selectedFile.size,
-        fileUrl: downloadUrl,
-        storagePath: fileRefPath,
-        description: description.trim(),
-        uploadedBy: user.uid,
-        uploaderName: user.fullName,
-        uploaderRole: 'teacher',
-        branch: user.branch || 'Sristy Academic School, Tangail',
-        subject: finalSub,
-        chapter: finalCh,
-        topic: finalTopic,
-        itemType: finalItemType,
-        isApproved: false, // Must be approved by Branch Admin or Master Admin
-        downloadCount: 0,
-        createdAt: serverTimestamp(),
-      };
+    setFileValidationErrors(newErrors);
 
-      // Record file metadata document in Firestore files collection
-      const docRef = await addDoc(collection(db, 'files'), payload);
-
-      // Record activity log dynamically
-      try {
-        await addDoc(collection(db, 'activity_logs'), {
-          action: 'file_uploaded',
-          actorId: user.uid,
-          actorName: user.fullName,
-          actorRole: user.role,
-          actorBranch: user.branch || '',
-          fileId: docRef.id,
-          fileName: payload.fileName,
-          fileSubject: payload.subject,
-          fileBranch: payload.branch,
-          createdAt: serverTimestamp()
-        });
-      } catch (logErr) {
-        console.warn("Failed to write activity upload log:", logErr);
-      }
-
-      setUploadSuccess(t("Upload successful! Awaiting admin approval."));
-      setSelectedFile(null);
+    if (successCount > 0) {
+      setUploadSuccess(
+        t("Upload successful! {count} file(s) are awaiting admin approval.")
+          .replace("{count}", String(successCount))
+      );
+      setSelectedFiles(failedFiles);
       setDescription('');
       
-      // Reset hierarchical options
       setChapter('');
       setNewChapterText('');
       setTopic('');
@@ -430,16 +498,11 @@ export default function DashboardTeacher({
       setIsNewItemTypeForm(false);
       
       onUploadSuccess();
-    } catch (err: any) {
-      console.error("Firebase Storage Upload Error Cascade: ", err);
-      const exactMsg = err?.message || String(err);
-      setUploadError(exactMsg.includes("permissions") 
-        ? t("Missing or insufficient Firestore database permissions. Try logging out and back in to refresh your teacher credentials.") 
-        : t("Failed to upload file: ") + exactMsg);
-    } finally {
-      setLoading(false);
-      setUploadProgress(null);
+    } else {
+      setUploadError(t("All file uploads in the batch failed. Please inspect the errors below."));
     }
+
+    setLoading(false);
   };
 
   return (
@@ -561,8 +624,8 @@ export default function DashboardTeacher({
                   ? 'border-gray-200 dark:border-slate-800 bg-gray-50/20 dark:bg-slate-900/20 cursor-not-allowed opacity-60'
                   : isDragActive 
                     ? 'border-brand-500 bg-brand-50 dark:bg-slate-800 cursor-pointer' 
-                    : selectedFile 
-                      ? 'border-emerald-400 bg-emerald-50/20 dark:bg-emerald-955/10 cursor-pointer' 
+                    : selectedFiles.length > 0 
+                      ? 'border-emerald-400 bg-emerald-50/25 dark:bg-emerald-955/10 cursor-pointer' 
                       : 'border-gray-200 dark:border-slate-700 hover:border-brand-500/50 dark:hover:border-brand-500/50 bg-gray-50/50 dark:bg-slate-800/30 cursor-pointer'
               }`}
             >
@@ -573,17 +636,20 @@ export default function DashboardTeacher({
                 className="hidden"
                 accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg"
                 disabled={loading}
+                multiple
               />
 
               <div className="flex flex-col items-center justify-center space-y-2">
-                <div className={`p-3 rounded-full ${selectedFile ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600' : 'bg-brand-50 dark:bg-slate-800 text-brand-500'}`}>
+                <div className={`p-3 rounded-full ${selectedFiles.length > 0 ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600' : 'bg-brand-50 dark:bg-slate-800 text-brand-500'}`}>
                   <Upload className="w-6 h-6" />
                 </div>
-                {selectedFile ? (
+                {selectedFiles.length > 0 ? (
                   <div>
-                    <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 break-all">{selectedFile.name}</p>
+                    <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                      {selectedFiles.length} {selectedFiles.length === 1 ? t("file selected") : t("files selected")}
+                    </p>
                     <p className="text-[10px] text-emerald-605 dark:text-emerald-400 font-medium tracking-wide mt-1">
-                      {t("Ready to encode")}: {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
+                      {t("Total Size")}: {(selectedFiles.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024)).toFixed(2)} MB
                     </p>
                   </div>
                 ) : (
@@ -597,6 +663,116 @@ export default function DashboardTeacher({
             <p className="text-[9px] text-gray-400 dark:text-gray-500 leading-normal">
               {t("Supported file types: PDF, Word, PPT or Image (Max 10MB due to SLA limit)")}
             </p>
+
+            {/* Interactive File Queue List */}
+            {selectedFiles.length > 0 && (
+              <div className="space-y-2 mt-4 max-h-[250px] overflow-y-auto pr-1 border border-gray-100 dark:border-slate-800 rounded-xl p-3 bg-gray-50/30 dark:bg-slate-900/40">
+                <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-slate-800">
+                  <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    {t("Upload Queue")} ({selectedFiles.length})
+                  </span>
+                  {!loading && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedFiles([]);
+                        setFileValidationErrors({});
+                        setFileProgresses({});
+                        setFileStatuses({});
+                      }}
+                      className="text-[10px] font-bold text-red-500 hover:underline cursor-pointer"
+                    >
+                      {t("Clear All")}
+                    </button>
+                  )}
+                </div>
+                {selectedFiles.map((file, idx) => {
+                  const parts = file.name.split('.');
+                  const ext = parts[parts.length - 1].toLowerCase();
+                  const isImg = ['png', 'jpg', 'jpeg'].includes(ext);
+                  const isPdf = ext === 'pdf';
+                  const isWord = ['doc', 'docx'].includes(ext);
+                  const isPpt = ['ppt', 'pptx'].includes(ext);
+
+                  let themeClass = "text-gray-500 bg-gray-50 dark:bg-slate-800";
+                  if (isPdf) themeClass = "text-red-600 bg-red-50 dark:bg-red-950/30";
+                  else if (isWord) themeClass = "text-blue-600 bg-blue-50 dark:bg-blue-950/30";
+                  else if (isPpt) themeClass = "text-amber-600 bg-amber-50 dark:bg-amber-950/30";
+                  else if (isImg) themeClass = "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30";
+
+                  const progress = fileProgresses[file.name] || 0;
+                  const status = fileStatuses[file.name] || 'pending';
+                  const fileErr = fileValidationErrors[file.name];
+
+                  return (
+                    <div key={idx} className="flex flex-col p-2.5 bg-white dark:bg-slate-950 border border-gray-100 dark:border-slate-900 rounded-lg shadow-xxs">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className={`p-2 rounded-lg shrink-0 ${themeClass}`}>
+                            {isImg ? <FileImage className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xxs font-bold text-gray-700 dark:text-gray-200 truncate max-w-[150px] sm:max-w-[200px]" title={file.name}>
+                              {file.name}
+                            </p>
+                            <p className="text-[9px] text-gray-400 dark:text-gray-500 font-medium">
+                              {(file.size / (1024 * 1024)).toFixed(2)} MB
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {status === 'uploading' && (
+                            <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1">
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              {progress}%
+                            </span>
+                          )}
+                          {status === 'success' && (
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 bg-emerald-50 dark:bg-emerald-955/30 px-2 py-0.5 rounded-md">
+                              <CheckCircle2 className="w-3 h-3" />
+                              {t("Success")}
+                            </span>
+                          )}
+                          {status === 'error' && (
+                            <span className="text-[10px] text-red-600 dark:text-red-400 font-bold flex items-center gap-1 bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded-md">
+                              <AlertCircle className="w-3 h-3" />
+                              {t("Failed")}
+                            </span>
+                          )}
+                          {status === 'pending' && !loading && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveFile(idx)}
+                              className="p-1 text-gray-400 hover:text-red-500 dark:hover:text-red-400 cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Progress bar for active upload */}
+                      {status === 'uploading' && (
+                        <div className="w-full bg-gray-100 dark:bg-slate-800 h-1 rounded-full overflow-hidden mt-2">
+                          <div 
+                            className="bg-brand-500 h-full transition-all duration-300" 
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                      )}
+
+                      {/* Validation or upload error messages */}
+                      {fileErr && (
+                        <p className="text-[9px] text-red-600 dark:text-red-400 mt-1.5 font-medium leading-relaxed">
+                          ⚠️ {fileErr}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Hierarchical metadata steps */}
             <div className="space-y-3.5 border-t border-b border-gray-105/70 dark:border-slate-800 py-3.5">
@@ -809,9 +985,9 @@ export default function DashboardTeacher({
 
             <button
               type="submit"
-              disabled={loading || !selectedFile}
+              disabled={loading || selectedFiles.length === 0}
               className={`w-full py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                (selectedFile && !loading)
+                (selectedFiles.length > 0 && !loading)
                   ? 'bg-brand-500 text-white hover:bg-brand-600 shadow-md' 
                   : 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-50'
               }`}

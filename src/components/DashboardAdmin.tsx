@@ -42,6 +42,7 @@ interface DashboardAdminProps {
   onFileDelete: (fileId: string, bypassConfirm?: boolean) => void;
   onFileRestore: (fileId: string) => void;
   onFileHardDelete: (fileId: string) => void;
+  onEmptyTrash?: (fileIds?: string[]) => void;
   onDownload: (file: FileArchive) => void;
   onPreview?: (file: FileArchive) => void;
   onViewTeacherDetails?: (teacherUid: string) => void;
@@ -56,6 +57,7 @@ export default function DashboardAdmin({
   onFileDelete,
   onFileRestore,
   onFileHardDelete,
+  onEmptyTrash,
   onDownload,
   onPreview,
   onViewTeacherDetails
@@ -1674,17 +1676,30 @@ export default function DashboardAdmin({
       {activeTab === 'trash_bin' && (
         /* Recycle Bin display */
         <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border border-gray-100 dark:border-slate-800 shadow-xs transition-colors">
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="bg-red-50 dark:bg-red-950/30 text-red-750 dark:text-red-400 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5">
-                <ShieldAlert className="w-3.5 h-3.5" />
-                <span>{t("Secure Trash Bin Module")}</span>
-              </span>
+          <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="bg-red-50 dark:bg-red-950/30 text-red-750 dark:text-red-400 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5">
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  <span>{t("Secure Trash Bin Module")}</span>
+                </span>
+              </div>
+              <h3 className="font-bold text-base text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase">{t("Recycle Bin / 30-Day Recovery Slot")}</h3>
+              <p className="text-xs text-gray-455 dark:text-gray-500 mt-1 leading-normal">
+                {t("Branch Admin recover rules: You can restore any deleted file from your branch space within 30 days. Hard delete actions are managed by Super Admin.")}
+              </p>
             </div>
-            <h3 className="font-bold text-base text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase">{t("Recycle Bin / 30-Day Recovery Slot")}</h3>
-            <p className="text-xs text-gray-455 dark:text-gray-500 mt-1 leading-normal">
-              {t("Branch Admin recover rules: You can restore any deleted file from your branch space within 30 days. Hard delete actions are managed by Super Admin.")}
-            </p>
+
+            {filteredDeletedFiles.length > 0 && onEmptyTrash && (
+              <button
+                type="button"
+                onClick={() => onEmptyTrash(filteredDeletedFiles.map(f => f.id))}
+                className="inline-flex items-center justify-center gap-2 px-4.5 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-extrabold text-xs rounded-xl shadow-sm hover:shadow-md transition-all cursor-pointer self-start md:self-center"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{t("Empty Trash")}</span>
+              </button>
+            )}
           </div>          {filteredDeletedFiles.length === 0 ? (
             <div className="text-center py-12 text-gray-400 dark:text-gray-500 text-xs">
               {t("The branch recycling storage is empty. No files require attention!")}

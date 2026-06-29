@@ -432,10 +432,6 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
         <div className="w-full h-1 bg-[#15803d] select-none" />
         {/* Header Branding */}
         <div className="bg-[#15803d] p-4 sm:p-8 text-center text-white relative">
-          <div className="absolute top-4 right-4 bg-white/10 px-2.5 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wider flex items-center gap-1">
-            <Sparkles className="w-2.5 h-2.5" />
-            <span>{t("Authorized Access Control Gateway")}</span>
-          </div>
           <div className="flex justify-center mb-3">
             {logoFailed ? (
               <div className="w-16 h-16 rounded-xl bg-white/20 flex items-center justify-center text-white backdrop-blur-xs">

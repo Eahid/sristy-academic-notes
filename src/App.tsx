@@ -29,7 +29,6 @@ import DashboardMasterAdmin from './components/DashboardMasterAdmin';
 import DashboardAdmin from './components/DashboardAdmin';
 import DashboardTeacher from './components/DashboardTeacher';
 import DashboardViewer from './components/DashboardViewer';
-import UserSystemDiagram from './components/UserSystemDiagram';
 import DocPreviewModal from './components/DocPreviewModal';
 import FileCard from './components/FileCard';
 import BatchDownloadBar from './components/BatchDownloadBar';
@@ -696,6 +695,82 @@ export default function App() {
     }
   };
 
+  const handleEmptyTrash = async (fileIds?: string[]) => {
+    // If specific fileIds are provided, we delete those. Otherwise we delete all files in deletedFiles.
+    const targets = fileIds 
+      ? deletedFiles.filter(f => fileIds.includes(f.id))
+      : deletedFiles;
+
+    if (targets.length === 0) {
+      alert(t("Trash is already empty."));
+      return;
+    }
+
+    if (!window.confirm(t("Are you sure you want to PERMANENTLY and IRREVERSIBLY empty the trash? This will delete all selected files from Sristy servers forever. This action cannot be undone!"))) {
+      return;
+    }
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const targetFile of targets) {
+      try {
+        if (targetFile.storagePath) {
+          // Attempt clean up from Cloudflare R2
+          try {
+            const r2DelRes = await fetch('/api/r2/delete', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ storagePath: targetFile.storagePath }),
+            });
+            if (r2DelRes.ok) {
+              console.log('R2: Successfully cleared physical storage binary.');
+            }
+          } catch (r2DelErr) {
+            console.warn('R2 deletion request failed, continuing fallback processes: ', r2DelErr);
+          }
+
+          // Keep standard Firebase Storage cleanup as a fallback
+          try {
+            const fileStorageRef = ref(storage, targetFile.storagePath);
+            await deleteObject(fileStorageRef);
+            console.log('Firebase Storage: Successfully deleted hosted binary.');
+          } catch (storageErr) {
+            console.warn('Firebase Storage deletion ignored:', storageErr);
+          }
+        }
+
+        await deleteDoc(doc(db, 'files', targetFile.id));
+
+        // audit log
+        if (currentUser) {
+          try {
+            await addDoc(collection(db, 'activity_logs'), {
+              action: 'file_hard_deleted',
+              actorId: currentUser.uid,
+              actorName: currentUser.fullName,
+              actorRole: currentUser.role,
+              actorBranch: currentUser.branch || '',
+              fileId: targetFile.id,
+              fileName: targetFile.fileName,
+              fileSubject: targetFile.subject,
+              fileBranch: targetFile.branch,
+              createdAt: serverTimestamp()
+            });
+          } catch (logErr) {
+            console.warn("Failed to write hard deletion log:", logErr);
+          }
+        }
+        successCount++;
+      } catch (err) {
+        console.error(`Failed to complete file hard delete for ${targetFile.fileName}: `, err);
+        failCount++;
+      }
+    }
+
+    alert(t("Successfully emptied trash! {successCount} files were permanently deleted.").replace("{successCount}", String(successCount)));
+  };
+
   // Group approved files by subject for visual catalog on homepage
   const getSubjectCounts = () => {
     const counts: { [key: string]: number } = {};
@@ -897,6 +972,7 @@ export default function App() {
                 onFileDelete={handleDeleteFile}
                 onFileRestore={handleRestoreFile}
                 onFileHardDelete={handleHardDeleteFile}
+                onEmptyTrash={handleEmptyTrash}
                 onDownload={handleDownloadAttempt}
                 onPreview={handlePreviewAttempt}
                 onViewTeacherDetails={setViewingTeacherUid}
@@ -913,6 +989,7 @@ export default function App() {
                 onFileDelete={handleDeleteFile}
                 onFileRestore={handleRestoreFile}
                 onFileHardDelete={handleHardDeleteFile}
+                onEmptyTrash={handleEmptyTrash}
                 onDownload={handleDownloadAttempt}
                 onPreview={handlePreviewAttempt}
                 onViewTeacherDetails={setViewingTeacherUid}
@@ -961,7 +1038,7 @@ export default function App() {
                 <span>{t("Centralized Resource Network")}</span>
               </span>
               <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-gray-900 dark:text-white tracking-tight font-display leading-[1.1]">
-                {t("Unified Storage, Note's &")} <br className="hidden sm:inline" />
+                {t("Sristy Education Family")} <br className="hidden sm:inline" />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-500 via-brand-600 to-indigo-600">
                   {t("File Sharing Platform")}
                 </span>
@@ -989,8 +1066,56 @@ export default function App() {
 
 
 
-            {/* Interactive User System Diagram */}
-            <UserSystemDiagram />
+            {/* Unified Academic Platform Key Pillars */}
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 py-6 border-y border-gray-150/50 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-900/10 p-6 rounded-3xl">
+              <div className="space-y-3">
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 w-fit">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <h3 className="font-extrabold text-sm text-gray-950 dark:text-white uppercase tracking-tight">
+                  {t("Verified Material")}
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
+                  {t("Every lecture sheet, study guide, and question is uploaded and audited by authorized branch educators.")}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div className="p-2.5 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 w-fit">
+                  <School className="w-5 h-5" />
+                </div>
+                <h3 className="font-extrabold text-sm text-gray-950 dark:text-white uppercase tracking-tight">
+                  {t("Unified Directory")}
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
+                  {t("Bridges multiple Sristy colleges and school campuses under a singular directory for seamless access.")}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 w-fit">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                <h3 className="font-extrabold text-sm text-gray-950 dark:text-white uppercase tracking-tight">
+                  {t("Structured Library")}
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
+                  {t("Categorized intuitively by subjects, classes, semesters, and chapters to avoid digital clutter.")}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 w-fit">
+                  <FolderLock className="w-5 h-5" />
+                </div>
+                <h3 className="font-extrabold text-sm text-gray-950 dark:text-white uppercase tracking-tight">
+                  {t("Secure Distribution")}
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
+                  {t("Rigorous access regulations guarantee that files are safely stored, previewed, and fetched cryptographically.")}
+                </p>
+              </div>
+            </div>
             <div className="space-y-6 scroll-mt-24" id="subject-catalog">
               <div className="text-center sm:text-left">
                 <h2 className="text-2xl font-bold font-display text-gray-900 dark:text-white leading-tight">{t("Subject-wise Catalogues")}</h2>

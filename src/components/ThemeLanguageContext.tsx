@@ -423,7 +423,17 @@ export const translations: Record<string, string> = {
   "Tip: Displaying using your local web browser engine. High performance & privacy.": "পরামর্শ: আপনার ব্রাউজারের নিজস্ব ইঞ্জিন ব্যবহার করে দেখানো হচ্ছে। অত্যন্ত দ্রুত ও নিরাপদ।",
   "Restore Size": "আগের সাইজে ফিরুন",
   "Fullscreen Mode": "ফুলস্ক্রিন মোড",
-  "Close Preview": "প্রিভিউ বন্ধ করুন"
+  "Close Preview": "প্রিভিউ বন্ধ করুন",
+
+  // Public Features Highlights
+  "Verified Material": "অনুমোদিত রিসোর্স",
+  "Every lecture sheet, study guide, and question is uploaded and audited by authorized branch educators.": "প্রতিটি লেকচার শিট, গাইড এবং প্রশ্নপত্র অনুমোদিত শাখা শিক্ষকদের দ্বারা আপলোড এবং যাচাই করা হয়।",
+  "Unified Directory": "সমন্বিত ডিরেক্টরি",
+  "Bridges multiple Sristy colleges and school campuses under a singular directory for seamless access.": "সবগুলো কলেজ এবং স্কুল ক্যাম্পাসকে একটি অভিন্ন ডিরেক্টরিতে সংযুক্ত করে সহজে ফাইল পাওয়ার জন্য।",
+  "Structured Library": "সুসজ্জিত লাইব্রেরি",
+  "Categorized intuitively by subjects, classes, semesters, and chapters to avoid digital clutter.": "ডিজিটাল বিশৃঙ্খলা এড়াতে বিষয়, শ্রেণী, সেমিস্টার এবং অধ্যায় অনুযায়ী সাজানো হয়েছে।",
+  "Secure Distribution": "নিরাপদ বিতরণ ব্যবস্থা",
+  "Rigorous access regulations guarantee that files are safely stored, previewed, and fetched cryptographically.": "কঠোর অ্যাক্সেস নিয়ন্ত্রণ নিশ্চিত করে যে প্রতিটি ফাইল সুরক্ষিত উপায়ে সংরক্ষিত ও প্রদর্শিত হয়।"
 };
 
 export const ThemeLanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
