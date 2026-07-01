@@ -860,8 +860,8 @@ export default function App() {
           </motion.div>
           
           <div className="space-y-1">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#15803d] tracking-tight font-display uppercase">
-              {t("Note's Sector")}
+            <h1 className="text-xl sm:text-2xl font-extrabold text-[#15803d] tracking-tight font-display uppercase">
+              {t("Notes Sharing Platform")}
             </h1>
           </div>
           
@@ -1053,7 +1053,7 @@ export default function App() {
               <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-gray-900 dark:text-white tracking-tight font-display leading-[1.1]">
                 {t("Sristy Education Family")} <br className="hidden sm:inline" />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-500 via-brand-600 to-indigo-600">
-                  {t("File Sharing Platform")}
+                  {t("Notes Sharing Platform")}
                 </span>
               </h1>
               <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400 max-w-2xl mx-auto leading-relaxed">

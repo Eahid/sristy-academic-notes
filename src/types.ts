@@ -50,6 +50,7 @@ export interface NoticeAnnouncement {
   content: string; // Markdown / plan content
   uploadedBy: string;
   uploaderName: string;
+  uploaderRole?: string;
   createdAt: any;
 }
 

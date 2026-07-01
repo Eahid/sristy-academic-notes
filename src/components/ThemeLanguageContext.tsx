@@ -19,6 +19,8 @@ const ThemeLanguageContext = createContext<ThemeLanguageContextType | undefined>
 export const translations: Record<string, string> = {
   // Brand / Headings
   "Sristy Education Family": "সৃষ্টি শিক্ষা পরিবার",
+  "Sristy Education Family Notes Sharing Platform": "সৃষ্টি শিক্ষা পরিবার নোট শেয়ারিং প্ল্যাটফর্ম",
+  "Notes Sharing Platform": "নোট শেয়ারিং প্ল্যাটফর্ম",
   "Resource & File Storage": "রিসোর্স ও ফাইল স্টোরেজ",
   "Note's Sector": "নোটস সেক্টর",
   "Note/Resource Type": "নোটস/শীটের ধরন",
@@ -290,12 +292,8 @@ export const translations: Record<string, string> = {
   "Recovery Restore Safeguard": "ডাটা পুনরুদ্ধার প্রতিরোধ ব্যবস্থা",
   "Write-back Restore Restrictions": "ডাটা রাইট-ব্যাক পুনরুদ্ধার নিষেধাজ্ঞা",
   "To avoid active data collisions or malicious file escalations, automated database writing/import restores are strictly disabled within Sristy Family interface. To restore Sristy databases manually, submit this exported backup files structure directly to Sristy Academic Engineering Desk.": "অনাকাঙ্ক্ষিত ডাটা ওভাররাইট বা নিরাপত্তা ক্ষুণ্ণ হওয়া এড়াতে সৃষ্টি ফ্যামিলি ইউজার ইন্টারফেসে অনলাইন অটো ডাটা রিস্টোর সরাসরি নিষেধ করা হয়েছে। কোন কারণে ডাটা রিস্টোর করার জরুরি প্রয়োজন হলে এই স্ন্যাপশট ফাইলটি সৃষ্টি আইটি ও ইঞ্জিনিয়ারিং ডেস্কে জমা দিন।",
-  "SECURE PORTAL RECOVERY LAYER v2.1": "সুরক্ষিত পোর্টাল রিকভারি লেয়ার সংস্করণ ২.১",
-
-  // Auth Screen dynamic keys
-  "Please specify both username/email and password.": "ইউজারনেম বা ইমেইল এবং পাসওয়ার্ড উভয়ই প্রদান করুন।",
-  "Authentication failed: Invalid username or incorrect credentials.": "প্রবেশ করতে ব্যর্থ: ইউজারনেম সঠিক নয় অথবা অননুমোদিত অ্যাকাউন্টের বিবরণ।",
-  "Account configuration error: No corporate email mapped to this username.": "অ্যাকাউন্ট ত্রুটি: এই ইউজারনেমের সাথে কোনো ইমেইল সংযুক্ত করা নেই।",
+  "SECURE PORTAL RECOVERY LAYER v2.1": "সুরক্ষিত পোর্টাল রিকভারি লেয়ার v২.১",
+  "No email address linked.": "কোনো ইমেইল সংযুক্ত করা নেই।",
   "This account has been deactivated by the branch admin.": "আপনার অ্যাকাউন্টটি শাখা এডমিন দ্বারা সাময়িকভাবে বন্ধ রাখা হয়েছে।",
   "Authentication succeeded in Auth, but your user profile does not exist in Firestore users collection.": "ফায়ারবেস অথেনটিকেশন সফল কিন্তু প্রোফাইল ফায়ারবেস ক্লাউড স্টোরেজে পাওয়া যায়নি।",
   "Welcome back": "স্বাগতম",
@@ -435,7 +433,24 @@ export const translations: Record<string, string> = {
   "Structured Library": "সুসজ্জিত লাইব্রেরি",
   "Categorized intuitively by subjects, classes, semesters, and chapters to avoid digital clutter.": "ডিজিটাল বিশৃঙ্খলা এড়াতে বিষয়, শ্রেণী, সেমিস্টার এবং অধ্যায় অনুযায়ী সাজানো হয়েছে।",
   "Secure Distribution": "নিরাপদ বিতরণ ব্যবস্থা",
-  "Rigorous access regulations guarantee that files are safely stored, previewed, and fetched cryptographically.": "কঠোর অ্যাক্সেস নিয়ন্ত্রণ নিশ্চিত করে যে প্রতিটি ফাইল সুরক্ষিত উপায়ে সংরক্ষিত ও প্রদর্শিত হয়।"
+  "Rigorous access regulations guarantee that files are safely stored, previewed, and fetched cryptographically.": "কঠোর অ্যাক্সেস নিয়ন্ত্রণ নিশ্চিত করে যে প্রতিটি ফাইল সুরক্ষিত উপায়ে সংরক্ষিত ও প্রদর্শিত হয়।",
+
+  // Recent Activity Translations
+  "Recent Activity": "সাম্প্রতিক কার্যকলাপ",
+  "Recent Department Activity Feed": "সাম্প্রতিক বিভাগীয় কার্যকলাপ ফিড",
+  "Live Activity Feed": "লাইভ কার্যকলাপ ফিড",
+  "Recent Events": "সাম্প্রতিক ইভেন্ট",
+  "Syncing activity logs...": "কার্যকলাপ লগ সিঙ্ক করা হচ্ছে...",
+  "Search recently active files...": "সাম্প্রতিক সক্রিয় ফাইল খুঁজুন...",
+  "No recent activity found for your assigned department subjects.": "আপনার নির্ধারিত বিভাগের বিষয়ের জন্য কোনো সাম্প্রতিক কার্যকলাপ রেকর্ড করা হয়নি।",
+  "uploaded educational material": "শিক্ষা উপকরণ আপলোড করেছেন",
+  "approved study file": "অধ্যয়ন ফাইল অনুমোদন করেছেন",
+  "rejected submission": "জমা দেওয়া ফাইল প্রত্যাখ্যান করেছেন",
+  "deleted study material": "শিক্ষা উপকরণ মুছে ফেলেছেন",
+
+  // Super Admin Notice board translations
+  "⭐ CRITICAL SUPER ADMIN ANNOUNCEMENT": "⭐ সুপার এডমিন বিশেষ ঘোষণা",
+  "Write Super Admin Notice": "সুপার এডমিন নোটিশ লিখুন"
 };
 
 export const ThemeLanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -445,7 +460,7 @@ export const ThemeLanguageProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const [theme, setTheme] = useState<Theme>('light');
   const [bgTheme, setBgTheme] = useState<'mint' | 'offwhite'>(() => {
-    return (safeLocalStorage.getItem('app-bg-theme') as 'mint' | 'offwhite') || 'mint';
+    return (safeLocalStorage.getItem('app-bg-theme') as 'mint' | 'offwhite') || 'offwhite';
   });
 
   // Apply theme to document documentElement

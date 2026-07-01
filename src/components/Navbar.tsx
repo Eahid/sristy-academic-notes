@@ -44,7 +44,7 @@ export default function Navbar({ user, onLogout, onOpenProfile, onTriggerAuth }:
                 {t("Sristy Education Family")}
               </span>
               <span className="font-bold text-[8px] min-[375px]:text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 tracking-tight block uppercase leading-none mt-0.5 truncate">
-                {t("Note's Sector")}
+                {t("Notes Sharing Platform")}
               </span>
             </div>
           </div>

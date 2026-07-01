@@ -660,8 +660,8 @@ export default function DashboardMasterAdmin({
     }
   };
 
-  const handleExportLogsCSV = () => {
-    const filteredLogs = logsList.filter(log => {
+  const getFilteredLogs = () => {
+    return logsList.filter(log => {
       const mSearch = !logSearchQuery.trim() || 
         log.actorName?.toLowerCase().includes(logSearchQuery.toLowerCase()) ||
         log.fileName?.toLowerCase().includes(logSearchQuery.toLowerCase()) ||
@@ -670,6 +670,45 @@ export default function DashboardMasterAdmin({
       const mAction = !logActionFilter || log.action === logActionFilter;
       return mSearch && mAction;
     });
+  };
+
+  const handleDeleteLog = async (logId: string) => {
+    if (!window.confirm(t("Are you sure you want to permanently delete this activity log? This cannot be undone."))) {
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, 'activity_logs', logId));
+      alert(t("Activity log was permanently deleted from Sristy cloud servers."));
+    } catch (err: any) {
+      console.error("Error deleting log:", err);
+      alert(t("Failed to delete log: ") + err.message);
+    }
+  };
+
+  const handleClearAllLogs = async (filteredLogs: any[]) => {
+    if (filteredLogs.length === 0) {
+      alert(t("No logs found matching current filter rules to delete."));
+      return;
+    }
+    const confirmMsg = t("CRITICAL ACTION: Are you sure you want to permanently delete all {{count}} currently filtered activity logs? This operation is completely irreversible.");
+    if (!window.confirm(confirmMsg.replace("{{count}}", String(filteredLogs.length)))) {
+      return;
+    }
+    try {
+      let count = 0;
+      for (const log of filteredLogs) {
+        await deleteDoc(doc(db, 'activity_logs', log.id));
+        count++;
+      }
+      alert(t("Successfully cleared {{count}} activity logs from cloud storage!").replace("{{count}}", String(count)));
+    } catch (err: any) {
+      console.error("Error clearing logs:", err);
+      alert(t("Failed to complete clear logs: ") + err.message);
+    }
+  };
+
+  const handleExportLogsCSV = () => {
+    const filteredLogs = getFilteredLogs();
 
     const csvRows = [
       ["Timestamp", "Actor Name", "Actor Role", "Actor Branch", "Action", "File Name", "Subject", "File Branch", "Rejection Reason"].map(h => `"${h.replace(/"/g, '""')}"`).join(',')
@@ -2867,6 +2906,16 @@ export default function DashboardMasterAdmin({
                 <FileSpreadsheet className="w-3.5 h-3.5" />
                 <span>{t("Export CSV")}</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => handleClearAllLogs(getFilteredLogs())}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-red-950/20 dark:hover:bg-red-950/35 text-red-700 dark:text-red-400 border border-red-100 dark:border-red-900/20 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs"
+                title={t("Permanently delete currently filtered activity logs")}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{t("Clear Filtered")}</span>
+              </button>
             </div>
           </div>
 
@@ -2874,15 +2923,7 @@ export default function DashboardMasterAdmin({
             {loadingLogs ? (
               <div className="text-center py-12 text-xs text-gray-400 dark:text-gray-505 font-medium">{t("Loading...")}</div>
             ) : (() => {
-              const filteredLogs = logsList.filter(log => {
-                const mSearch = !logSearchQuery.trim() || 
-                  log.actorName?.toLowerCase().includes(logSearchQuery.toLowerCase()) ||
-                  log.fileName?.toLowerCase().includes(logSearchQuery.toLowerCase()) ||
-                  log.fileSubject?.toLowerCase().includes(logSearchQuery.toLowerCase()) ||
-                  log.fileBranch?.toLowerCase().includes(logSearchQuery.toLowerCase());
-                const mAction = !logActionFilter || log.action === logActionFilter;
-                return mSearch && mAction;
-              });
+              const filteredLogs = getFilteredLogs();
 
               if (filteredLogs.length === 0) {
                 return (
@@ -2903,6 +2944,7 @@ export default function DashboardMasterAdmin({
                           <th className="py-3 px-5">{t("Operation Actor")}</th>
                           <th className="py-3 px-5">{t("Execution Action")}</th>
                           <th className="py-3 px-5">{t("Target Resource Details")}</th>
+                          <th className="py-3 px-5 text-right pr-8">{t("Actions")}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 dark:divide-slate-800 font-medium text-gray-700 dark:text-gray-300">
@@ -2927,7 +2969,7 @@ export default function DashboardMasterAdmin({
                                 onClick={() => setExpandedLogs(prev => ({ ...prev, [log.id]: !prev[log.id] }))}
                                 className="hover:bg-gray-50/40 dark:hover:bg-slate-850/10 transition-colors cursor-pointer"
                               >
-                                <td className="py-3.5 px-5 text-gray-400 dark:text-gray-500 font-mono text-[10px] whitespace-nowrap">
+                                <td className="py-3.5 px-5 text-gray-400 dark:text-gray-550 font-mono text-[10px] whitespace-nowrap">
                                   <span className="flex items-center gap-1.5">
                                     <Clock className="w-3.5 h-3.5 text-gray-400" />
                                     <span>{log.createdAt ? log.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "just now"}</span>
@@ -2952,10 +2994,20 @@ export default function DashboardMasterAdmin({
                                     </span>
                                   </div>
                                 </td>
+                                <td className="py-3.5 px-5 text-right pr-6" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteLog(log.id)}
+                                    className="p-1 hover:bg-red-50 dark:hover:bg-red-955/20 text-red-500 rounded-md transition-colors cursor-pointer inline-flex items-center"
+                                    title={t("Delete log entry")}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </td>
                               </tr>
                               {isExpanded && (
                                 <tr className="bg-gray-50/30 dark:bg-slate-800/10">
-                                  <td colSpan={4} className="py-4 px-6 border-b border-gray-100 dark:border-slate-800/40">
+                                  <td colSpan={5} className="py-4 px-6 border-b border-gray-100 dark:border-slate-800/40">
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
                                       {/* Actor Details */}
                                       <div className="space-y-1">
@@ -3062,6 +3114,17 @@ export default function DashboardMasterAdmin({
                               <div>
                                 <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{t("Date & Time")}</span>
                                 <span className="font-mono text-gray-500">{log.createdAt ? log.createdAt.toLocaleString() : "just now"}</span>
+                              </div>
+
+                              <div className="pt-2 border-t border-gray-100/40 dark:border-slate-800/40 flex justify-end" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteLog(log.id)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 text-red-600 dark:text-red-400 font-bold text-[10px] rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>{t("Delete Log")}</span>
+                                </button>
                               </div>
 
                               {log.rejectionReason && (

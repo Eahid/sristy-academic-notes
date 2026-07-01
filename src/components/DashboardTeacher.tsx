@@ -29,7 +29,7 @@ export default function DashboardTeacher({
   onViewTeacherDetails
 }: DashboardTeacherProps) {
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
-  const [archiveTab, setArchiveTab] = useState<'my_submissions' | 'department_materials'>('my_submissions');
+  const [archiveTab, setArchiveTab] = useState<'my_submissions' | 'department_materials' | 'recent_activity'>('my_submissions');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -88,7 +88,15 @@ export default function DashboardTeacher({
   );
 
   // Active files prior to search
-  const activeTabFiles = archiveTab === 'my_submissions' ? myUploadedFiles : departmentFiles;
+  const activeTabFiles = archiveTab === 'my_submissions' 
+    ? myUploadedFiles 
+    : archiveTab === 'recent_activity'
+    ? [...myUploadedFiles, ...departmentFiles].filter((v, i, a) => a.findIndex(t => t.id === v.id) === i).sort((a, b) => {
+        const dateA = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt || 0);
+        const dateB = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt || 0);
+        return dateB.getTime() - dateA.getTime();
+      })
+    : departmentFiles;
 
   // Filter with search query
   const currentFilteredFiles = activeTabFiles.filter(file => {
@@ -138,6 +146,51 @@ export default function DashboardTeacher({
   const [rejectionLogs, setRejectionLogs] = useState<any[]>([]);
   const [loadingRejections, setLoadingRejections] = useState(false);
   const [showRejectionModal, setShowRejectionModal] = useState(false);
+
+  const [recentLogs, setRecentLogs] = useState<any[]>([]);
+  const [loadingRecentLogs, setLoadingRecentLogs] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const fetchRecentLogs = async () => {
+      setLoadingRecentLogs(true);
+      try {
+        const q = query(
+          collection(db, 'activity_logs'),
+          orderBy('createdAt', 'desc')
+        );
+        const snap = await getDocs(q);
+        if (active) {
+          const logs: any[] = [];
+          snap.forEach((docSnap) => {
+            const data = docSnap.data();
+            logs.push({
+              id: docSnap.id,
+              ...data,
+              createdAt: data.createdAt?.toDate() || null
+            });
+          });
+          // Filter logs belonging to CSE/Physics/etc department subjects assigned to this teacher
+          const filtered = logs.filter(log => {
+            const isMine = log.uploaderId === user.uid || log.actorId === user.uid;
+            const inDept = log.fileSubject && teacherSubjects.some(
+              sub => typeof sub === 'string' && sub.toLowerCase() === log.fileSubject.toLowerCase()
+            );
+            return isMine || inDept;
+          });
+          setRecentLogs(filtered.slice(0, 30));
+        }
+      } catch (err) {
+        console.warn("Failed to fetch department logs:", err);
+      } finally {
+        if (active) setLoadingRecentLogs(false);
+      }
+    };
+    fetchRecentLogs();
+    return () => {
+      active = false;
+    };
+  }, [user.uid, teacherSubjects]);
 
   useEffect(() => {
     let active = true;
@@ -1045,6 +1098,20 @@ export default function DashboardTeacher({
                     {t("Department Library")} ({departmentFiles.length})
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setArchiveTab('recent_activity');
+                    setSelectedFileIds([]);
+                  }}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    archiveTab === 'recent_activity'
+                      ? 'bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-100 shadow-xs'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  }`}
+                >
+                  {t("Recent Activity")}
+                </button>
               </div>
 
               {/* View Switchers */}
@@ -1089,6 +1156,8 @@ export default function DashboardTeacher({
                   placeholder={
                     archiveTab === 'my_submissions'
                       ? t("Search my submissions by name, topic...")
+                      : archiveTab === 'recent_activity'
+                      ? t("Search recently active files...")
                       : t("Search department files by name, author...")
                   }
                   className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-lg focus:outline-none focus:border-[#15803d] dark:focus:border-brand-500 text-xs font-semibold text-gray-700 dark:text-gray-200"
@@ -1106,6 +1175,8 @@ export default function DashboardTeacher({
               <div className="text-[10px] bg-brand-100 dark:bg-brand-950/40 text-[#15803d] dark:text-brand-400 px-3 py-1 rounded-full font-bold select-none capitalize border border-[#15803d]/10">
                 {archiveTab === 'my_submissions'
                   ? `${t("My Submissions")}: ${user.subject || t("General")}`
+                  : archiveTab === 'recent_activity'
+                  ? t("Recent Department Activity Feed")
                   : `${t("Assigned")}: ${teacherSubjects.join(', ')}`}
               </div>
             </div>
@@ -1113,6 +1184,91 @@ export default function DashboardTeacher({
 
           {/* List/Grid Container Segment */}
           <div className="space-y-4">
+            {archiveTab === 'recent_activity' && (
+              <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-gray-150/65 dark:border-slate-800 shadow-xs transition-colors space-y-4 text-left">
+                <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-[#15803d] animate-pulse"></div>
+                    <h3 className="font-extrabold text-xs uppercase tracking-wider text-gray-800 dark:text-gray-100">
+                      {t("Live Activity Feed")}
+                    </h3>
+                  </div>
+                  <span className="text-[10px] text-gray-400 font-mono">
+                    {recentLogs.length} {t("Recent Events")}
+                  </span>
+                </div>
+
+                {loadingRecentLogs ? (
+                  <div className="text-center py-8 text-xs font-semibold text-gray-400 dark:text-gray-500 flex flex-col items-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+                    <span>{t("Syncing activity logs...")}</span>
+                  </div>
+                ) : recentLogs.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-gray-400 dark:text-gray-500">
+                    {t("No recent activity found for your assigned department subjects.")}
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-100/60 dark:divide-slate-850/50 max-h-[280px] overflow-y-auto pr-1">
+                    {recentLogs.map((log) => {
+                      const matchingFile = files.find(f => f.id === log.fileId && !f.isDeleted);
+                      let logIcon = <FileText className="w-4 h-4 text-gray-450" />;
+                      let actionText = "";
+                      
+                      if (log.action === 'file_uploaded') {
+                        logIcon = <Upload className="w-4 h-4 text-blue-500" />;
+                        actionText = t("uploaded educational material");
+                      } else if (log.action === 'file_approved') {
+                        logIcon = <CheckCircle2 className="w-4 h-4 text-green-500" />;
+                        actionText = t("approved study file");
+                      } else if (log.action === 'file_rejected') {
+                        logIcon = <AlertTriangle className="w-4 h-4 text-amber-500" />;
+                        actionText = t("rejected submission");
+                      } else if (log.action === 'file_deleted') {
+                        logIcon = <Trash2 className="w-4 h-4 text-red-500" />;
+                        actionText = t("deleted study material");
+                      }
+
+                      return (
+                        <div key={log.id} className="py-2.5 flex items-start justify-between gap-3 text-xs">
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <div className="p-1.5 rounded-lg bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-slate-750 shrink-0 mt-0.5">
+                              {logIcon}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-gray-800 dark:text-gray-200 leading-tight">
+                                <strong className="font-bold">{log.actorName}</strong> <span className="text-gray-500">{actionText}</span>
+                              </p>
+                              <p className="font-bold text-[11px] text-brand-600 dark:text-brand-405 truncate max-w-[280px] sm:max-w-[450px] mt-0.5" title={log.fileName}>
+                                {log.fileName}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1 text-[9px] font-bold text-gray-400 uppercase tracking-wider">
+                                <span className="bg-gray-100 dark:bg-slate-800 px-1 py-0.5 rounded">{log.fileSubject}</span>
+                                <span>•</span>
+                                <span className="font-mono">{log.createdAt ? new Date(log.createdAt).toLocaleString() : "just now"}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Quick download/preview button if file is active */}
+                          {matchingFile && (
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                onClick={() => onDownload(matchingFile)}
+                                className="p-1.5 bg-green-50 hover:bg-green-100 dark:bg-green-950/20 text-green-600 dark:text-green-400 rounded-lg transition-colors cursor-pointer"
+                                title={t("Download File")}
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {currentFilteredFiles.length > 1 && (
               <div className="flex sm:hidden items-center justify-center gap-1.5 text-[11px] text-brand-605 dark:text-brand-405 mb-2 animate-pulse bg-brand-500/5 py-1 px-3 rounded-full border border-brand-500/10">
                 <span className="font-semibold uppercase tracking-wider">Swipe horizontally</span>
