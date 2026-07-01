@@ -189,6 +189,12 @@ service cloud.firestore {
       allow update, delete: if isEmailVerified() && isMasterAdmin();
     }
 
+    // --- Custom Board Members Collection ---
+    match /custom_board_members/{memberId} {
+      allow read: if isSignedIn();
+      allow write: if isEmailVerified() && isMasterAdmin();
+    }
+
     // --- System Config Collection ---
     match /system_config/{configId} {
       allow read: if true; // Config status accessible to unauthenticated guests to check shutdown state

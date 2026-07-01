@@ -19,6 +19,7 @@ import {
   CheckCircle2, 
   ShieldAlert, 
   Award,
+  Sparkles,
   History,
   DownloadCloud,
   Search,
@@ -1709,9 +1710,31 @@ export default function DashboardMasterAdmin({
       )}
 
       {activeTab === 'admins' && (
-        <div className="grid lg:grid-cols-3 gap-8 animate-in fade-in duration-200">
-          {/* Column 1 Container */}
-          <div className="lg:col-span-1 space-y-6 self-start w-full">
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Sristy Board Directory Link Banner */}
+          <div className="bg-gradient-to-r from-emerald-800 to-green-700 dark:from-emerald-955 dark:to-green-900 rounded-2xl p-4 sm:p-5 text-white shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border border-emerald-700/20">
+            <div>
+              <h4 className="font-bold text-sm tracking-tight flex items-center gap-2 font-display uppercase">
+                <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+                <span>{t("Sristy Supreme Governing Body & Branch Admins")}</span>
+              </h4>
+              <p className="text-xs text-green-100/90 mt-1">
+                {t("View the official board member ledger, copy temporary credentials, and provision active branch administrators.")}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('board_directory')}
+              className="bg-white hover:bg-emerald-50 text-emerald-800 active:scale-98 font-bold text-xs px-4 py-2 rounded-xl transition-all shadow-xs shrink-0 flex items-center gap-1.5 cursor-pointer select-none"
+            >
+              <Users className="w-4 h-4 text-emerald-700" />
+              <span>{t("Open Board Directory")}</span>
+            </button>
+          </div>
+
+          <div className="grid lg:grid-cols-3 gap-8">
+            {/* Column 1 Container */}
+            <div className="lg:col-span-1 space-y-6 self-start w-full">
             {/* Create Admin Form */}
             <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-xl shadow-xs border border-gray-100 dark:border-slate-800 transition-colors">
             <div className="flex items-center gap-2 text-brand-600 dark:text-brand-400 mb-4 font-display">
@@ -2626,6 +2649,7 @@ export default function DashboardMasterAdmin({
             </div>
           </div>
         </div>
+      </div>
       )}
 
       {activeTab === 'all_files' && (
@@ -4245,7 +4269,16 @@ R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
       )}
 
       {activeTab === 'board_directory' && (
-        <div className="animate-in fade-in duration-200">
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setActiveTab('admins')}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-gray-55 dark:bg-slate-900 dark:hover:bg-slate-800 text-gray-700 dark:text-gray-200 font-extrabold text-xs rounded-xl shadow-xs border border-gray-200 dark:border-slate-800 transition-all cursor-pointer select-none"
+            >
+              <span>← {t("Back to Accounts Directory")}</span>
+            </button>
+          </div>
           <SristyBoardDirectory 
             currentUser={user} 
             onRefreshAdmins={fetchAdmins}
