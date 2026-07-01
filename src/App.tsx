@@ -701,6 +701,8 @@ export default function App() {
           console.warn("Failed to write hard deletion log:", logErr);
         }
       }
+
+      alert(t("File was permanently deleted from Sristy servers!"));
     } catch (err) {
       console.error("Failed to complete file hard delete: ", err);
     }

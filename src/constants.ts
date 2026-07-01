@@ -44,3 +44,14 @@ export const SUBJECTS = [
   "Bangladesh and Global Studies",
   "History"
 ];
+
+export const CLASS_LEVELS = [
+  "Class 6",
+  "Class 7",
+  "Class 8",
+  "Class 9",
+  "Class 10",
+  "HSC 1st Year",
+  "HSC 2nd Year"
+];
+

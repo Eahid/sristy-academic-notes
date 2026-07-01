@@ -9,6 +9,8 @@ interface ThemeLanguageContextType {
   setLanguage: (lang: Language) => void;
   theme: Theme;
   toggleTheme: () => void;
+  bgTheme: 'mint' | 'offwhite';
+  setBgTheme: (theme: 'mint' | 'offwhite') => void;
   t: (text: string) => string;
 }
 
@@ -442,6 +444,9 @@ export const ThemeLanguageProvider: React.FC<{ children: React.ReactNode }> = ({
   });
 
   const [theme, setTheme] = useState<Theme>('light');
+  const [bgTheme, setBgTheme] = useState<'mint' | 'offwhite'>(() => {
+    return (safeLocalStorage.getItem('app-bg-theme') as 'mint' | 'offwhite') || 'mint';
+  });
 
   // Apply theme to document documentElement
   useEffect(() => {
@@ -453,6 +458,17 @@ export const ThemeLanguageProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     safeLocalStorage.setItem('app-language', language);
   }, [language]);
+
+  // Handle dynamic body background color customization
+  useEffect(() => {
+    const body = window.document.body;
+    if (bgTheme === 'offwhite') {
+      body.style.backgroundColor = '#faf9f6';
+    } else {
+      body.style.backgroundColor = '#f6fcf8';
+    }
+    safeLocalStorage.setItem('app-bg-theme', bgTheme);
+  }, [bgTheme]);
 
   const toggleTheme = () => {
     // Locked to light theme as requested, no-op
@@ -489,7 +505,7 @@ export const ThemeLanguageProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   return (
-    <ThemeLanguageContext.Provider value={{ language, setLanguage, theme, toggleTheme, t }}>
+    <ThemeLanguageContext.Provider value={{ language, setLanguage, theme, toggleTheme, bgTheme, setBgTheme, t }}>
       {children}
     </ThemeLanguageContext.Provider>
   );

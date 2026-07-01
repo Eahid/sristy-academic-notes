@@ -32,6 +32,7 @@ import {
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
 import { useThemeLanguage } from './ThemeLanguageContext';
+import { CLASS_LEVELS } from '../constants';
 
 interface DashboardAdminProps {
   user: UserProfile;
@@ -76,6 +77,17 @@ export default function DashboardAdmin({
   const [newEmail, setNewEmail] = useState('');
   const [memberRole, setNewMemberRole] = useState<'teacher' | 'viewer'>('teacher');
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  
+  // Dynamic Subject & Class assignments
+  const [assignments, setAssignments] = useState<{ subject: string; classLevel: string }[]>([]);
+  const [currentSelSubject, setCurrentSelSubject] = useState('');
+  const [currentSelClass, setCurrentSelClass] = useState('');
+
+  // Filters for teachers directory search
+  const [teacherSearchQuery, setTeacherSearchQuery] = useState('');
+  const [teacherFilterSubject, setTeacherFilterSubject] = useState('');
+  const [teacherFilterClass, setTeacherFilterClass] = useState('');
+
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
 
@@ -140,8 +152,8 @@ export default function DashboardAdmin({
       return;
     }
 
-    if (memberRole === 'teacher' && selectedSubjects.length === 0) {
-      setFormError(t("Teachers must specify at least one teaching subject specialty."));
+    if (memberRole === 'teacher' && assignments.length === 0) {
+      setFormError(t("Teachers must specify at least one Subject and Class mapping."));
       return;
     }
 
@@ -175,8 +187,10 @@ export default function DashboardAdmin({
       };
 
       if (memberRole === 'teacher') {
-        payload.subjects = selectedSubjects;
-        payload.subject = selectedSubjects[0] || '';
+        payload.classAssignments = assignments;
+        payload.subjects = Array.from(new Set(assignments.map(a => a.subject)));
+        payload.classes = Array.from(new Set(assignments.map(a => a.classLevel)));
+        payload.subject = assignments[0]?.subject || '';
       }
 
       await setDoc(doc(db, 'users', authUid), payload);
@@ -187,6 +201,7 @@ export default function DashboardAdmin({
       setNewFullName('');
       setNewEmail('');
       setSelectedSubjects([]);
+      setAssignments([]);
       
       fetchBranchTeachers();
     } catch (err: any) {
@@ -459,6 +474,32 @@ export default function DashboardAdmin({
       subjectsTree[sub].chapters[ch].topics[top] = { name: top, notes: [] };
     }
     subjectsTree[sub].chapters[ch].topics[top].notes.push(file);
+  });
+
+  const filteredTeachers = teachersList.filter((tea) => {
+    // Search query filter
+    if (teacherSearchQuery) {
+      const q = teacherSearchQuery.toLowerCase();
+      const matchesName = tea.fullName.toLowerCase().includes(q);
+      const matchesUser = tea.username.toLowerCase().includes(q);
+      if (!matchesName && !matchesUser) return false;
+    }
+
+    // Subject specialty filter
+    if (teacherFilterSubject) {
+      const hasSubject = tea.subjects?.includes(teacherFilterSubject) || tea.subject === teacherFilterSubject || 
+        (tea.classAssignments && tea.classAssignments.some(asg => asg.subject === teacherFilterSubject));
+      if (!hasSubject) return false;
+    }
+
+    // Class levels filter
+    if (teacherFilterClass) {
+      const hasClass = tea.classes?.includes(teacherFilterClass) || 
+        (tea.classAssignments && tea.classAssignments.some(asg => asg.classLevel === teacherFilterClass));
+      if (!hasClass) return false;
+    }
+
+    return true;
   });
 
   return (
@@ -880,35 +921,92 @@ export default function DashboardAdmin({
               </div>
 
               {memberRole === 'teacher' && (
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
-                    {t("Assigned Teaching Subjects")}
-                  </label>
-                  <div className="p-3 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg max-h-48 overflow-y-auto space-y-2.5">
-                    {subjects.map((sub, idx) => {
-                      const isChecked = selectedSubjects.includes(sub);
-                      return (
-                        <label key={idx} className="flex items-center gap-2.5 text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:text-brand-500 transition-colors">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedSubjects([...selectedSubjects, sub]);
-                              } else {
-                                setSelectedSubjects(selectedSubjects.filter(s => s !== sub));
-                              }
-                            }}
-                            className="rounded text-brand-500 focus:ring-brand-500 w-4 h-4"
-                          />
-                          <span>{t(sub)}</span>
-                        </label>
-                      );
-                    })}
+                <div className="space-y-4 bg-indigo-50/20 dark:bg-indigo-950/5 p-3 sm:p-4 rounded-xl border border-indigo-100/30 dark:border-indigo-900/10">
+                  <span className="block text-[10px] font-extrabold text-[#15803d] dark:text-emerald-405 uppercase tracking-widest font-display mb-1">
+                    {t("Branch > Teacher > Subject > Class Mapping")}
+                  </span>
+                  
+                  {/* Quick Add Form */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1">{t("Select Subject")}</label>
+                      <select
+                        value={currentSelSubject}
+                        onChange={(e) => setCurrentSelSubject(e.target.value)}
+                        className="w-full px-2 py-1.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-750 text-[10px] font-bold rounded-lg focus:outline-none focus:border-brand-500 cursor-pointer text-gray-800 dark:text-gray-100"
+                      >
+                        <option value="">{t("-- Select Subject --")}</option>
+                        {subjects.map((sub, idx) => (
+                          <option key={idx} value={sub}>{t(sub)}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1">{t("Select Class")}</label>
+                      <select
+                        value={currentSelClass}
+                        onChange={(e) => setCurrentSelClass(e.target.value)}
+                        className="w-full px-2 py-1.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-750 text-[10px] font-bold rounded-lg focus:outline-none focus:border-brand-500 cursor-pointer text-gray-800 dark:text-gray-100"
+                      >
+                        <option value="">{t("-- Select Class --")}</option>
+                        {CLASS_LEVELS.map((cls, idx) => (
+                          <option key={idx} value={cls}>{t(cls)}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5 leading-normal">
-                    {t("Select one or multiple subjects. At least one selection is required.")}
-                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!currentSelSubject || !currentSelClass) {
+                        alert(t("Please select both a Subject and Class to map."));
+                        return;
+                      }
+                      const alreadyExists = assignments.some(
+                        a => a.subject === currentSelSubject && a.classLevel === currentSelClass
+                      );
+                      if (alreadyExists) {
+                        alert(t("This Subject and Class combination is already assigned."));
+                        return;
+                      }
+                      setAssignments([...assignments, { subject: currentSelSubject, classLevel: currentSelClass }]);
+                      // Reset dropdowns for better usability
+                      setCurrentSelSubject('');
+                      setCurrentSelClass('');
+                    }}
+                    className="w-full py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-[10px] rounded-lg shadow-xxs transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <span>+ {t("Add Subject-Class Mapping")}</span>
+                  </button>
+
+                  {/* Added mappings list */}
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                    {assignments.length === 0 ? (
+                      <p className="text-[10px] text-gray-400 text-center py-2 italic">
+                        {t("No mappings added yet. Add at least one above.")}
+                      </p>
+                    ) : (
+                      assignments.map((asg, idx) => (
+                        <div key={idx} className="flex items-center justify-between bg-white dark:bg-slate-800 border border-gray-150 dark:border-slate-700 px-2.5 py-1.5 rounded-lg text-[10px] font-bold">
+                          <div className="flex items-center gap-1.5 text-gray-700 dark:text-gray-300">
+                            <span className="text-brand-600 dark:text-brand-400">{t(asg.subject)}</span>
+                            <span className="text-gray-400">➔</span>
+                            <span className="text-indigo-600 dark:text-indigo-400 font-mono">{t(asg.classLevel)}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setAssignments(assignments.filter((_, i) => i !== idx))}
+                            className="p-1 hover:bg-red-50 dark:hover:bg-red-955/20 text-red-500 rounded-md transition-colors cursor-pointer"
+                            title={t("Remove mapping")}
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -927,15 +1025,55 @@ export default function DashboardAdmin({
             <div className="p-6 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center bg-gray-50/50 dark:bg-slate-800/10">
               <h3 className="font-semibold text-sm text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase">{t("Active Branch Registrations")}</h3>
               <span className="bg-brand-50 dark:bg-brand-950/20 text-brand-600 dark:text-brand-405 border border-brand-100 dark:border-brand-900/30 text-xs font-bold px-3 py-1 rounded-full select-none">
-                {teachersList.length} {t("Users")}
+                {filteredTeachers.length} / {teachersList.length} {t("Users")}
               </span>
+            </div>
+
+            {/* Search & Filter Bar */}
+            <div className="p-4 bg-gray-50/30 dark:bg-slate-900/50 border-b border-gray-100 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={teacherSearchQuery}
+                  onChange={(e) => setTeacherSearchQuery(e.target.value)}
+                  placeholder={t("Search by name...")}
+                  className="w-full pl-8 pr-3 py-1.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-500"
+                />
+                <Search className="absolute left-2.5 top-2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+              </div>
+
+              <div>
+                <select
+                  value={teacherFilterSubject}
+                  onChange={(e) => setTeacherFilterSubject(e.target.value)}
+                  className="w-full px-2 py-1.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-805 dark:text-gray-100 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer"
+                >
+                  <option value="">{t("All Subjects")}</option>
+                  {subjects.map((sub, idx) => (
+                    <option key={idx} value={sub}>{t(sub)}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <select
+                  value={teacherFilterClass}
+                  onChange={(e) => setTeacherFilterClass(e.target.value)}
+                  className="w-full px-2 py-1.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-805 dark:text-gray-100 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer"
+                >
+                  <option value="">{t("All Classes")}</option>
+                  {CLASS_LEVELS.map((cls, idx) => (
+                    <option key={idx} value={cls}>{t(cls)}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="flex-1 overflow-hidden">
               {loadingTeachers ? (
                 <div className="text-center py-12 text-xs text-gray-400 dark:text-gray-500">{t("Loading...")}</div>
-              ) : teachersList.length === 0 ? (
-                <div className="text-center py-12 text-xs text-gray-400 dark:text-gray-500">{t("No files found. Clean start!")}</div>
+              ) : filteredTeachers.length === 0 ? (
+                <div className="text-center py-12 text-xs text-gray-400 dark:text-gray-500">{t("No users found matching filter guidelines.")}</div>
               ) : (
                 <div className="bg-white dark:bg-slate-900 transition-colors">
                   {/* Desktop view (Table layout) */}
@@ -950,7 +1088,7 @@ export default function DashboardAdmin({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-105 dark:divide-slate-850 text-xs font-medium text-gray-700 dark:text-gray-300">
-                        {teachersList.map((tea) => {
+                        {filteredTeachers.map((tea) => {
                           const isExpanded = expandedTeacherId === tea.uid;
                           const teacherFiles = files.filter(f => f.uploadedBy === tea.uid);
                           const teacherRejections = logsList.filter(log => log.action === 'file_rejected' && log.uploaderId === tea.uid);
@@ -982,8 +1120,16 @@ export default function DashboardAdmin({
                                 </td>
                                 <td className="py-4.5 px-6">
                                   {tea.role === 'teacher' ? (
-                                    <div className="flex flex-wrap gap-1 max-w-[240px]">
-                                      {tea.subjects && tea.subjects.length > 0 ? (
+                                    <div className="flex flex-col gap-1 max-w-[240px]">
+                                      {tea.classAssignments && tea.classAssignments.length > 0 ? (
+                                        tea.classAssignments.map((asg, aIdx) => (
+                                          <div key={aIdx} className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0 font-bold">
+                                            <span>{t(asg.subject)}</span>
+                                            <span className="text-gray-400 font-normal">➔</span>
+                                            <span className="text-brand-600 dark:text-brand-400">{t(asg.classLevel)}</span>
+                                          </div>
+                                        ))
+                                      ) : tea.subjects && tea.subjects.length > 0 ? (
                                         tea.subjects.map((s, sIdx) => (
                                           <span key={sIdx} className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0">
                                             <BookOpen className="w-2.5 h-2.5" />
@@ -1213,7 +1359,7 @@ export default function DashboardAdmin({
 
                   {/* Mobile Card stack layout */}
                   <div className="md:hidden divide-y divide-gray-105 dark:divide-slate-805/40">
-                    {teachersList.map((tea) => {
+                    {filteredTeachers.map((tea) => {
                       const isExpanded = expandedTeacherId === tea.uid;
                       const teacherFiles = files.filter(f => f.uploadedBy === tea.uid);
                       const teacherRejections = logsList.filter(log => log.action === 'file_rejected' && log.uploaderId === tea.uid);
@@ -1247,16 +1393,24 @@ export default function DashboardAdmin({
                           <div className="text-xs">
                             <span className="block text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">{t("Assigned Subject Specialty")}</span>
                             {tea.role === 'teacher' ? (
-                              <div className="flex flex-wrap gap-1">
-                                {tea.subjects && tea.subjects.length > 0 ? (
+                              <div className="flex flex-col gap-1">
+                                {tea.classAssignments && tea.classAssignments.length > 0 ? (
+                                  tea.classAssignments.map((asg, aIdx) => (
+                                    <div key={aIdx} className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0 font-bold max-w-max">
+                                      <span>{t(asg.subject)}</span>
+                                      <span className="text-gray-400 font-normal">➔</span>
+                                      <span className="text-brand-605 dark:text-brand-400">{t(asg.classLevel)}</span>
+                                    </div>
+                                  ))
+                                ) : tea.subjects && tea.subjects.length > 0 ? (
                                   tea.subjects.map((s, sIdx) => (
-                                    <span key={sIdx} className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0 font-bold">
+                                    <span key={sIdx} className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0 font-bold max-w-max">
                                       <BookOpen className="w-2.5 h-2.5" />
                                       <span>{t(s)}</span>
                                     </span>
                                   ))
                                 ) : (
-                                  <span className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0 font-bold">
+                                  <span className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0 font-bold max-w-max">
                                     <BookOpen className="w-3 h-3" />
                                     <span>{t(tea.subject || '')}</span>
                                   </span>

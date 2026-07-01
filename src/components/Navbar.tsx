@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
-import { LogOut, User, Sparkles, BookOpen, School, Menu, X, Landmark, ChevronDown, Languages, Sun, Moon } from 'lucide-react';
+import { LogOut, User, Sparkles, BookOpen, School, Menu, X, Landmark, ChevronDown, Languages, Sun, Moon, Palette } from 'lucide-react';
 import { useThemeLanguage } from './ThemeLanguageContext';
 
 interface NavbarProps {
@@ -14,7 +14,7 @@ export default function Navbar({ user, onLogout, onOpenProfile, onTriggerAuth }:
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
-  const { language, setLanguage, theme, toggleTheme, t } = useThemeLanguage();
+  const { language, setLanguage, theme, toggleTheme, bgTheme, setBgTheme, t } = useThemeLanguage();
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 bg-white dark:bg-slate-900 border-b border-gray-100 dark:border-slate-800 shadow-xs transition-colors" id="sristy-navigation-bar">
@@ -51,6 +51,16 @@ export default function Navbar({ user, onLogout, onOpenProfile, onTriggerAuth }:
 
           {/* Desktop Right Settings Menu */}
           <div className="hidden md:flex items-center gap-4">
+            {/* Background Theme Switcher pill */}
+            <button 
+              onClick={() => setBgTheme(bgTheme === 'mint' ? 'offwhite' : 'mint')}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-gray-200 transition-colors select-none cursor-pointer"
+              title={t("Toggle Background Color")}
+            >
+              <Palette className="w-3.5 h-3.5 text-brand-500 shrink-0" />
+              <span>{bgTheme === 'mint' ? t("Mint View") : t("Off-white")}</span>
+            </button>
+
             {/* Language Switcher pill */}
             <button 
               onClick={() => setLanguage(language === 'en' ? 'bn' : 'en')}
@@ -167,16 +177,25 @@ export default function Navbar({ user, onLogout, onOpenProfile, onTriggerAuth }:
       {/* Mobile Drawer Panel */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-white dark:bg-slate-900 border-t border-gray-100 dark:border-slate-800 py-4 px-4 space-y-4 animate-in slide-in-from-top duration-200 transition-colors">
-          {/* Quick controls for language switching in mobile */}
-          <div className="flex items-center justify-between pb-3 border-b border-gray-50 dark:border-slate-800">
-            <span className="text-xs font-bold text-gray-500 dark:text-gray-400">{t("Language & Style")}</span>
-            <button 
-              onClick={() => setLanguage(language === 'en' ? 'bn' : 'en')}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-gray-200"
-            >
-              <Languages className="w-3.5 h-3.5 text-brand-500" />
-              <span>{language === 'en' ? 'English' : 'বাংলা'}</span>
-            </button>
+           {/* Quick controls for language switching in mobile */}
+          <div className="flex flex-col gap-2 pb-3 border-b border-gray-50 dark:border-slate-800">
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{t("Language & Style")}</span>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setLanguage(language === 'en' ? 'bn' : 'en')}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-gray-200"
+              >
+                <Languages className="w-3.5 h-3.5 text-brand-500" />
+                <span>{language === 'en' ? 'English' : 'বাংলা'}</span>
+              </button>
+              <button 
+                onClick={() => setBgTheme(bgTheme === 'mint' ? 'offwhite' : 'mint')}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-gray-200"
+              >
+                <Palette className="w-3.5 h-3.5 text-brand-500" />
+                <span>{bgTheme === 'mint' ? t("Mint View") : t("Off-white")}</span>
+              </button>
+            </div>
           </div>
 
           {user ? (

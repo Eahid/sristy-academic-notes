@@ -9,6 +9,8 @@ export interface UserProfile {
   branch?: string; // Optional (not needed or blank for master_admin)
   subject?: string; // Optional (primarily for teachers)
   subjects?: string[]; // Multiple assigned subjects for teachers
+  classes?: string[]; // Multiple assigned classes for teachers
+  classAssignments?: { subject: string; classLevel: string }[]; // Specific subject-class pairings
   status: 'active' | 'inactive';
   profilePic?: string; // Base64 image
   bio?: string;
