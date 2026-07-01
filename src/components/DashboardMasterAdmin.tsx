@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
+import SristyBoardDirectory from './SristyBoardDirectory';
 import { useThemeLanguage } from './ThemeLanguageContext';
 
 interface DashboardMasterAdminProps {
@@ -102,7 +103,7 @@ export default function DashboardMasterAdmin({
   const [newPasswordVal, setNewPasswordVal] = useState('');
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'admins' | 'all_files' | 'trash_bin' | 'activity_logs' | 'database_backups' | 'rejection_history' | 'teacher_rankings'>('admins');
+  const [activeTab, setActiveTab] = useState<'admins' | 'all_files' | 'trash_bin' | 'activity_logs' | 'database_backups' | 'rejection_history' | 'teacher_rankings' | 'board_directory'>('admins');
   const { t } = useThemeLanguage();
 
   // Master Admin dedicated search and filter states for Storage
@@ -1265,6 +1266,32 @@ export default function DashboardMasterAdmin({
             }`}>{t("Performance")}</p>
             <h4 className="font-extrabold text-xs text-gray-800 dark:text-gray-150 mt-1 leading-snug">
               {t("Teacher Rankings")}
+            </h4>
+          </div>
+        </button>
+
+        {/* Board Directory option */}
+        <button
+          onClick={() => setActiveTab('board_directory')}
+          className={`group text-left p-4 rounded-xl border transition-all duration-300 cursor-pointer flex items-center gap-3.5 ${
+            activeTab === 'board_directory'
+              ? 'bg-[#15803d]/5 dark:bg-[#15803d]/10 border-[#15803d] shadow-md ring-1 ring-[#15803d]/20 scale-[1.01]'
+              : 'bg-white dark:bg-slate-900 border-gray-150 dark:border-slate-800/80 hover:border-[#15803d]/40 hover:shadow-xs'
+          }`}
+        >
+          <div className={`p-2.5 rounded-lg transition-all duration-300 relative ${
+            activeTab === 'board_directory'
+              ? 'bg-[#15803d] text-white shadow-sm'
+              : 'bg-gray-100 dark:bg-slate-800 text-gray-550 dark:text-gray-400 group-hover:bg-[#15803d]/10 group-hover:text-[#15803d]'
+          }`}>
+            <Users className="w-4.5 h-4.5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className={`font-bold text-[9px] tracking-wider uppercase leading-tight ${
+              activeTab === 'board_directory' ? 'text-[#15803d] dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
+            }`}>{t("Sristy Board")}</p>
+            <h4 className="font-extrabold text-xs text-gray-800 dark:text-gray-150 mt-1 leading-snug">
+              {t("Board & Branch Admins")}
             </h4>
           </div>
         </button>
@@ -3885,7 +3912,7 @@ R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
       {activeTab === 'teacher_rankings' && (
         <div className="space-y-6 animate-in fade-in duration-200" id="teacher-rankings-dashboard">
           {/* Header Card */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-xs border border-gray-100 dark:border-slate-800 transition-colors">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-xs border border-gray-150 dark:border-slate-800 transition-colors">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-50 dark:border-slate-800/50 pb-4 mb-6">
               <div>
                 <h3 className="font-bold text-base text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase flex items-center gap-2">
@@ -4025,7 +4052,7 @@ R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
                             const medalColors = [
                               'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200',
                               'bg-slate-100 text-slate-700 dark:bg-slate-800/60 dark:text-slate-300 border-slate-200',
-                              'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400 border-orange-200'
+                              'bg-orange-100 text-orange-700 dark:bg-orange-955/30 dark:text-orange-400 border-orange-200'
                             ];
                             const medals = ["🥇", "🥈", "🥉"];
 
@@ -4054,7 +4081,7 @@ R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
                                   </div>
                                 </td>
                                 <td className="py-3 px-4 max-w-[180px] truncate">
-                                  <span className="text-[10.5px] font-semibold text-gray-650 dark:text-gray-350 bg-gray-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-xs">
+                                  <span className="text-[10.5px] font-semibold text-gray-655 dark:text-gray-350 bg-gray-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-xs">
                                     {teacher.subjects && teacher.subjects.length > 0
                                       ? teacher.subjects.join(', ')
                                       : teacher.subject || t("General Curriculum")}
@@ -4112,7 +4139,7 @@ R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
                                     #{index + 1}
                                   </span>
                                 )}
-                                <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-slate-800 flex items-center justify-center font-bold text-gray-650 dark:text-gray-300">
+                                <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-slate-800 flex items-center justify-center font-bold text-gray-655 dark:text-gray-300">
                                   {teacher.fullName.charAt(0)}
                                 </div>
                                 <div>
@@ -4122,7 +4149,7 @@ R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
                               </div>
                               <span className={`inline-block px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase ${
                                 teacher.status === 'inactive'
-                                  ? 'bg-red-50 text-red-600 dark:bg-red-955/20 dark:text-red-400 border border-red-100'
+                                  ? 'bg-red-50 text-red-605 dark:bg-red-955/20 dark:text-red-400 border border-red-100'
                                   : 'bg-emerald-50 text-emerald-650 dark:bg-emerald-955/20 dark:text-emerald-400 border border-emerald-100'
                               }`}>
                                 {teacher.status === 'inactive' ? t("Suspended") : t("Active")}
@@ -4187,7 +4214,7 @@ R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
                               <div key={tObj.uid} className="p-4 flex items-center justify-between gap-3 hover:bg-gray-50/20">
                                 <div className="space-y-1">
                                   <p className="font-extrabold text-xs text-gray-800 dark:text-gray-150 leading-none">{tObj.fullName}</p>
-                                  <p className="text-[10px] text-gray-400 dark:text-gray-500">{tObj.email}</p>
+                                  <p className="text-[10px] text-gray-400 dark:text-gray-550">{tObj.email}</p>
                                   <div className="flex gap-1.5 flex-wrap pt-1">
                                     <span className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-xs leading-none">
                                       {tObj.subjects && tObj.subjects.length > 0 ? tObj.subjects[0] : tObj.subject || t("General")}
@@ -4214,6 +4241,17 @@ R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
               );
             })()}
           </div>
+        </div>
+      )}
+
+      {activeTab === 'board_directory' && (
+        <div className="animate-in fade-in duration-200">
+          <SristyBoardDirectory 
+            currentUser={user} 
+            onRefreshAdmins={fetchAdmins}
+            onSuccessMessage={(msg) => setAdminSuccessMsg(msg)}
+            onErrorMessage={(msg) => setAdminErrMsg(msg)}
+          />
         </div>
       )}
 

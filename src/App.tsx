@@ -33,6 +33,7 @@ import DocPreviewModal from './components/DocPreviewModal';
 import FileCard from './components/FileCard';
 import BatchDownloadBar from './components/BatchDownloadBar';
 import TeacherDetailsModal from './components/TeacherDetailsModal';
+import SristyBoardDirectory from './components/SristyBoardDirectory';
 import { useThemeLanguage } from './components/ThemeLanguageContext';
 import { 
   FolderLock, 
@@ -49,7 +50,8 @@ import {
   CheckCircle2,
   Landmark,
   Loader2,
-  ArrowUpDown
+  ArrowUpDown,
+  Users
 } from 'lucide-react';
 
 export default function App() {
@@ -77,6 +79,7 @@ export default function App() {
   const [guestBranch, setGuestBranch] = useState('');
   const [guestSubject, setGuestSubject] = useState('');
   const [guestSortBy, setGuestSortBy] = useState<'date_desc' | 'date_asc' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc'>('date_desc');
+  const [guestActiveTab, setGuestActiveTab] = useState<'notes' | 'board'>('notes');
 
   const hasAutoOpened = useRef(false);
   const [logoFailed, setLogoFailed] = useState(false);
@@ -1169,172 +1172,220 @@ export default function App() {
               </div>
             </div>
 
-            {/* Interactive Search & Filters Portal (Public Resource Explorer) */}
-            <div className="space-y-6 scroll-mt-24" id="public-explorer">
-              <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-gray-100 dark:border-slate-800 shadow-xs space-y-4 transition-colors text-left">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div className="space-y-1">
-                    <h3 className="font-bold text-base text-gray-800 dark:text-gray-100 tracking-tight font-display flex items-center gap-2">
-                      <FolderLock className="w-5 h-5 text-brand-500 animate-pulse" />
-                      <span>{t("Verified Public Sristy Repository")}</span>
-                    </h3>
-                    <p className="text-xs text-gray-400">{t("Explore real learning sheets uploaded across Sristy College of Tangail & school branches.")}</p>
+            {/* Guest Tab Navigation */}
+            <div className="flex justify-center border-b border-gray-100 dark:border-slate-800 mb-8 mt-12 gap-6 select-none">
+              <button
+                onClick={() => setGuestActiveTab('notes')}
+                className={`pb-4 px-4 text-sm font-extrabold transition-all relative flex items-center gap-2 cursor-pointer ${
+                  guestActiveTab === 'notes'
+                    ? 'text-[#15803d] dark:text-brand-400'
+                    : 'text-gray-400 hover:text-gray-650 dark:text-gray-500'
+                }`}
+              >
+                <BookOpen className="w-4 h-4" />
+                <span>{t("Verified Notes Archive")}</span>
+                {guestActiveTab === 'notes' && (
+                  <motion.div 
+                    layoutId="guestActiveTabUnderline" 
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#15803d] rounded-full" 
+                  />
+                )}
+              </button>
+
+              <button
+                onClick={() => setGuestActiveTab('board')}
+                className={`pb-4 px-4 text-sm font-extrabold transition-all relative flex items-center gap-2 cursor-pointer ${
+                  guestActiveTab === 'board'
+                    ? 'text-[#15803d] dark:text-brand-400'
+                    : 'text-gray-400 hover:text-gray-650 dark:text-gray-500'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>{t("Sristy Board Directory")}</span>
+                {guestActiveTab === 'board' && (
+                  <motion.div 
+                    layoutId="guestActiveTabUnderline" 
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#15803d] rounded-full" 
+                  />
+                )}
+              </button>
+            </div>
+
+            {guestActiveTab === 'notes' ? (
+              /* Interactive Search & Filters Portal (Public Resource Explorer) */
+              <div className="space-y-6 scroll-mt-24" id="public-explorer">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-gray-100 dark:border-slate-800 shadow-xs space-y-4 transition-colors text-left">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="space-y-1">
+                      <h3 className="font-bold text-base text-gray-800 dark:text-gray-100 tracking-tight font-display flex items-center gap-2">
+                        <FolderLock className="w-5 h-5 text-brand-500 animate-pulse" />
+                        <span>{t("Verified Public Sristy Repository")}</span>
+                      </h3>
+                      <p className="text-xs text-gray-400">{t("Explore real learning sheets uploaded across Sristy College of Tangail & school branches.")}</p>
+                    </div>
+                    <span className="bg-emerald-50 dark:bg-emerald-955/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40 font-mono text-[10px] font-bold px-3 py-1 rounded-full uppercase flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                      <span>{filteredPublicArchives.length} {t("Available Note's")}</span>
+                    </span>
                   </div>
-                  <span className="bg-emerald-50 dark:bg-emerald-955/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40 font-mono text-[10px] font-bold px-3 py-1 rounded-full uppercase flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>{filteredPublicArchives.length} {t("Available Note's")}</span>
-                  </span>
+
+                  <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4">
+                    {/* Text Search */}
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        </svg>
+                      </span>
+                      <input
+                        type="text"
+                        value={guestSearch}
+                        onChange={(e) => setGuestSearch(e.target.value)}
+                        placeholder={t("Search file name, topic, notes...")}
+                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-705 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold text-gray-700 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                      />
+                    </div>
+
+                    {/* Branch Filter */}
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
+                        <School className="w-4 h-4 text-brand-500" />
+                      </span>
+                      <select
+                        value={guestBranch}
+                        onChange={(e) => setGuestBranch(e.target.value)}
+                        className="w-full pl-10 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-705 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold text-gray-750 dark:text-gray-100 appearance-none cursor-pointer transition-all"
+                      >
+                        <option value="">{t("-- Apply Branch Filter --")}</option>
+                        {BRANCHES.map((bName, idx) => (
+                          <option key={idx} value={bName}>{t(bName)}</option>
+                        ))}
+                      </select>
+                      <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+
+                    {/* Subject Filter */}
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
+                        <BookOpen className="w-4 h-4 text-brand-500" />
+                      </span>
+                      <select
+                        value={guestSubject}
+                        onChange={(e) => setGuestSubject(e.target.value)}
+                        className="w-full pl-10 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-705 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold text-gray-750 dark:text-gray-100 appearance-none cursor-pointer transition-all"
+                      >
+                        <option value="">{t("-- Apply Subject Filter --")}</option>
+                        {SUBJECTS.map((sub, idx) => (
+                          <option key={idx} value={sub}>{t(sub)}</option>
+                        ))}
+                      </select>
+                      <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+
+                    {/* Sort Selection */}
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
+                        <ArrowUpDown className="w-4 h-4 text-brand-500" />
+                      </span>
+                      <select
+                        value={guestSortBy}
+                        onChange={(e) => setGuestSortBy(e.target.value as any)}
+                        className="w-full pl-10 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-705 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold text-gray-750 dark:text-gray-100 appearance-none cursor-pointer transition-all"
+                      >
+                        <option value="date_desc">{t("Newest First")}</option>
+                        <option value="date_asc">{t("Oldest First")}</option>
+                        <option value="name_asc">{t("Name: A to Z")}</option>
+                        <option value="name_desc">{t("Name: Z to A")}</option>
+                        <option value="size_desc">{t("Size: Largest First")}</option>
+                        <option value="size_asc">{t("Size: Smallest First")}</option>
+                      </select>
+                      <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Reset Buttons */}
+                  {(guestSearch || guestBranch || guestSubject || guestSortBy !== 'date_desc') && (
+                    <div className="flex justify-end pt-1">
+                      <button
+                        onClick={() => {
+                          setGuestSearch('');
+                          setGuestBranch('');
+                          setGuestSubject('');
+                          setGuestSortBy('date_desc');
+                        }}
+                        className="text-[10px] font-bold text-brand-600 hover:text-brand-700 hover:underline cursor-pointer"
+                      >
+                        {t("Clear Search Parameters & Filters")}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4">
-                  {/* Text Search */}
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                      </svg>
-                    </span>
-                    <input
-                      type="text"
-                      value={guestSearch}
-                      onChange={(e) => setGuestSearch(e.target.value)}
-                      placeholder={t("Search file name, topic, notes...")}
-                      className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-705 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold text-gray-700 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
-                    />
+                {filteredPublicArchives.length > 1 && (
+                  <div className="flex sm:hidden items-center justify-center gap-1.5 text-[11px] text-brand-605 dark:text-brand-405 mb-3.5 animate-pulse bg-brand-500/5 py-1 px-3 rounded-full border border-brand-500/10">
+                    <span className="font-semibold uppercase tracking-wider">Swipe horizontally</span>
+                    <span className="text-sm font-bold">↔</span>
+                    <span>to browse {filteredPublicArchives.length} files</span>
                   </div>
+                )}
 
-                  {/* Branch Filter */}
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
-                      <School className="w-4 h-4 text-brand-500" />
-                    </span>
-                    <select
-                      value={guestBranch}
-                      onChange={(e) => setGuestBranch(e.target.value)}
-                      className="w-full pl-10 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-705 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold text-gray-750 dark:text-gray-100 appearance-none cursor-pointer transition-all"
-                    >
-                      <option value="">{t("-- Apply Branch Filter --")}</option>
-                      {BRANCHES.map((bName, idx) => (
-                        <option key={idx} value={bName}>{t(bName)}</option>
-                      ))}
-                    </select>
-                    <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </span>
+                {filteredPublicArchives.length === 0 ? (
+                  <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 text-gray-400 dark:text-gray-555 text-xs shadow-xs">
+                    <FolderLock className="w-12 h-12 mx-auto stroke-1 text-gray-300 dark:text-gray-650 mb-2" />
+                    <p>{t("No matching verified documents found in Sristy Education database. Refine your indicators or clear filter.")}</p>
                   </div>
-
-                  {/* Subject Filter */}
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
-                      <BookOpen className="w-4 h-4 text-brand-500" />
-                    </span>
-                    <select
-                      value={guestSubject}
-                      onChange={(e) => setGuestSubject(e.target.value)}
-                      className="w-full pl-10 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-705 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold text-gray-750 dark:text-gray-100 appearance-none cursor-pointer transition-all"
-                    >
-                      <option value="">{t("-- Apply Subject Filter --")}</option>
-                      {SUBJECTS.map((sub, idx) => (
-                        <option key={idx} value={sub}>{t(sub)}</option>
-                      ))}
-                    </select>
-                    <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </span>
-                  </div>
-
-                  {/* Sort Selection */}
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
-                      <ArrowUpDown className="w-4 h-4 text-brand-500" />
-                    </span>
-                    <select
-                      value={guestSortBy}
-                      onChange={(e) => setGuestSortBy(e.target.value as any)}
-                      className="w-full pl-10 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-705 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold text-gray-750 dark:text-gray-100 appearance-none cursor-pointer transition-all"
-                    >
-                      <option value="date_desc">{t("Newest First")}</option>
-                      <option value="date_asc">{t("Oldest First")}</option>
-                      <option value="name_asc">{t("Name: A to Z")}</option>
-                      <option value="name_desc">{t("Name: Z to A")}</option>
-                      <option value="size_desc">{t("Size: Largest First")}</option>
-                      <option value="size_asc">{t("Size: Smallest First")}</option>
-                    </select>
-                    <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </span>
-                  </div>
-                </div>
-
-                {/* Reset Buttons */}
-                {(guestSearch || guestBranch || guestSubject || guestSortBy !== 'date_desc') && (
-                  <div className="flex justify-end pt-1">
-                    <button
-                      onClick={() => {
-                        setGuestSearch('');
-                        setGuestBranch('');
-                        setGuestSubject('');
-                        setGuestSortBy('date_desc');
+                ) : (
+                  <div className="space-y-4">
+                    <BatchDownloadBar
+                      selectedIds={selectedFileIds}
+                      allFiles={files}
+                      currentFilteredFiles={filteredPublicArchives}
+                      onSelectToggle={(id) => {
+                        setSelectedFileIds(prev =>
+                          prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+                        );
                       }}
-                      className="text-[10px] font-bold text-brand-600 hover:text-brand-700 hover:underline cursor-pointer"
-                    >
-                      {t("Clear Search Parameters & Filters")}
-                    </button>
+                      onClearSelection={() => setSelectedFileIds([])}
+                      onSelectAll={(ids) => setSelectedFileIds(ids)}
+                    />
+
+                    <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 sm:gap-6">
+                      {filteredPublicArchives.map((file) => (
+                        <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
+                          <FileCard
+                            file={file}
+                            user={currentUser}
+                            onDownload={handleDownloadAttempt}
+                            onPreview={handlePreviewAttempt}
+                            isSelected={selectedFileIds.includes(file.id)}
+                            onSelectToggle={(id) => {
+                              setSelectedFileIds(prev =>
+                                prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+                              );
+                            }}
+                            onViewTeacherDetails={setViewingTeacherUid}
+                            allFiles={files}
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
-
-              {filteredPublicArchives.length > 1 && (
-                <div className="flex sm:hidden items-center justify-center gap-1.5 text-[11px] text-brand-605 dark:text-brand-405 mb-3.5 animate-pulse bg-brand-500/5 py-1 px-3 rounded-full border border-brand-500/10">
-                  <span className="font-semibold uppercase tracking-wider">Swipe horizontally</span>
-                  <span className="text-sm font-bold">↔</span>
-                  <span>to browse {filteredPublicArchives.length} files</span>
-                </div>
-              )}
-
-              {filteredPublicArchives.length === 0 ? (
-                <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 text-gray-400 dark:text-gray-500 text-xs shadow-xs">
-                  <FolderLock className="w-12 h-12 mx-auto stroke-1 text-gray-300 dark:text-gray-600 mb-2" />
-                  <p>{t("No matching verified documents found in Sristy Education database. Refine your indicators or clear filter.")}</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <BatchDownloadBar
-                    selectedIds={selectedFileIds}
-                    allFiles={files}
-                    currentFilteredFiles={filteredPublicArchives}
-                    onSelectToggle={(id) => {
-                      setSelectedFileIds(prev =>
-                        prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-                      );
-                    }}
-                    onClearSelection={() => setSelectedFileIds([])}
-                    onSelectAll={(ids) => setSelectedFileIds(ids)}
-                  />
-
-                  <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 sm:gap-6">
-                    {filteredPublicArchives.map((file) => (
-                      <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
-                        <FileCard
-                          file={file}
-                          user={currentUser}
-                          onDownload={handleDownloadAttempt}
-                          onPreview={handlePreviewAttempt}
-                          isSelected={selectedFileIds.includes(file.id)}
-                          onSelectToggle={(id) => {
-                            setSelectedFileIds(prev =>
-                              prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-                            );
-                          }}
-                          onViewTeacherDetails={setViewingTeacherUid}
-                          allFiles={files}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            ) : (
+              <div className="animate-in fade-in duration-300">
+                <SristyBoardDirectory 
+                  currentUser={currentUser} 
+                  onRefreshAdmins={() => {}}
+                />
+              </div>
+            )}
 
             {/* Quick Sristy Branch Info Panel for Aesthetic Value */}
             <div className="p-8 rounded-2xl bg-brand-50/40 dark:bg-slate-900 border border-brand-100 dark:border-slate-800 flex flex-col md:flex-row justify-between items-center gap-6">
