@@ -46,6 +46,9 @@ export const SUBJECTS = [
 ];
 
 export const CLASS_LEVELS = [
+  "Class 3",
+  "Class 4",
+  "Class 5",
   "Class 6",
   "Class 7",
   "Class 8",

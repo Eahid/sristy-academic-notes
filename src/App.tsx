@@ -18,7 +18,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { ref, deleteObject } from 'firebase/storage';
 import { motion, AnimatePresence } from 'motion/react';
 import { db, auth, storage } from './firebase';
-import { safeLocalStorage } from './utils';
+import { safeLocalStorage, forceClearSystemCache } from './utils';
 import { UserProfile, FileArchive } from './types';
 import { BRANCHES, SUBJECTS } from './constants';
 import Navbar from './components/Navbar';
@@ -1418,6 +1418,17 @@ export default function App() {
           <div className="flex gap-4">
             <span className="hover:text-brand-500 cursor-pointer">{t("Security Protocol")}</span>
             <span className="hover:text-brand-500 cursor-pointer">{t("Storage Fairuse")}</span>
+            <span 
+              onClick={() => {
+                const confirmed = window.confirm(t("If you cannot see the latest updates, please click below to force clear system cache and fetch the newest version."));
+                if (confirmed) {
+                  forceClearSystemCache();
+                }
+              }}
+              className="hover:text-amber-600 dark:hover:text-amber-400 text-amber-700 dark:text-amber-500 font-semibold cursor-pointer"
+            >
+              {t("Force System Update")}
+            </span>
             <span className="hover:text-brand-500 cursor-pointer text-brand-500 font-bold">{t("Tangail Central")}</span>
           </div>
         </div>

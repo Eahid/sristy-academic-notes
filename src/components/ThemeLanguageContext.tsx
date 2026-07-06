@@ -450,7 +450,18 @@ export const translations: Record<string, string> = {
 
   // Super Admin Notice board translations
   "⭐ CRITICAL SUPER ADMIN ANNOUNCEMENT": "⭐ সুপার এডমিন বিশেষ ঘোষণা",
-  "Write Super Admin Notice": "সুপার এডমিন নোটিশ লিখুন"
+  "Write Super Admin Notice": "সুপার এডমিন নোটিশ লিখুন",
+
+  // Cache reset and force system updates translations
+  "Reset App Cache": "ক্যাশ রিসেট করুন",
+  "Clear Cache": "ক্যাশ পরিষ্কার করুন",
+  "Clear App Cache": "সিস্টেম ক্যাশ পরিষ্কার করুন",
+  "Force System Update": "সিস্টেম ফোর্স আপডেট",
+  "System Update / Reset App Cache": "সিস্টেম আপডেট / ক্যাশ রিসেট",
+  "Successfully cleared all system caches and cookies! Reloading page...": "সফলভাবে সমস্ত সিস্টেম ক্যাশ এবং কুকিজ পরিষ্কার করা হয়েছে! পেজটি পুনরায় লোড হচ্ছে...",
+  "If you cannot see the latest updates, please click below to force clear system cache and fetch the newest version.": "আপনি যদি সর্বশেষ আপডেটগুলো দেখতে না পান, তবে অনুগ্রহ করে নিচে ক্লিক করে সিস্টেমের ক্যাশ পরিষ্কার করুন এবং নতুন সংস্করণটি লোড করুন।",
+  "Click to force clear cache and reload if updates are not showing up.": "আপডেট দেখতে না পেলে এখানে ক্লিক করে ক্যাশ পরিষ্কার ও রিফ্রেশ করুন।",
+  "Updates not showing up or having trouble signing in?": "আপডেট দেখতে সমস্যা হচ্ছে অথবা সাইন-ইন করতে পারছেন না?"
 };
 
 export const ThemeLanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

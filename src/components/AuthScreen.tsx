@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { collection, query, where, getDocs, doc, setDoc, getDoc, serverTimestamp, limit } from 'firebase/firestore';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { db, auth, handleFirestoreError, OperationType, createSecondaryUser } from '../firebase';
-import { safeLocalStorage } from '../utils';
+import { safeLocalStorage, forceClearSystemCache } from '../utils';
 import { UserProfile, UserRole } from '../types';
 import { BRANCHES, SUBJECTS } from '../constants';
-import { Lock, User, Mail, School, BookOpen, AlertCircle, Sparkles, CheckCircle2, ChevronDown } from 'lucide-react';
+import { Lock, User, Mail, School, BookOpen, AlertCircle, Sparkles, CheckCircle2, ChevronDown, RefreshCw } from 'lucide-react';
 import { useThemeLanguage } from './ThemeLanguageContext';
 
 interface AuthScreenProps {
@@ -512,6 +512,26 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
               {loading ? t("Signing In...") : t("Sign In Gateway")}
             </button>
           </form>
+
+          {/* Stale Cache Help Center section */}
+          <div className="mt-6 pt-5 border-t border-gray-150 dark:border-slate-800 text-center">
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-2">
+              {t("Updates not showing up or having trouble signing in?")}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                const confirmed = window.confirm(t("If you cannot see the latest updates, please click below to force clear system cache and fetch the newest version."));
+                if (confirmed) {
+                  forceClearSystemCache();
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/20 dark:hover:bg-amber-950/40 text-amber-800 dark:text-amber-400 border border-amber-200 dark:border-amber-900/30 rounded-lg text-[10px] font-bold transition-all active:scale-95 cursor-pointer"
+            >
+              <RefreshCw className="w-3 h-3 text-amber-600 dark:text-amber-400 animate-spin-slow" style={{ animationDuration: '6s' }} />
+              <span>{t("Clear App Cache")}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
