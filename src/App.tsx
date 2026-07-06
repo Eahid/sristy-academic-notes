@@ -78,6 +78,46 @@ export default function App() {
   const [guestSearch, setGuestSearch] = useState('');
   const [guestBranch, setGuestBranch] = useState('');
   const [guestSubject, setGuestSubject] = useState('');
+
+  // 1. URL Query Cache-Reset Listener: Clears cache immediately if link contains "?clear-cache=true" or "?reset=true"
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('clear-cache') === 'true' || params.get('reset') === 'true' || params.get('clear') === 'true') {
+        console.log("Auto cache reset query detected. Cleaning up system caches...");
+        // Clear LocalStorage & SessionStorage
+        localStorage.clear();
+        sessionStorage.clear();
+        
+        // Clear Cookies
+        const cookies = document.cookie.split(";");
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i];
+          const eqPos = cookie.indexOf("=");
+          const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+          document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+          document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=" + window.location.hostname;
+          document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=." + window.location.hostname;
+        }
+
+        // Unregister Service Workers
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.getRegistrations().then((registrations) => {
+            for (const registration of registrations) {
+              registration.unregister();
+            }
+          });
+        }
+
+        // Redirect to a clean landing URL
+        setTimeout(() => {
+          window.location.href = window.location.origin + window.location.pathname + "?v=" + Date.now();
+        }, 300);
+      }
+    } catch (err) {
+      console.error("Error executing auto-cache clear handler:", err);
+    }
+  }, []);
   const [guestSortBy, setGuestSortBy] = useState<'date_desc' | 'date_asc' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc'>('date_desc');
   const [guestActiveTab, setGuestActiveTab] = useState<'notes' | 'board'>('notes');
 

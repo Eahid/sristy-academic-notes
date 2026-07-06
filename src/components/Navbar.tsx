@@ -72,23 +72,6 @@ export default function Navbar({ user, onLogout, onOpenProfile, onTriggerAuth }:
               <span>{language === 'en' ? 'English' : 'বাংলা'}</span>
             </button>
 
-            {/* Force Clear Cache / Update pill */}
-            <button 
-              onClick={() => {
-                const confirmed = window.confirm(t("If you cannot see the latest updates, please click below to force clear system cache and fetch the newest version."));
-                if (confirmed) {
-                  forceClearSystemCache();
-                }
-              }}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg border border-amber-200 bg-amber-50/50 hover:bg-amber-100 text-amber-800 dark:text-amber-400 transition-colors select-none cursor-pointer"
-              title={t("Click to force clear cache and reload if updates are not showing up.")}
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span>{t("Clear Cache")}</span>
-            </button>
-
-
-
             {user ? (
               <div className="flex items-center gap-4">
                 {/* Branch Badge info */}
@@ -212,21 +195,6 @@ export default function Navbar({ user, onLogout, onOpenProfile, onTriggerAuth }:
                 <span>{bgTheme === 'mint' ? t("Mint View") : t("Off-white")}</span>
               </button>
             </div>
-            
-            {/* Mobile cache reset row */}
-            <button 
-              onClick={() => {
-                const confirmed = window.confirm(t("If you cannot see the latest updates, please click below to force clear system cache and fetch the newest version."));
-                if (confirmed) {
-                  forceClearSystemCache();
-                }
-              }}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-bold rounded-lg border border-amber-200 bg-amber-50 text-amber-800 dark:text-amber-400 cursor-pointer mt-1"
-              title={t("Click to force clear cache and reload if updates are not showing up.")}
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
-              <span>{t("Clear App Cache")}</span>
-            </button>
           </div>
 
           {user ? (
