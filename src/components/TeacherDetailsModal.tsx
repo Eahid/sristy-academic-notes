@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { doc, getDoc, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, orderBy, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { UserProfile, FileArchive } from '../types';
 import { useThemeLanguage } from './ThemeLanguageContext';
+import { useBranchSubject } from './BranchSubjectContext';
+import { CLASS_LEVELS } from '../constants';
 import { motion } from 'motion/react';
 import { 
   X, 
@@ -16,7 +18,12 @@ import {
   Clock, 
   CheckCircle2, 
   Eye, 
-  Download 
+  Download,
+  Plus,
+  Trash2,
+  AlertCircle,
+  Save,
+  Sliders
 } from 'lucide-react';
 
 interface TeacherDetailsModalProps {
@@ -25,6 +32,7 @@ interface TeacherDetailsModalProps {
   files: FileArchive[];
   onDownload: (file: FileArchive) => void;
   onPreview?: (file: FileArchive) => void;
+  user?: UserProfile | null;
 }
 
 export default function TeacherDetailsModal({ 
@@ -32,14 +40,24 @@ export default function TeacherDetailsModal({
   onClose, 
   files, 
   onDownload, 
-  onPreview 
+  onPreview,
+  user
 }: TeacherDetailsModalProps) {
   const { t } = useThemeLanguage();
+  const { subjects: globalSubjectsList } = useBranchSubject();
   const [teacher, setTeacher] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [rejections, setRejections] = useState<any[]>([]);
   const [loadingRejections, setLoadingRejections] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'uploads' | 'rejections'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'uploads' | 'rejections' | 'manage_assignments'>('overview');
+
+  // Edit mappings state
+  const [editAssignments, setEditAssignments] = useState<{ subject: string; classLevel: string }[]>([]);
+  const [selSubject, setSelSubject] = useState('');
+  const [selClass, setSelClass] = useState('');
+  const [savingAssignments, setSavingAssignments] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   // Filter study materials uploaded by this teacher from real-time files prop
   const teacherFiles = files.filter(f => f.uploadedBy === teacherUid && !f.isDeleted);
@@ -62,7 +80,7 @@ export default function TeacherDetailsModal({
               ? data.createdAt.toDate() 
               : new Date(data.createdAt);
           }
-          setTeacher({
+          const loadedTeacher: UserProfile = {
             uid: docSnap.id,
             username: data.username || '',
             fullName: data.fullName || '',
@@ -71,11 +89,15 @@ export default function TeacherDetailsModal({
             branch: data.branch || '',
             subject: data.subject || '',
             subjects: data.subjects || [],
+            classes: data.classes || [],
+            classAssignments: data.classAssignments || [],
             status: data.status || 'active',
             profilePic: data.profilePic || '',
             bio: data.bio || '',
             createdAt: createdAtDate
-          });
+          };
+          setTeacher(loadedTeacher);
+          setEditAssignments(data.classAssignments || []);
         }
       } catch (err) {
         console.error("Error fetching teacher details:", err);
@@ -130,6 +152,76 @@ export default function TeacherDetailsModal({
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  };
+
+  const isAuthorizedToEdit = user && teacher && (
+    user.role === 'master_admin' || 
+    (user.role === 'admin' && user.branch === teacher.branch)
+  );
+
+  const handleAddAssignment = () => {
+    if (!selSubject || !selClass) {
+      setSaveError(t("Please select both a Subject and a Class."));
+      return;
+    }
+    const exists = editAssignments.some(
+      a => a.subject === selSubject && a.classLevel === selClass
+    );
+    if (exists) {
+      setSaveError(t("This specific Subject and Class mapping already exists."));
+      return;
+    }
+    setSaveError('');
+    setSaveSuccess(false);
+    setEditAssignments([...editAssignments, { subject: selSubject, classLevel: selClass }]);
+    setSelSubject('');
+    setSelClass('');
+  };
+
+  const handleRemoveAssignment = (index: number) => {
+    setSaveSuccess(false);
+    setEditAssignments(editAssignments.filter((_, i) => i !== index));
+  };
+
+  const handleSaveAssignments = async () => {
+    if (!teacher) return;
+    if (editAssignments.length === 0) {
+      setSaveError(t("Teachers must have at least one assigned subject and class mapping."));
+      return;
+    }
+
+    setSavingAssignments(true);
+    setSaveError('');
+    setSaveSuccess(false);
+
+    try {
+      const uniqueSubjects = Array.from(new Set(editAssignments.map(a => a.subject)));
+      const uniqueClasses = Array.from(new Set(editAssignments.map(a => a.classLevel)));
+      const mainSubject = editAssignments[0]?.subject || '';
+
+      const docRef = doc(db, 'users', teacher.uid);
+      await updateDoc(docRef, {
+        classAssignments: editAssignments,
+        subjects: uniqueSubjects,
+        classes: uniqueClasses,
+        subject: mainSubject
+      });
+
+      setTeacher({
+        ...teacher,
+        classAssignments: editAssignments,
+        subjects: uniqueSubjects,
+        classes: uniqueClasses,
+        subject: mainSubject
+      });
+
+      setSaveSuccess(true);
+    } catch (err) {
+      console.error("Error saving teacher assignments:", err);
+      setSaveError(t("Failed to update teacher's assignments."));
+    } finally {
+      setSavingAssignments(false);
+    }
   };
 
   return (
@@ -238,6 +330,19 @@ export default function TeacherDetailsModal({
                 <span>{t("Rejection Logs")}</span>
                 <span className="bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-full text-[10px]">{rejections.length}</span>
               </button>
+              {isAuthorizedToEdit && (
+                <button 
+                  onClick={() => setActiveTab('manage_assignments')}
+                  className={`py-3.5 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                    activeTab === 'manage_assignments' 
+                      ? 'border-[#15803d] text-[#15803d] dark:text-brand-400' 
+                      : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                  }`}
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>{t("Manage Classes / Subjects")}</span>
+                </button>
+              )}
             </div>
 
             {/* Scrollable Tab Views Content */}
@@ -408,6 +513,135 @@ export default function TeacherDetailsModal({
                       </div>
                     ))
                   )}
+                </div>
+              )}
+
+              {/* TAB 4: MANAGE ASSIGNMENTS */}
+              {activeTab === 'manage_assignments' && isAuthorizedToEdit && (
+                <div className="space-y-5 animate-in fade-in duration-150">
+                  <div className="bg-amber-500/10 border border-amber-500/20 text-amber-805 dark:text-amber-400 p-3.5 rounded-xl flex gap-2.5 text-xxs leading-relaxed font-semibold">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-extrabold uppercase tracking-wide text-[10px] mb-0.5">{t("Dynamic Role Assignment Warning")}</p>
+                      <p>{t("Updating subject or class pairings directly alters which curriculum topics and grade folders this instructor can access and publish study materials for. Ensure changes are correct.")}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Add new mapping form */}
+                    <div className="space-y-4 bg-gray-50/50 dark:bg-slate-950/10 p-4 rounded-xl border border-gray-100 dark:border-slate-800/60">
+                      <h4 className="font-extrabold text-[11px] text-gray-800 dark:text-gray-200 uppercase tracking-wider flex items-center gap-1.5 border-b border-gray-100 dark:border-slate-800/60 pb-2">
+                        <Plus className="w-3.5 h-3.5 text-[#15803d]" />
+                        <span>{t("Add Class & Subject Mapping")}</span>
+                      </h4>
+
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">{t("Subject Assignment")}</label>
+                          <select
+                            value={selSubject}
+                            onChange={(e) => setSelSubject(e.target.value)}
+                            className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-850 rounded-xl text-xs text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                          >
+                            <option value="">-- {t("Select Subject")} --</option>
+                            {globalSubjectsList.map((sub, idx) => (
+                              <option key={idx} value={sub}>{t(sub)}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">{t("Class Level")}</label>
+                          <select
+                            value={selClass}
+                            onChange={(e) => setSelClass(e.target.value)}
+                            className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-850 rounded-xl text-xs text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                          >
+                            <option value="">-- {t("Select Class Level")} --</option>
+                            {CLASS_LEVELS.map((cls, idx) => (
+                              <option key={idx} value={cls}>{t(cls)}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleAddAssignment}
+                          className="w-full py-2 bg-gray-100 hover:bg-gray-200 dark:bg-slate-850 dark:hover:bg-slate-800 text-[#15803d] dark:text-brand-400 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-3xs"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>{t("Add to Assignments")}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Current assignments list preview */}
+                    <div className="space-y-4">
+                      <h4 className="font-extrabold text-[11px] text-gray-800 dark:text-gray-200 uppercase tracking-wider flex items-center justify-between border-b border-gray-100 dark:border-slate-800/60 pb-2">
+                        <span>{t("Assigned Pairings List")}</span>
+                        <span className="text-[10px] text-gray-400 bg-gray-100 dark:bg-slate-800 px-2 py-0.5 rounded-full font-bold">
+                          {editAssignments.length} {t("Pairings")}
+                        </span>
+                      </h4>
+
+                      <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                        {editAssignments.length === 0 ? (
+                          <div className="text-center py-12 text-gray-400 dark:text-gray-500">
+                            <p className="text-xs">{t("No subject-class assignments specified.")}</p>
+                            <p className="text-[10px] text-gray-450 mt-1">{t("A teacher must have at least one mapping to access classrooms.")}</p>
+                          </div>
+                        ) : (
+                          editAssignments.map((asg, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-2.5 bg-indigo-50/40 dark:bg-indigo-950/10 border border-indigo-100/40 dark:border-indigo-900/15 rounded-xl text-xs">
+                              <div className="min-w-0 flex-1 flex items-center gap-2">
+                                <span className="bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-extrabold px-2 py-0.5 rounded text-[10px]">{t(asg.subject)}</span>
+                                <span className="text-gray-400">➔</span>
+                                <span className="bg-brand-50 dark:bg-slate-800 text-[#15803d] dark:text-brand-400 font-extrabold px-2 py-0.5 rounded text-[10px]">{t(asg.classLevel)}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveAssignment(idx)}
+                                className="p-1.5 hover:bg-red-50 dark:hover:bg-red-955/20 text-red-500 rounded-lg transition-colors cursor-pointer"
+                                title={t("Remove Assignment")}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {saveError && (
+                    <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xxs font-semibold rounded-xl flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{saveError}</span>
+                    </div>
+                  )}
+
+                  {saveSuccess && (
+                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xxs font-semibold rounded-xl flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      <span>{t("Teacher's subject and class assignments successfully updated in database!")}</span>
+                    </div>
+                  )}
+
+                  <div className="pt-2 border-t border-gray-100 dark:border-slate-800/60 flex justify-end">
+                    <button
+                      type="button"
+                      disabled={savingAssignments}
+                      onClick={handleSaveAssignments}
+                      className="px-5 py-2.5 bg-[#15803d] hover:bg-[#166534] disabled:bg-gray-300 text-white font-extrabold text-xs rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-md disabled:cursor-not-allowed"
+                    >
+                      {savingAssignments ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      ) : (
+                        <Save className="w-4 h-4" />
+                      )}
+                      <span>{savingAssignments ? t("Saving Changes...") : t("Save Assignment Changes")}</span>
+                    </button>
+                  </div>
                 </div>
               )}
 

@@ -19,12 +19,14 @@ export function BranchSubjectProvider({ children }: { children: React.ReactNode 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Read and listen to the 'system_config/metadata' document
     const unsub = onSnapshot(doc(db, 'system_config', 'metadata'), (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
-
+        
         let targetBranches = DEFAULT_BRANCHES;
         if (data.branches && Array.isArray(data.branches) && data.branches.length > 0) {
+          // Merge defaults with dynamic custom elements, maintaining order and uniqueness
           targetBranches = Array.from(new Set([...DEFAULT_BRANCHES, ...data.branches]));
         }
         setBranches(targetBranches);
@@ -41,6 +43,7 @@ export function BranchSubjectProvider({ children }: { children: React.ReactNode 
       setLoading(false);
     }, (error) => {
       console.warn("Could not fetch branches/subjects from Firestore:", error);
+      // Fallback to static lists
       setBranches(DEFAULT_BRANCHES);
       setSubjects(DEFAULT_SUBJECTS);
       setLoading(false);
@@ -51,11 +54,18 @@ export function BranchSubjectProvider({ children }: { children: React.ReactNode 
 
   const addBranch = async (newBranch: string) => {
     const trimmed = newBranch.trim();
-    if (!trimmed) throw new Error("Branch name cannot be empty.");
+    if (!trimmed) {
+      throw new Error("Branch name cannot be empty.");
+    }
+    
+    // Check duplication (case-insensitive)
     if (branches.some(b => b.toLowerCase() === trimmed.toLowerCase())) {
       throw new Error("This branch already exists.");
     }
+
     const updatedBranches = [...branches, trimmed];
+    // Keep custom ones from the default to keep Firestore doc lightweight, or store full list.
+    // Storing full merged list in Firestore is safer and more direct.
     await setDoc(doc(db, 'system_config', 'metadata'), {
       branches: updatedBranches,
       subjects: subjects
@@ -64,10 +74,15 @@ export function BranchSubjectProvider({ children }: { children: React.ReactNode 
 
   const addSubject = async (newSubject: string) => {
     const trimmed = newSubject.trim();
-    if (!trimmed) throw new Error("Subject name cannot be empty.");
+    if (!trimmed) {
+      throw new Error("Subject name cannot be empty.");
+    }
+
+    // Check duplication (case-insensitive)
     if (subjects.some(s => s.toLowerCase() === trimmed.toLowerCase())) {
       throw new Error("This subject already exists.");
     }
+
     const updatedSubjects = [...subjects, trimmed];
     await setDoc(doc(db, 'system_config', 'metadata'), {
       branches: branches,

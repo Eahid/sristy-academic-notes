@@ -1547,6 +1547,7 @@ export default function App() {
             files={files}
             onDownload={handleDownloadAttempt}
             onPreview={handlePreviewAttempt}
+            user={currentUser}
           />
         )}
       </AnimatePresence>
