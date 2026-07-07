@@ -5,22 +5,22 @@ import { getStorage } from 'firebase/storage';
 
 // ─────────────────────────────────────────────────────────────
 // FIREBASE PROJECT POOL
-// PRIMARY  → gen-lang-client-0561669486  (your original DB)
-// BACKUP   → notes-backup-9fd41          (your new backup DB)
+// PRIMARY  → sristy-notes-main (Blaze — no quota limits)
+// BACKUP   → notes-backup-9fd41 (free tier backup)
 //
-// Auth   → always PRIMARY (users only exist there)
-// primaryDb → always PRIMARY Firestore (for auth lookups: username→email)
-// db     → PRIMARY normally, BACKUP when quota is exceeded
+// Auth      → always PRIMARY
+// primaryDb → always PRIMARY Firestore (for user lookups)
+// db        → PRIMARY normally, BACKUP when quota exceeded
 // ─────────────────────────────────────────────────────────────
 
 const PRIMARY_CONFIG = {
-  projectId: "gen-lang-client-0561669486",
-  appId: "1:597455778443:web:618c69bffab50d21d3da8e",
-  apiKey: "AIzaSyBcfrZMJ0r6yLfY46ttck9CUancJH4jpP8",
-  authDomain: "gen-lang-client-0561669486.firebaseapp.com",
-  firestoreDatabaseId: "ai-studio-ff73a67c-fae9-4980-8b17-d8dd1494a585",
-  storageBucket: "gen-lang-client-0561669486.firebasestorage.app",
-  messagingSenderId: "597455778443",
+  projectId: "sristy-notes-main",
+  appId: "1:153318755219:web:a685a32a57e4f929c8f666",
+  apiKey: "AIzaSyCdjI-nSxdKF91lhD2WZSTY-SiyMVXlA8g",
+  authDomain: "sristy-notes-main.firebaseapp.com",
+  firestoreDatabaseId: "sristy-main-db",
+  storageBucket: "sristy-notes-main.firebasestorage.app",
+  messagingSenderId: "153318755219",
 };
 
 const BACKUP_CONFIG = {
@@ -53,18 +53,15 @@ export function isUsingBackupDb(): boolean {
 
 const isBackup = isFailoverActive();
 
-// ─── PRIMARY app — always initialized ────────────────────────────────────────
+// ─── PRIMARY app — always initialized ────────────────────────
 const primaryApp = initializeApp(PRIMARY_CONFIG, 'PRIMARY');
 export const auth: Auth = getAuth(primaryApp);
 export const storage = getStorage(primaryApp);
 
-// primaryDb: ALWAYS the primary Firestore, regardless of quota state.
-// Use this in AuthScreen for username→email lookup and user profile reads.
-// These reads are minimal (1-2 per login) and must always see the real user data.
+// primaryDb: ALWAYS primary Firestore — for auth/user lookups
 export const primaryDb: Firestore = getFirestore(primaryApp, PRIMARY_CONFIG.firestoreDatabaseId);
 
-// ─── ACTIVE Firestore — switches to backup under quota ───────────────────────
-// Use `db` everywhere else (files, notices, activity logs, board members).
+// ─── ACTIVE Firestore — switches to backup under quota ───────
 let dbApp: FirebaseApp;
 if (isBackup) {
   dbApp = initializeApp(BACKUP_CONFIG, 'BACKUP_DB');
@@ -79,7 +76,6 @@ export const db: Firestore = activeDbId === 'default'
 
 // ─────────────────────────────────────────────────────────────
 // QUOTA FAILOVER HANDLER
-// Catches Firestore quota errors and silently switches to backup.
 // ─────────────────────────────────────────────────────────────
 export function handleQuotaFailover(error: unknown): boolean {
   const msg = String((error as any)?.message || error).toLowerCase();
@@ -90,7 +86,7 @@ export function handleQuotaFailover(error: unknown): boolean {
     msg.includes('free daily');
 
   if (isQuota && !isFailoverActive()) {
-    console.warn('[Sristy Failover] Quota exceeded on primary DB — switching to backup DB');
+    console.warn('[Sristy Failover] Quota exceeded — switching to backup DB');
     activateFailover();
     setTimeout(() => window.location.reload(), 400);
     return true;
@@ -99,7 +95,7 @@ export function handleQuotaFailover(error: unknown): boolean {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Creates a Firebase Auth user without disrupting the admin session.
+// Creates a Firebase Auth user without disrupting admin session
 // ─────────────────────────────────────────────────────────────
 export async function createSecondaryUser(email: string, pass: string): Promise<string> {
   const nonce = Math.random().toString(36).substring(2, 9);
@@ -120,9 +116,6 @@ export async function createSecondaryUser(email: string, pass: string): Promise<
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// Shared enums / error helpers
-// ─────────────────────────────────────────────────────────────
 export enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
@@ -148,7 +141,7 @@ export interface FirestoreErrorInfo {
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   if (handleQuotaFailover(error)) {
-    throw new Error('Quota limit reached. Switching to backup database — please wait a moment.');
+    throw new Error('Quota limit reached. Switching to backup database — please wait.');
   }
 
   const errInfo: FirestoreErrorInfo = {
