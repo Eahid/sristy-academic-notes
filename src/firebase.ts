@@ -18,7 +18,7 @@ const PRIMARY_CONFIG = {
   appId: "1:597455778443:web:618c69bffab50d21d3da8e",
   apiKey: "AIzaSyBcfrZMJ0r6yLfY46ttck9CUancJH4jpP8",
   authDomain: "gen-lang-client-0561669486.firebaseapp.com",
-  firestoreDatabaseId: "sristynotes",
+  firestoreDatabaseId: "ai-studio-ff73a67c-fae9-4980-8b17-d8dd1494a585",
   storageBucket: "gen-lang-client-0561669486.firebasestorage.app",
   messagingSenderId: "597455778443",
 };
