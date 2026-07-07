@@ -103,7 +103,7 @@ service cloud.firestore {
          getUserData(request.auth.uid).branch == existing().branch && 
          incoming().branch == existing().branch &&
          incoming().role == existing().role &&
-         incoming().diff(existing()).affectedKeys().hasAny(['fullName', 'subject', 'status', 'password', 'bio', 'profilePic']))
+         incoming().diff(existing()).affectedKeys().hasAny(['fullName', 'subject', 'subjects', 'classes', 'classAssignments', 'status', 'password', 'bio', 'profilePic']))
       );
 
       allow delete: if isEmailVerified() && isMasterAdmin();
