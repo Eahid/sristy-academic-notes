@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { collection, query, where, getDocs, doc, setDoc, getDoc, serverTimestamp, limit } from 'firebase/firestore';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { db, auth, handleFirestoreError, OperationType, createSecondaryUser } from '../firebase';
+import { db, auth, handleFirestoreError, OperationType, createSecondaryUser, handleQuotaFailover, isUsingBackupDb } from '../firebase';
 import { safeLocalStorage, forceClearSystemCache } from '../utils';
 import { UserProfile, UserRole } from '../types';
 import { BRANCHES, SUBJECTS } from '../constants';
@@ -32,6 +32,12 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
 
   React.useEffect(() => {
     const seedSuperAdmin = async () => {
+      // ── Read-quota guard: only seed once, ever. ──────────────────────────
+      // This check previously ran a Firestore query on EVERY page load,
+      // burning free reads. Now it only checks Firestore the very first time.
+      const SEED_FLAG = 'sristy_superadmin_seeded';
+      if (localStorage.getItem(SEED_FLAG) === 'true') return;
+
       try {
         const superAdminEmail = 'superadmin@sristynotes.com';
         const superAdminPass = 'Hello@2026';
@@ -39,6 +45,9 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
         const q = query(collection(db, 'users'), where('email', '==', superAdminEmail), limit(1));
         const snap = await getDocs(q);
         
+        // Whether or not it existed, mark as done so we never read again
+        localStorage.setItem(SEED_FLAG, 'true');
+
         if (snap.empty) {
           console.log("Seeding super admin account...");
           const uid = await createSecondaryUser(superAdminEmail, superAdminPass);
@@ -323,14 +332,38 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
       console.error("Firebase Login Error Cascade: ", err);
 
       const rawErrStr = String(err.message || err.code || err);
-      if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-        setErrorMsg(t("Authentication failed: Invalid credentials / incorrect key parameters."));
+      const rawLower = rawErrStr.toLowerCase();
+
+      // ── Quota exceeded: switch Firestore to backup DB and reload ──
+      if (
+        rawLower.includes('quota') ||
+        rawLower.includes('resource-exhausted') ||
+        rawLower.includes('free daily') ||
+        rawLower.includes('quota_exceeded')
+      ) {
+        handleQuotaFailover(err);
+        setErrorMsg(t("Daily read quota reached. Switching to backup database — reloading in a moment..."));
+        return; // reload is already triggered inside handleQuotaFailover
+      }
+
+      // ── Standard auth errors ──
+      if (
+        err.code === 'auth/wrong-password' ||
+        err.code === 'auth/user-not-found' ||
+        err.code === 'auth/invalid-credential' ||
+        err.code === 'auth/invalid-login-credentials'
+      ) {
+        setErrorMsg(t("Authentication failed: Invalid username or incorrect credentials."));
       } else if (err.code === 'auth/operation-not-allowed') {
-        setErrorMsg(`${t("Email/Password credential registry is disabled in your Firebase console. Please go to your Firebase Console > Authentication > Sign-in method and enable the Email/Password provider.")}`);
-      } else if (rawErrStr.toLowerCase().includes('network') || rawErrStr.toLowerCase().includes('failed-to-get-redirect') || rawErrStr.toLowerCase().includes('network-request-failed')) {
-        setErrorMsg(`${t("Failed to complete sign in due to network blockages. Please verify your internet/proxy settings.")}`);
+        setErrorMsg(t("Email/Password sign-in is disabled. Enable it in Firebase Console → Authentication → Sign-in method."));
+      } else if (
+        rawLower.includes('network') ||
+        rawLower.includes('failed-to-get-redirect') ||
+        rawLower.includes('network-request-failed')
+      ) {
+        setErrorMsg(t("Failed to complete sign in due to network issues. Please check your connection and try again."));
       } else {
-        setErrorMsg(`${t("Failed to complete sign in. Please verify network settings or try again. Error detail:")} ${rawErrStr}`);
+        setErrorMsg(`${t("Sign in failed. Error detail:")} ${rawErrStr}`);
       }
     } finally {
       setLoading(false);
@@ -455,6 +488,14 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
 
         {/* Auth Body Forms */}
         <div className="p-4 sm:p-8">
+          {/* Backup DB notice — only shown when failover is active */}
+          {isUsingBackupDb() && (
+            <div className="mb-4 flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 rounded-lg text-xs font-semibold border border-amber-200 dark:border-amber-800/40">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+              <span>Running on backup database (daily quota reached on primary). Service is normal — this resets at midnight UTC.</span>
+            </div>
+          )}
+
           {errorMsg && (
             <div className="mb-6 flex items-start gap-2.5 p-3.5 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 rounded-lg text-xs font-semibold leading-relaxed border border-red-100 dark:border-red-900/40">
               <AlertCircle className="w-4 h-4 shrink-0 text-red-500 mt-0.5" />
