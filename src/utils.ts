@@ -89,3 +89,58 @@ export function forceClearSystemCache(): void {
     window.location.href = window.location.origin + window.location.pathname + "?update=" + Date.now();
   }, 300);
 }
+
+// HSC-only subjects
+const HSC_ONLY_SUBJECTS = [
+  "Physics 1st Paper",
+  "Physics 2nd Paper",
+  "Chemistry 1st Paper",
+  "Chemistry 2nd Paper",
+  "Biology 1st Paper",
+  "Biology 2nd Paper",
+  "Math 1st Paper",
+  "Math 2nd Paper",
+  "Higher Math 1st Paper",
+  "Higher Math 2nd Paper"
+];
+
+// SSC and lower level specific subjects
+const SSC_ONLY_SUBJECTS = [
+  "Physics",
+  "Chemistry",
+  "General Math",
+  "Higher Math",
+  "Science",
+  "Biology",
+  "Math"
+];
+
+export function isHscClass(classLevel: string): boolean {
+  return classLevel === "HSC 1st Year" || classLevel === "HSC 2nd Year";
+}
+
+export function getFilteredSubjectsForClass(classLevel: string, allSubjects: string[]): string[] {
+  if (!classLevel) return allSubjects;
+  
+  if (isHscClass(classLevel)) {
+    // For HSC: only 1st/2nd Paper, no general versions, no "Science" subject
+    return allSubjects.filter(sub => !SSC_ONLY_SUBJECTS.includes(sub));
+  } else {
+    // For SSC/Lower: no 1st/2nd Paper, only "Physics", "Chemistry", "General Math", "Higher Math", "Science", etc.
+    return allSubjects.filter(sub => !HSC_ONLY_SUBJECTS.includes(sub) && sub !== "Math");
+  }
+}
+
+export function getFilteredClassesForSubject(subjectName: string, allClasses: string[]): string[] {
+  if (!subjectName) return allClasses;
+
+  if (HSC_ONLY_SUBJECTS.includes(subjectName)) {
+    // Only HSC classes
+    return allClasses.filter(cls => isHscClass(cls));
+  } else if (SSC_ONLY_SUBJECTS.includes(subjectName)) {
+    // Only SSC/lower classes
+    return allClasses.filter(cls => !isHscClass(cls));
+  }
+  return allClasses;
+}
+

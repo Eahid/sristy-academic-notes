@@ -33,6 +33,7 @@ import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import { CLASS_LEVELS } from '../constants';
+import { getFilteredSubjectsForClass, getFilteredClassesForSubject } from '../utils';
 
 interface DashboardAdminProps {
   user: UserProfile;
@@ -974,7 +975,7 @@ export default function DashboardAdmin({
                         className="w-full px-2 py-1.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-750 text-[10px] font-bold rounded-lg focus:outline-none focus:border-brand-500 cursor-pointer text-gray-800 dark:text-gray-100"
                       >
                         <option value="">{t("-- Select Subject --")}</option>
-                        {subjects.map((sub, idx) => (
+                        {getFilteredSubjectsForClass(currentSelClass, subjects).map((sub, idx) => (
                           <option key={idx} value={sub}>{t(sub)}</option>
                         ))}
                       </select>
@@ -988,7 +989,7 @@ export default function DashboardAdmin({
                         className="w-full px-2 py-1.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-750 text-[10px] font-bold rounded-lg focus:outline-none focus:border-brand-500 cursor-pointer text-gray-800 dark:text-gray-100"
                       >
                         <option value="">{t("-- Select Class --")}</option>
-                        {CLASS_LEVELS.map((cls, idx) => (
+                        {getFilteredClassesForSubject(currentSelSubject, CLASS_LEVELS).map((cls, idx) => (
                           <option key={idx} value={cls}>{t(cls)}</option>
                         ))}
                       </select>
@@ -2501,7 +2502,7 @@ export default function DashboardAdmin({
                         className="w-full bg-white dark:bg-slate-850 border border-gray-200 dark:border-slate-700 rounded-lg p-2 text-xs font-semibold outline-none focus:border-[#15803d]"
                       >
                         <option value="">-- {t("Choose Subject")} --</option>
-                        {subjects.map((sub, sIdx) => (
+                        {getFilteredSubjectsForClass(editSelClass, subjects).map((sub, sIdx) => (
                           <option key={sIdx} value={sub}>{t(sub)}</option>
                         ))}
                       </select>
@@ -2515,7 +2516,7 @@ export default function DashboardAdmin({
                         className="w-full bg-white dark:bg-slate-850 border border-gray-200 dark:border-slate-700 rounded-lg p-2 text-xs font-semibold outline-none focus:border-[#15803d]"
                       >
                         <option value="">-- {t("Choose Class")} --</option>
-                        {CLASS_LEVELS.map((cls, cIdx) => (
+                        {getFilteredClassesForSubject(editSelSubject, CLASS_LEVELS).map((cls, cIdx) => (
                           <option key={cIdx} value={cls}>{t(cls)}</option>
                         ))}
                       </select>
