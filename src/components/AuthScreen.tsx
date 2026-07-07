@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { collection, query, where, getDocs, doc, setDoc, getDoc, serverTimestamp, limit } from 'firebase/firestore';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { db, auth, handleFirestoreError, OperationType, createSecondaryUser, handleQuotaFailover, isUsingBackupDb } from '../firebase';
+import { db, primaryDb, auth, handleFirestoreError, OperationType, createSecondaryUser, handleQuotaFailover, isUsingBackupDb } from '../firebase';
 import { safeLocalStorage, forceClearSystemCache } from '../utils';
 import { UserProfile, UserRole } from '../types';
 import { BRANCHES, SUBJECTS } from '../constants';
@@ -42,7 +42,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
         const superAdminEmail = 'superadmin@sristynotes.com';
         const superAdminPass = 'Hello@2026';
         
-        const q = query(collection(db, 'users'), where('email', '==', superAdminEmail), limit(1));
+        const q = query(collection(primaryDb, 'users'), where('email', '==', superAdminEmail), limit(1));
         const snap = await getDocs(q);
         
         // Whether or not it existed, mark as done so we never read again
@@ -52,7 +52,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           console.log("Seeding super admin account...");
           const uid = await createSecondaryUser(superAdminEmail, superAdminPass);
           
-          await setDoc(doc(db, 'users', uid), {
+          await setDoc(doc(primaryDb, 'users', uid), {
             uid,
             username: 'superadmin',
             fullName: 'Sristy Super Admin',
@@ -95,7 +95,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
 
       // If it doesn't look like an email pattern, resolve it from the users collection
       if (targetEmail.indexOf('@') === -1) {
-        const usersRef = collection(db, 'users');
+        const usersRef = collection(primaryDb, 'users'); // Always use primaryDb — backup has no users
         const q = query(usersRef, where('username', '==', targetEmail), limit(1));
         const snap = await getDocs(q);
 
@@ -140,7 +140,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
       const userObj = userCredential.user;
 
       // Fetch official fields from user document profile
-      const userDocRef = doc(db, 'users', userObj.uid);
+      const userDocRef = doc(primaryDb, 'users', userObj.uid); // Always use primaryDb for auth lookups
       const userDocSnap = await getDoc(userDocRef);
       
       let matchedUser: UserProfile | null = null;
@@ -389,7 +389,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
     try {
       const lowerUsername = username.trim().toLowerCase();
       // Step 1: Check in Firestore first for name collision
-      const usersRef = collection(db, 'users');
+      const usersRef = collection(primaryDb, 'users'); // Always use primaryDb — backup has no users
       const q = query(usersRef, where('username', '==', lowerUsername));
       const snap = await getDocs(q);
 
@@ -404,7 +404,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
       const customUid = credential.user.uid;
 
       // Step 3: Write profile payload to Firestore users document mapping
-      const userRef = doc(db, 'users', customUid);
+      const userRef = doc(primaryDb, 'users', customUid);
       const profilePayload: any = {
         uid: customUid,
         username: lowerUsername,
