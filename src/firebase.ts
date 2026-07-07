@@ -1,5 +1,5 @@
-import { initializeApp, getApps, deleteApp, FirebaseApp } from 'firebase/app';
-import { getAuth, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, Auth } from 'firebase/auth';
+import { initializeApp, deleteApp, FirebaseApp } from 'firebase/app';
+import { getAuth, signOut, createUserWithEmailAndPassword, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
@@ -7,7 +7,10 @@ import { getStorage } from 'firebase/storage';
 // FIREBASE PROJECT POOL
 // PRIMARY  → gen-lang-client-0561669486  (your original DB)
 // BACKUP   → notes-backup-9fd41          (your new backup DB)
-// Auth lives on PRIMARY only. Firestore/quota switches to BACKUP.
+//
+// Auth   → always PRIMARY (users only exist there)
+// primaryDb → always PRIMARY Firestore (for auth lookups: username→email)
+// db     → PRIMARY normally, BACKUP when quota is exceeded
 // ─────────────────────────────────────────────────────────────
 
 const PRIMARY_CONFIG = {
@@ -25,18 +28,13 @@ const BACKUP_CONFIG = {
   appId: "1:353121451807:web:fb4029cc30052c5947ba2a",
   apiKey: "AIzaSyDyvkZxrJVPtNjn4DQ-qXAawLKkvNB2_A0",
   authDomain: "notes-backup-9fd41.firebaseapp.com",
-  firestoreDatabaseId: "default",   // backup uses default Firestore DB
+  firestoreDatabaseId: "default",
   storageBucket: "notes-backup-9fd41.firebasestorage.app",
   messagingSenderId: "353121451807",
 };
 
 const FAILOVER_KEY = 'sristy_db_failover_active';
 
-// ─────────────────────────────────────────────────────────────
-// Determine which Firestore project is active right now.
-// Auth ALWAYS uses the primary project (users are registered there).
-// Firestore switches to backup when quota is exceeded.
-// ─────────────────────────────────────────────────────────────
 function isFailoverActive(): boolean {
   try { return localStorage.getItem(FAILOVER_KEY) === 'true'; } catch { return false; }
 }
@@ -49,15 +47,24 @@ export function deactivateFailover() {
   try { localStorage.removeItem(FAILOVER_KEY); } catch {}
 }
 
-const activeDbConfig = isFailoverActive() ? BACKUP_CONFIG : PRIMARY_CONFIG;
+export function isUsingBackupDb(): boolean {
+  return isFailoverActive();
+}
+
 const isBackup = isFailoverActive();
 
-// ─── Initialize PRIMARY app (always, for Auth) ───────────────
+// ─── PRIMARY app — always initialized ────────────────────────────────────────
 const primaryApp = initializeApp(PRIMARY_CONFIG, 'PRIMARY');
 export const auth: Auth = getAuth(primaryApp);
 export const storage = getStorage(primaryApp);
 
-// ─── Initialize FIRESTORE on the active project ──────────────
+// primaryDb: ALWAYS the primary Firestore, regardless of quota state.
+// Use this in AuthScreen for username→email lookup and user profile reads.
+// These reads are minimal (1-2 per login) and must always see the real user data.
+export const primaryDb: Firestore = getFirestore(primaryApp, PRIMARY_CONFIG.firestoreDatabaseId);
+
+// ─── ACTIVE Firestore — switches to backup under quota ───────────────────────
+// Use `db` everywhere else (files, notices, activity logs, board members).
 let dbApp: FirebaseApp;
 if (isBackup) {
   dbApp = initializeApp(BACKUP_CONFIG, 'BACKUP_DB');
@@ -65,17 +72,14 @@ if (isBackup) {
   dbApp = primaryApp;
 }
 
-const dbId = activeDbConfig.firestoreDatabaseId;
-export const db: Firestore = dbId === 'default'
+const activeDbId = isBackup ? BACKUP_CONFIG.firestoreDatabaseId : PRIMARY_CONFIG.firestoreDatabaseId;
+export const db: Firestore = activeDbId === 'default'
   ? getFirestore(dbApp)
-  : getFirestore(dbApp, dbId);
+  : getFirestore(dbApp, activeDbId);
 
 // ─────────────────────────────────────────────────────────────
 // QUOTA FAILOVER HANDLER
-// Call this whenever you catch a Firestore quota error.
-// It sets the failover flag and reloads the page so the app
-// re-initializes Firestore against the backup project.
-// Auth stays on primary — users don't need to log in again.
+// Catches Firestore quota errors and silently switches to backup.
 // ─────────────────────────────────────────────────────────────
 export function handleQuotaFailover(error: unknown): boolean {
   const msg = String((error as any)?.message || error).toLowerCase();
@@ -86,22 +90,16 @@ export function handleQuotaFailover(error: unknown): boolean {
     msg.includes('free daily');
 
   if (isQuota && !isFailoverActive()) {
-    console.warn('[Sristy Failover] Quota exceeded on primary DB → switching to backup DB');
+    console.warn('[Sristy Failover] Quota exceeded on primary DB — switching to backup DB');
     activateFailover();
-    // Short delay so any pending writes finish, then reload
     setTimeout(() => window.location.reload(), 400);
     return true;
   }
   return false;
 }
 
-export function isUsingBackupDb(): boolean {
-  return isFailoverActive();
-}
-
 // ─────────────────────────────────────────────────────────────
-// Creates a Firebase Auth user WITHOUT disrupting the admin session.
-// Uses an isolated secondary app instance that is cleaned up after.
+// Creates a Firebase Auth user without disrupting the admin session.
 // ─────────────────────────────────────────────────────────────
 export async function createSecondaryUser(email: string, pass: string): Promise<string> {
   const nonce = Math.random().toString(36).substring(2, 9);
@@ -123,7 +121,7 @@ export async function createSecondaryUser(email: string, pass: string): Promise<
 }
 
 // ─────────────────────────────────────────────────────────────
-// Shared enums / error helpers (unchanged from original)
+// Shared enums / error helpers
 // ─────────────────────────────────────────────────────────────
 export enum OperationType {
   CREATE = 'create',
@@ -149,9 +147,7 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  // First check if this is a quota error → trigger failover
   if (handleQuotaFailover(error)) {
-    // Reload is in-flight; throw a friendly message while waiting
     throw new Error('Quota limit reached. Switching to backup database — please wait a moment.');
   }
 
