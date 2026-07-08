@@ -2015,6 +2015,7 @@ export default function DashboardAdmin({
                       onApprove={onFileApprove}
                       onReject={onFileReject}
                       onDelete={onFileDelete}
+                      onFileEdit={onFileEdit}
                       isSelected={selectedFileIds.includes(file.id)}
                       onSelectToggle={(id) => {
                         setSelectedFileIds(prev =>

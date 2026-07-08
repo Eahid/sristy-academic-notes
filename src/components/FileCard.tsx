@@ -15,8 +15,11 @@ import {
   XCircle,
   X,
   ChevronUp,
-  ArrowLeft
+  ArrowLeft,
+  Pencil,
+  Save
 } from 'lucide-react';
+import { CLASS_LEVELS } from '../constants';
 import { useThemeLanguage } from './ThemeLanguageContext';
 
 interface FileCardProps {
@@ -27,6 +30,7 @@ interface FileCardProps {
   onApprove?: (fileId: string) => void;
   onReject?: (fileId: string, reason?: string) => void;
   onDelete?: (fileId: string) => void;
+  onFileEdit?: (fileId: string, updates: { fileName?: string; description?: string; subject?: string; classLevel?: string }) => void;
   isSelected?: boolean;
   onSelectToggle?: (fileId: string) => void;
   onViewTeacherDetails?: (teacherId: string) => void;
@@ -34,10 +38,16 @@ interface FileCardProps {
   key?: string | number;
 }
 
-export default function FileCard({ file, user, onDownload, onPreview, onApprove, onReject, onDelete, isSelected, onSelectToggle, onViewTeacherDetails, allFiles }: FileCardProps) {
+export default function FileCard({ file, user, onDownload, onPreview, onApprove, onReject, onDelete, onFileEdit, isSelected, onSelectToggle, onViewTeacherDetails, allFiles }: FileCardProps) {
   const { t } = useThemeLanguage();
 
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editFileName, setEditFileName] = useState(file.fileName);
+  const [editDescription, setEditDescription] = useState(file.description || '');
+  const [editSubject, setEditSubject] = useState(file.subject || '');
+  const [editClassLevel, setEditClassLevel] = useState(file.classLevel || '');
+  const [editSaving, setEditSaving] = useState(false);
 
   // Generate deterministic checksum (SHA-256 style)
   const getFileChecksum = (fileId: string) => {
@@ -102,9 +112,28 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
   const isFileApprover = user?.role === 'file_approver';
   const isBranchAdminOfFile = user?.role === 'admin' && user?.branch === file.branch;
   const canApproveOrReject = isSuperOrMaster || isFileApprover || isBranchAdminOfFile;
+  const canEdit = (isBranchAdminOfFile || isSuperOrMaster) && onFileEdit;
+
+  const handleSaveEdit = async () => {
+    if (!onFileEdit || !editFileName.trim()) return;
+    setEditSaving(true);
+    try {
+      await onFileEdit(file.id, {
+        fileName: editFileName.trim(),
+        description: editDescription.trim(),
+        subject: editSubject,
+        classLevel: editClassLevel,
+      });
+      setIsEditing(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setEditSaving(false);
+    }
+  };
 
   return (
-    <motion.div 
+    <><motion.div 
       layout
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
@@ -540,6 +569,24 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
                       <span>{t("DELETE HISTORIC RECORD")}</span>
                     </button>
                   )}
+
+                  {/* Edit Metadata — Branch Admin & Super/Master Admin */}
+                  {canEdit && (
+                    <button
+                      onClick={() => {
+                        setEditFileName(file.fileName);
+                        setEditDescription(file.description || '');
+                        setEditSubject(file.subject || '');
+                        setEditClassLevel(file.classLevel || '');
+                        setIsEditing(true);
+                        setShowReviewPanel(false);
+                      }}
+                      className="w-full bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/20 dark:hover:bg-blue-950/30 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/30 py-2.5 rounded-xl font-semibold text-[11px] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                    >
+                      <Pencil className="w-3.5 h-3.5 shrink-0" />
+                      <span>{t("EDIT FILE DETAILS")}</span>
+                    </button>
+                  )}
                 </>
               ) : (
                 /* Rejection Modal Actions */
@@ -574,5 +621,96 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
         </div>
       )}
     </motion.div>
+
+      {/* ── Edit File Modal ── */}
+      {isEditing && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 dark:border-slate-800 overflow-hidden">
+            {/* Header */}
+            <div className="bg-blue-600 px-5 py-4 flex items-center justify-between text-white">
+              <div className="flex items-center gap-2">
+                <Pencil className="w-4 h-4" />
+                <h3 className="font-bold text-sm">{t("Edit File Details")}</h3>
+              </div>
+              <button onClick={() => setIsEditing(false)} className="p-1.5 hover:bg-blue-700 rounded-lg cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* File Name */}
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("File Name")}</label>
+                <input
+                  type="text"
+                  value={editFileName}
+                  onChange={e => setEditFileName(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("Description / Notes")}</label>
+                <textarea
+                  value={editDescription}
+                  onChange={e => setEditDescription(e.target.value)}
+                  rows={3}
+                  placeholder={t("Add description or notes...")}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Subject */}
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("Subject")}</label>
+                <select
+                  value={editSubject}
+                  onChange={e => setEditSubject(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-blue-500"
+                >
+                  {['Bangla 1st Paper','Bangla 2nd Paper','English 1st Paper','English 2nd Paper','Math','Religion','ICT','Physics 1st Paper','Physics 2nd Paper','Chemistry 1st Paper','Chemistry 2nd Paper','Biology 1st Paper','Biology 2nd Paper','Higher Math','Accounting','Finance','Business Entrepreneurship','Geography','General Science','Bangladesh and Global Studies','History'].map(s => (
+                    <option key={s} value={s}>{t(s)}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Class */}
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("Class")}</label>
+                <select
+                  value={editClassLevel}
+                  onChange={e => setEditClassLevel(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="">{t("-- Select Class --")}</option>
+                  {CLASS_LEVELS.map(c => (
+                    <option key={c} value={c}>{t(c)}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 pb-5 flex gap-3">
+              <button
+                onClick={() => setIsEditing(false)}
+                className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 text-xs font-bold rounded-xl cursor-pointer transition-all"
+              >
+                {t("Cancel")}
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={editSaving || !editFileName.trim()}
+                className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                <Save className="w-3.5 h-3.5" />
+                {editSaving ? t("Saving...") : t("Save Changes")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
