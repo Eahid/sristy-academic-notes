@@ -65,7 +65,7 @@
 
 body {
   font-family: var(--font-sans);
-  background-color: #f6fcf8;     /* Soft natural mint-tinted cream white background, exceptionally gentle on the eyes */
+  background-color: #faf9f7;     /* Warm off-white — most likeable neutral, gentle on the eyes */
   color: #1e293b;                /* sleek slate-800 text */
   overflow-x: hidden;
   transition: background-color 0.15s ease, color 0.15s ease;
@@ -116,5 +116,3 @@ h1, h2, h3, h4, h5, h6 {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
 }
-
-
