@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { collection, getDocs, doc, setDoc, query, where, updateDoc, serverTimestamp, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, query, where, updateDoc, serverTimestamp, onSnapshot, orderBy, addDoc } from 'firebase/firestore';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { motion, AnimatePresence } from 'motion/react';
-import { db, createSecondaryUser } from '../firebase';
+import { db, createSecondaryUser, storage } from '../firebase';
 import { UserProfile, FileArchive } from '../types';
 import { useBranchSubject } from './BranchSubjectContext';
 import { 
@@ -27,7 +28,9 @@ import {
   Clock,
   X,
   Calendar,
-  ArrowUpDown
+  ArrowUpDown,
+  Upload,
+  Send
 } from 'lucide-react';
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
@@ -49,6 +52,9 @@ interface DashboardAdminProps {
   onDownload: (file: FileArchive) => void;
   onPreview?: (file: FileArchive) => void;
   onViewTeacherDetails?: (teacherUid: string) => void;
+  onFileEdit?: (fileId: string, updates: { fileName?: string; description?: string; subject?: string; classLevel?: string }) => void;
+  onDeleteUser?: (uid: string) => void;
+  onUploadSuccess?: () => void;
 }
 
 export default function DashboardAdmin({
@@ -64,7 +70,10 @@ export default function DashboardAdmin({
   onEmptyTrash,
   onDownload,
   onPreview,
-  onViewTeacherDetails
+  onViewTeacherDetails,
+  onFileEdit,
+  onDeleteUser,
+  onUploadSuccess,
 }: DashboardAdminProps) {
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [teachersList, setTeachersList] = useState<UserProfile[]>([]);
@@ -107,9 +116,19 @@ export default function DashboardAdmin({
   const [editSelClass, setEditSelClass] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<'teachers' | 'files' | 'trash_bin' | 'curriculum' | 'activity_logs'>(
+  const [activeTab, setActiveTab] = useState<'teachers' | 'files' | 'trash_bin' | 'curriculum' | 'activity_logs' | 'upload'>(
     user.role === 'file_approver' ? 'files' : 'teachers'
   );
+
+  // Upload states for branch admin
+  const [adminUploadFile, setAdminUploadFile] = useState<File | null>(null);
+  const [adminUploadSubject, setAdminUploadSubject] = useState('');
+  const [adminUploadClass, setAdminUploadClass] = useState('');
+  const [adminUploadDescription, setAdminUploadDescription] = useState('');
+  const [adminUploadFileName, setAdminUploadFileName] = useState('');
+  const [adminUploading, setAdminUploading] = useState(false);
+  const [adminUploadError, setAdminUploadError] = useState('');
+  const [adminUploadSuccess, setAdminUploadSuccess] = useState(false);
   const { t } = useThemeLanguage();
   const { subjects } = useBranchSubject();
 
@@ -769,6 +788,34 @@ export default function DashboardAdmin({
               </h4>
             </div>
           </button>
+
+          {/* Upload Files Option — Branch Admin only */}
+          {user.role === 'admin' && (
+            <button
+              onClick={() => setActiveTab('upload')}
+              className={`group text-left p-4 rounded-xl border transition-all duration-300 cursor-pointer flex items-center gap-4 ${
+                activeTab === 'upload'
+                  ? 'bg-[#15803d]/5 dark:bg-[#15803d]/10 border-[#15803d] shadow-md ring-1 ring-[#15803d]/20 scale-[1.01]'
+                  : 'bg-white dark:bg-slate-900 border-gray-150 dark:border-slate-800/80 hover:border-[#15803d]/40 hover:shadow-xs'
+              }`}
+            >
+              <div className={`p-3 rounded-xl transition-all duration-300 ${
+                activeTab === 'upload'
+                  ? 'bg-[#15803d] text-white shadow-sm'
+                  : 'bg-gray-100 dark:bg-slate-800 text-gray-550 dark:text-gray-400 group-hover:bg-[#15803d]/10 group-hover:text-[#15803d]'
+              }`}>
+                <Upload className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={`font-bold text-[10px] tracking-wider uppercase leading-tight ${
+                  activeTab === 'upload' ? 'text-[#15803d] dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
+                }`}>{t("Upload")}</p>
+                <h4 className="font-extrabold text-sm text-gray-800 dark:text-gray-150 mt-1.5 leading-snug">
+                  {t("Upload Files")}
+                </h4>
+              </div>
+            </button>
+          )}
         </div>
       )}
 
@@ -1240,16 +1287,27 @@ export default function DashboardAdmin({
                                   )}
                                 </td>
                                 <td className="py-4.5 px-6 text-right" onClick={(e) => e.stopPropagation()}>
-                                  <button
-                                    onClick={() => handleToggleStatus(tea.uid, tea.status)}
-                                    className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition-all cursor-pointer ${
-                                      tea.status === 'active'
-                                        ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-605 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/30 hover:bg-emerald-100'
-                                        : 'bg-red-50 dark:bg-red-955/20 text-red-650 dark:text-red-400 border-red-100 dark:border-red-900/30 hover:bg-red-100'
-                                    }`}
-                                  >
-                                    {tea.status === 'active' ? t("Active") : t("Suspended")}
-                                  </button>
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      onClick={() => handleToggleStatus(tea.uid, tea.status)}
+                                      className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition-all cursor-pointer ${
+                                        tea.status === 'active'
+                                          ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-605 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/30 hover:bg-emerald-100'
+                                          : 'bg-red-50 dark:bg-red-955/20 text-red-650 dark:text-red-400 border-red-100 dark:border-red-900/30 hover:bg-red-100'
+                                      }`}
+                                    >
+                                      {tea.status === 'active' ? t("Active") : t("Suspended")}
+                                    </button>
+                                    {onDeleteUser && (
+                                      <button
+                                        onClick={() => onDeleteUser(tea.uid)}
+                                        className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors cursor-pointer"
+                                        title={t("Delete User")}
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
 
@@ -2649,6 +2707,161 @@ export default function DashboardAdmin({
           </div>
         )}
       </AnimatePresence>
+
+      {/* ── Upload Tab for Branch Admin ── */}
+      {activeTab === 'upload' && user.role === 'admin' && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-xs p-6">
+          <h3 className="text-sm font-bold text-gray-800 dark:text-white mb-6 flex items-center gap-2">
+            <Upload className="w-4 h-4 text-[#15803d]" />
+            {t("Upload Study Material")}
+          </h3>
+
+          {adminUploadSuccess && (
+            <div className="mb-4 p-3 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 rounded-lg text-xs font-semibold flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4" />
+              {t("File uploaded successfully!")}
+            </div>
+          )}
+
+          {adminUploadError && (
+            <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 rounded-lg text-xs font-semibold flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" />
+              {adminUploadError}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            {/* File picker */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("Select File")}</label>
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg"
+                onChange={e => {
+                  const f = e.target.files?.[0] || null;
+                  setAdminUploadFile(f);
+                  if (f) setAdminUploadFileName(f.name.replace(/\.[^/.]+$/, ''));
+                }}
+                className="w-full text-xs text-gray-600 dark:text-gray-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#15803d]/10 file:text-[#15803d] hover:file:bg-[#15803d]/20 cursor-pointer"
+              />
+            </div>
+
+            {/* File name */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("File Name")}</label>
+              <input
+                type="text"
+                value={adminUploadFileName}
+                onChange={e => setAdminUploadFileName(e.target.value)}
+                placeholder={t("Enter file name...")}
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-[#15803d]"
+              />
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("Description / Notes")}</label>
+              <textarea
+                value={adminUploadDescription}
+                onChange={e => setAdminUploadDescription(e.target.value)}
+                rows={3}
+                placeholder={t("Add description or notes...")}
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-[#15803d]"
+              />
+            </div>
+
+            {/* Subject */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("Subject")}</label>
+              <select
+                value={adminUploadSubject}
+                onChange={e => setAdminUploadSubject(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-[#15803d]"
+              >
+                <option value="">{t("Select subject...")}</option>
+                {subjects.map(s => <option key={s} value={s}>{t(s)}</option>)}
+              </select>
+            </div>
+
+            {/* Class */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("Class")}</label>
+              <select
+                value={adminUploadClass}
+                onChange={e => setAdminUploadClass(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-[#15803d]"
+              >
+                <option value="">{t("Select class...")}</option>
+                {CLASS_LEVELS.map(c => <option key={c} value={c}>{t(c)}</option>)}
+              </select>
+            </div>
+
+            <button
+              onClick={async () => {
+                if (!adminUploadFile || !adminUploadSubject || !adminUploadClass || !adminUploadFileName.trim()) {
+                  setAdminUploadError(t("Please fill all fields and select a file."));
+                  return;
+                }
+                setAdminUploading(true);
+                setAdminUploadError('');
+                setAdminUploadSuccess(false);
+                try {
+                  const ext = adminUploadFile.name.split('.').pop()?.toLowerCase() || 'pdf';
+                  const storagePath = 'files/' + user.uid + '/' + Date.now() + '.' + ext;
+                  const storageRef = ref(storage, storagePath);
+                  const uploadTask = uploadBytesResumable(storageRef, adminUploadFile);
+
+                  await new Promise<void>((resolve, reject) => {
+                    uploadTask.on('state_changed', null, reject, () => resolve());
+                  });
+
+                  const fileUrl = await getDownloadURL(uploadTask.snapshot.ref);
+
+                  await addDoc(collection(db, 'files'), {
+                    fileName: adminUploadFileName.trim(),
+                    fileType: ext,
+                    fileSize: adminUploadFile.size,
+                    fileUrl,
+                    storagePath,
+                    description: adminUploadDescription.trim(),
+                    uploadedBy: user.uid,
+                    uploaderName: user.fullName,
+                    uploaderRole: user.role,
+                    branch: user.branch || '',
+                    subject: adminUploadSubject,
+                    classLevel: adminUploadClass,
+                    isApproved: true, // Admin uploads are auto-approved
+                    downloadCount: 0,
+                    createdAt: serverTimestamp(),
+                    isDeleted: false,
+                  });
+
+                  setAdminUploadSuccess(true);
+                  setAdminUploadFile(null);
+                  setAdminUploadFileName('');
+                  setAdminUploadDescription('');
+                  setAdminUploadSubject('');
+                  setAdminUploadClass('');
+                  if (onUploadSuccess) onUploadSuccess();
+                } catch (err) {
+                  console.error(err);
+                  setAdminUploadError(t("Upload failed. Please try again."));
+                } finally {
+                  setAdminUploading(false);
+                }
+              }}
+              disabled={adminUploading || !adminUploadFile || !adminUploadSubject || !adminUploadClass}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#15803d] hover:bg-emerald-700 text-white text-sm font-bold rounded-xl cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {adminUploading ? (
+                <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>{t("Uploading...")}</>
+              ) : (
+                <><Send className="w-4 h-4" />{t("Upload File")}</>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

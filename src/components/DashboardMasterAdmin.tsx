@@ -990,16 +990,21 @@ export default function DashboardMasterAdmin({
 
   // Load all admins or all users for Super Admin / Master Admin
   const fetchAdmins = async () => {
+    // Left as a placeholder since real-time onSnapshot listener is registered in useEffect
+    console.log("Admins fetch triggered manually (handled automatically via real-time stream)");
+  };
+
+  useEffect(() => {
     setLoadingAdmins(true);
-    try {
-      let q;
-      // If super_admin or master_admin, load users collection dynamically
-      if (user.role === 'super_admin' || user.role === 'master_admin') {
-        q = query(collection(db, 'users'));
-      } else {
-        q = query(collection(db, 'users'), where('role', '==', 'admin'));
-      }
-      const snap = await getDocs(q);
+    let q;
+    // If super_admin or master_admin, load users collection dynamically
+    if (user.role === 'super_admin' || user.role === 'master_admin') {
+      q = query(collection(db, 'users'));
+    } else {
+      q = query(collection(db, 'users'), where('role', '==', 'admin'));
+    }
+
+    const unsubAdmins = onSnapshot(q, (snap) => {
       const list: UserProfile[] = [];
       snap.forEach((doc) => {
         const d = doc.data() as any;
@@ -1008,6 +1013,13 @@ export default function DashboardMasterAdmin({
         // Master admin can only see/manage user accounts under them (not other master_admins or super_admins)
         if (user.role === 'master_admin' && (uRole === 'super_admin' || uRole === 'master_admin')) {
           return;
+        }
+
+        let createdAtDate = null;
+        if (d.createdAt) {
+          createdAtDate = typeof d.createdAt.toDate === 'function' 
+            ? d.createdAt.toDate() 
+            : new Date(d.createdAt);
         }
 
         list.push({
@@ -1019,23 +1031,22 @@ export default function DashboardMasterAdmin({
           branch: d.branch,
           subject: d.subject,
           subjects: d.subjects,
+          classes: d.classes,
+          classAssignments: d.classAssignments,
           status: d.status || 'active',
           bio: d.bio,
           profilePic: d.profilePic,
-          createdAt: d.createdAt?.toDate(),
+          createdAt: createdAtDate,
         });
       });
       setAdminsList(list);
-    } catch (err) {
-      console.error(err);
-    } finally {
       setLoadingAdmins(false);
-    }
-  };
+    }, (err) => {
+      console.error("Error streaming admin list:", err);
+      setLoadingAdmins(false);
+    });
 
-  useEffect(() => {
-    fetchAdmins();
-    const unsub = onSnapshot(doc(db, 'system_config', 'status'), (docSnap) => {
+    const unsubStatus = onSnapshot(doc(db, 'system_config', 'status'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setIsShutDownActive(!!data.isShutDown);
@@ -1047,8 +1058,12 @@ export default function DashboardMasterAdmin({
     }, (err) => {
       console.warn("Could not retrieve system configuration snapshot: ", err);
     });
-    return () => unsub();
-  }, []);
+
+    return () => {
+      unsubAdmins();
+      unsubStatus();
+    };
+  }, [user.role]);
 
   const handleToggleShutDownMode = async () => {
     try {

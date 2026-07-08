@@ -15,6 +15,7 @@ interface DashboardTeacherProps {
   files: FileArchive[];
   onUploadSuccess: () => void;
   onFileDelete: (fileId: string) => void;
+  onFileEdit: (fileId: string, updates: { fileName?: string; description?: string; subject?: string; classLevel?: string }) => void;
   onDownload: (file: FileArchive) => void;
   onPreview?: (file: FileArchive) => void;
   onViewTeacherDetails?: (teacherUid: string) => void;
@@ -25,12 +26,19 @@ export default function DashboardTeacher({
   files,
   onUploadSuccess,
   onFileDelete,
+  onFileEdit,
   onDownload,
   onPreview,
   onViewTeacherDetails
 }: DashboardTeacherProps) {
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
-  const [archiveTab, setArchiveTab] = useState<'my_submissions' | 'department_materials' | 'recent_activity'>('my_submissions');
+  const [archiveTab, setArchiveTab] = useState<'my_submissions' | 'department_materials' | 'recent_activity' | 'pending' | 'approved'>('my_submissions');
+  const [editingFile, setEditingFile] = useState<FileArchive | null>(null);
+  const [editFileName, setEditFileName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editSubject, setEditSubject] = useState('');
+  const [editClassLevel, setEditClassLevel] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -83,6 +91,8 @@ export default function DashboardTeacher({
   // Filter files
   // 1. My archive (all files uploaded by me)
   const myUploadedFiles = files.filter(f => f && f.uploadedBy === user.uid);
+  const myPendingFiles = myUploadedFiles.filter(f => !f.isApproved && !f.isDeleted);
+  const myApprovedFiles = myUploadedFiles.filter(f => f.isApproved && !f.isDeleted);
 
   // 2. Department Library (all approved files from my assigned department)
   const departmentFiles = files.filter(f => 
@@ -95,6 +105,10 @@ export default function DashboardTeacher({
   // Active files prior to search
   const activeTabFiles = archiveTab === 'my_submissions' 
     ? myUploadedFiles 
+    : archiveTab === 'pending'
+    ? myPendingFiles
+    : archiveTab === 'approved'
+    ? myApprovedFiles
     : archiveTab === 'recent_activity'
     ? [...myUploadedFiles, ...departmentFiles].filter((v, i, a) => a.findIndex(t => t.id === v.id) === i).sort((a, b) => {
         const dateA = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt || 0);
@@ -579,6 +593,32 @@ export default function DashboardTeacher({
     }
 
     setLoading(false);
+  };
+
+  const handleOpenEdit = (file: FileArchive) => {
+    setEditingFile(file);
+    setEditFileName(file.fileName);
+    setEditDescription(file.description || '');
+    setEditSubject(file.subject || '');
+    setEditClassLevel(file.classLevel || '');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingFile) return;
+    setEditSaving(true);
+    try {
+      await onFileEdit(editingFile.id, {
+        fileName: editFileName.trim(),
+        description: editDescription.trim(),
+        subject: editSubject,
+        classLevel: editClassLevel,
+      });
+      setEditingFile(null);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   return (
@@ -1150,6 +1190,28 @@ export default function DashboardTeacher({
                 )}
                 <button
                   type="button"
+                  onClick={() => { setArchiveTab('pending'); setSelectedFileIds([]); }}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    archiveTab === 'pending'
+                      ? 'bg-amber-500 text-white shadow-xs'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  }`}
+                >
+                  ⏳ {t("Pending")} ({myPendingFiles.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setArchiveTab('approved'); setSelectedFileIds([]); }}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    archiveTab === 'approved'
+                      ? 'bg-green-500 text-white shadow-xs'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  }`}
+                >
+                  ✅ {t("Approved")} ({myApprovedFiles.length})
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
                     setArchiveTab('recent_activity');
                     setSelectedFileIds([]);
@@ -1573,13 +1635,22 @@ export default function DashboardTeacher({
                                     <Download className="w-3.5 h-3.5" />
                                   </button>
                                   {file.uploadedBy === user.uid && (
-                                    <button
-                                      onClick={() => onFileDelete(file.id)}
-                                      className="p-1.5 bg-red-50 dark:bg-red-955/20 hover:bg-red-100 dark:hover:bg-red-955/40 text-red-650 dark:text-red-400 rounded border border-red-105 dark:border-red-900/30 cursor-pointer"
-                                      title={t("Delete")}
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
+                                    <>
+                                      <button
+                                        onClick={() => handleOpenEdit(file)}
+                                        className="p-1.5 bg-blue-50 dark:bg-blue-955/20 hover:bg-blue-100 dark:hover:bg-blue-955/40 text-blue-600 dark:text-blue-400 rounded border border-blue-100 dark:border-blue-900/30 cursor-pointer"
+                                        title={t("Edit")}
+                                      >
+                                        <Sparkles className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        onClick={() => onFileDelete(file.id)}
+                                        className="p-1.5 bg-red-50 dark:bg-red-955/20 hover:bg-red-100 dark:hover:bg-red-955/40 text-red-650 dark:text-red-400 rounded border border-red-105 dark:border-red-900/30 cursor-pointer"
+                                        title={t("Delete")}
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
                                   )}
                                 </div>
                               </td>
@@ -1672,6 +1743,84 @@ export default function DashboardTeacher({
                 className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-gray-700 dark:text-gray-200 text-xs font-bold rounded-lg cursor-pointer transition-all uppercase tracking-wider border border-transparent dark:border-slate-700"
               >
                 {t("Dismiss")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit File Modal ── */}
+      {editingFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-100 dark:border-slate-800">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-sm font-bold text-gray-800 dark:text-white">✏️ {t("Edit File Details")}</h3>
+              <button onClick={() => setEditingFile(null)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer">
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("File Name")}</label>
+                <input
+                  type="text"
+                  value={editFileName}
+                  onChange={e => setEditFileName(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("Description / Notes")}</label>
+                <textarea
+                  value={editDescription}
+                  onChange={e => setEditDescription(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("Subject")}</label>
+                <select
+                  value={editSubject}
+                  onChange={e => setEditSubject(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-brand-500"
+                >
+                  {teacherSubjects.map(s => (
+                    <option key={s} value={s}>{t(s)}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("Class")}</label>
+                <select
+                  value={editClassLevel}
+                  onChange={e => setEditClassLevel(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-brand-500"
+                >
+                  {CLASS_LEVELS.map(c => (
+                    <option key={c} value={c}>{t(c)}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setEditingFile(null)}
+                className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 text-xs font-bold rounded-lg cursor-pointer transition-all"
+              >
+                {t("Cancel")}
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={editSaving || !editFileName.trim()}
+                className="flex-1 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg cursor-pointer transition-all disabled:opacity-50"
+              >
+                {editSaving ? t("Saving...") : t("Save Changes")}
               </button>
             </div>
           </div>

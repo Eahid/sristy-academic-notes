@@ -705,6 +705,30 @@ export default function App() {
     }
   };
 
+  const handleEditFile = async (fileId: string, updates: { fileName?: string; description?: string; subject?: string; classLevel?: string }) => {
+    try {
+      await updateDoc(doc(db, 'files', fileId), {
+        ...updates,
+        updatedAt: serverTimestamp(),
+      });
+      // Optimistic update
+      setFiles(prev => prev.map(f => f.id === fileId ? { ...f, ...updates } : f));
+    } catch (err) {
+      console.error("Failed to edit file:", err);
+      alert(t("Failed to update file. Please try again."));
+    }
+  };
+
+  const handleDeleteUser = async (uid: string) => {
+    if (!window.confirm(t("Are you sure you want to delete this user? This cannot be undone."))) return;
+    try {
+      await deleteDoc(doc(db, 'users', uid));
+    } catch (err) {
+      console.error("Failed to delete user:", err);
+      alert(t("Failed to delete user."));
+    }
+  };
+
   const handleRestoreFile = async (fileId: string) => {
     try {
       const targetFile = deletedFiles.find(f => f.id === fileId);
@@ -1074,6 +1098,9 @@ export default function App() {
                 onDownload={handleDownloadAttempt}
                 onPreview={handlePreviewAttempt}
                 onViewTeacherDetails={setViewingTeacherUid}
+                onFileEdit={handleEditFile}
+                onDeleteUser={handleDeleteUser}
+                onUploadSuccess={() => setTriggerRefresh(t => t + 1)}
               />
             )}
 
@@ -1101,6 +1128,7 @@ export default function App() {
                 files={files} 
                 onUploadSuccess={() => setTriggerRefresh(t => t + 1)}
                 onFileDelete={handleDeleteFile}
+                onFileEdit={handleEditFile}
                 onDownload={handleDownloadAttempt}
                 onPreview={handlePreviewAttempt}
                 onViewTeacherDetails={setViewingTeacherUid}

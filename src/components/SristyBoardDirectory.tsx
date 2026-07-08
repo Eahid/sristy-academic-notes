@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, doc, setDoc, getDocs, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, deleteDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { db, createSecondaryUser } from '../firebase';
 import { SRISTY_BOARD_MEMBERS, BoardMember } from '../data/boardMembers';
 import { useThemeLanguage } from './ThemeLanguageContext';
@@ -57,26 +57,7 @@ export default function SristyBoardDirectory({
 
   // Check which members are already active in the system
   const checkProvisionedAccounts = async () => {
-    try {
-      setLoadingStatuses(true);
-      const snap = await getDocs(collection(db, 'users'));
-      const activeMap: Record<string, { uid: string, status: string }> = {};
-      
-      snap.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (data.username) {
-          activeMap[data.username.toLowerCase()] = {
-            uid: docSnap.id,
-            status: data.status || 'active'
-          };
-        }
-      });
-      setProvisionedUsernames(activeMap);
-    } catch (e) {
-      console.error("Error checking active board members:", e);
-    } finally {
-      setLoadingStatuses(false);
-    }
+    // Handled automatically via real-time stream listener in useEffect
   };
 
   // Fetch custom board members from Firestore
@@ -112,8 +93,28 @@ export default function SristyBoardDirectory({
   };
 
   useEffect(() => {
-    checkProvisionedAccounts();
+    setLoadingStatuses(true);
+    const unsub = onSnapshot(collection(db, 'users'), (snap) => {
+      const activeMap: Record<string, { uid: string, status: string }> = {};
+      snap.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.username) {
+          activeMap[data.username.toLowerCase()] = {
+            uid: docSnap.id,
+            status: data.status || 'active'
+          };
+        }
+      });
+      setProvisionedUsernames(activeMap);
+      setLoadingStatuses(false);
+    }, (err) => {
+      console.error("Error checking active board members:", err);
+      setLoadingStatuses(false);
+    });
+
     fetchCustomMembers();
+
+    return () => unsub();
   }, []);
 
   const handleCopyCredentials = (member: BoardMember) => {
