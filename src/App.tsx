@@ -54,120 +54,8 @@ import {
   Users
 } from 'lucide-react';
 
-const getSandboxInitialFiles = (): FileArchive[] => {
-  return [
-    {
-      id: 'sb-file-1',
-      fileName: 'HSC Bangla 1st Paper - Poem Analysis.pdf',
-      fileType: 'pdf',
-      fileSize: 2450000,
-      description: 'Comprehensive analysis and critical breakdown of key poetry in the HSC curriculum.',
-      uploadedBy: 'sandbox_user_teacher_123',
-      uploaderName: 'Sristy Demo Teacher',
-      uploaderRole: 'teacher',
-      branch: 'Sristy Academic School, Tangail',
-      subject: 'Bangla 1st Paper',
-      isApproved: true,
-      approvedBy: 'sandbox_user_approver_123',
-      downloadCount: 15,
-      createdAt: new Date(Date.now() - 3 * 24 * 3600 * 1000),
-      isDeleted: false,
-      deletedAt: null,
-      deletedBy: '',
-      deletedByName: ''
-    },
-    {
-      id: 'sb-file-2',
-      fileName: 'Class 10 Physics - Chapter 4 Lecture Notes.pdf',
-      fileType: 'pdf',
-      fileSize: 4120000,
-      description: 'Handwritten classroom notes and solved examples on Work, Power, and Energy.',
-      uploadedBy: 'sandbox_user_teacher_123',
-      uploaderName: 'Sristy Demo Teacher',
-      uploaderRole: 'teacher',
-      branch: 'Sristy Academic School, Tangail',
-      subject: 'Physics',
-      isApproved: false,
-      approvedBy: '',
-      downloadCount: 0,
-      createdAt: new Date(Date.now() - 1 * 24 * 3600 * 1000),
-      isDeleted: false,
-      deletedAt: null,
-      deletedBy: '',
-      deletedByName: ''
-    },
-    {
-      id: 'sb-file-3',
-      fileName: 'Higher Mathematics - Coordinate Geometry Guide.docx',
-      fileType: 'docx',
-      fileSize: 1890000,
-      description: 'Practice questions and shortcuts for solving coordinate geometry problems quickly.',
-      uploadedBy: 'teacher-456',
-      uploaderName: 'Tahmid Rahman',
-      uploaderRole: 'teacher',
-      branch: 'Sristy College of Tangail',
-      subject: 'Higher Mathematics',
-      isApproved: true,
-      approvedBy: 'sandbox_user_approver_123',
-      downloadCount: 8,
-      createdAt: new Date(Date.now() - 5 * 24 * 3600 * 1000),
-      isDeleted: false,
-      deletedAt: null,
-      deletedBy: '',
-      deletedByName: ''
-    }
-  ];
-};
-
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  
-  // Custom graphical confirmation modal state
-  const [confirmModal, setConfirmModal] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    confirmText: string;
-    cancelText: string;
-    onConfirm: () => void;
-    onCancel?: () => void;
-    isDanger?: boolean;
-  }>({
-    isOpen: false,
-    title: '',
-    message: '',
-    confirmText: '',
-    cancelText: '',
-    onConfirm: () => {},
-  });
-
-  const askConfirmation = (options: {
-    title: string;
-    message: string;
-    confirmText?: string;
-    cancelText?: string;
-    isDanger?: boolean;
-    onConfirm: () => void;
-    onCancel?: () => void;
-  }) => {
-    setConfirmModal({
-      isOpen: true,
-      title: options.title,
-      message: options.message,
-      confirmText: options.confirmText || t("Confirm"),
-      cancelText: options.cancelText || t("Cancel"),
-      onConfirm: () => {
-        options.onConfirm();
-        setConfirmModal(prev => ({ ...prev, isOpen: false }));
-      },
-      onCancel: () => {
-        if (options.onCancel) options.onCancel();
-        setConfirmModal(prev => ({ ...prev, isOpen: false }));
-      },
-      isDanger: options.isDanger || false,
-    });
-  };
-
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [files, setFiles] = useState<FileArchive[]>([]);
   const [deletedFiles, setDeletedFiles] = useState<FileArchive[]>([]);
@@ -187,7 +75,6 @@ export default function App() {
   const [viewingTeacherUid, setViewingTeacherUid] = useState<string | null>(null);
 
   const [isSystemShutDown, setIsSystemShutDown] = useState(false);
-  const [disableNonEssentialLogsGlobal, setDisableNonEssentialLogsGlobal] = useState(false);
   const [guestSearch, setGuestSearch] = useState('');
   const [guestBranch, setGuestBranch] = useState('');
   const [guestSubject, setGuestSubject] = useState('');
@@ -254,10 +141,8 @@ export default function App() {
     const unsub = onSnapshot(doc(db, 'system_config', 'status'), (docSnap) => {
       if (docSnap.exists()) {
         setIsSystemShutDown(!!docSnap.data().isShutDown);
-        setDisableNonEssentialLogsGlobal(!!docSnap.data().disableNonEssentialLogs);
       } else {
         setIsSystemShutDown(false);
-        setDisableNonEssentialLogsGlobal(false);
       }
     }, (err) => {
       console.warn("Could not fetch System Configuration state:", err);
@@ -324,9 +209,17 @@ export default function App() {
   };
 
   useEffect(() => {
-    // Force remove legacy sandbox mode states to ensure real database connections
-    safeLocalStorage.removeItem('sristy_sandbox_active');
-    safeLocalStorage.removeItem('sristy_local_user');
+    // Read local bypass storage initially if any
+    const localUserJSON = safeLocalStorage.getItem('sristy_local_user');
+    if (localUserJSON) {
+      try {
+        const parsed = JSON.parse(localUserJSON);
+        parsed.createdAt = parsed.createdAt ? new Date(parsed.createdAt) : new Date();
+        setCurrentUser(parsed);
+      } catch (e) {
+        safeLocalStorage.removeItem('sristy_local_user');
+      }
+    }
 
     // Only attempt bootstrap if user is signed in.
     if (auth.currentUser) {
@@ -435,79 +328,6 @@ export default function App() {
 
   // 2. Fetch all system files archives with multiple secure sub-queries depending on role
   useEffect(() => {
-    if (!currentUser) {
-      setFiles([]);
-      setDeletedFiles([]);
-      setLoading(false);
-      return;
-    }
-
-    const isSandboxActive = safeLocalStorage.getItem('sristy_sandbox_active') === 'true';
-    if (isSandboxActive) {
-      const loadSandboxFiles = () => {
-        let sbFiles: FileArchive[] = [];
-        const saved = safeLocalStorage.getItem('sristy_sandbox_files');
-        if (saved) {
-          try {
-            sbFiles = JSON.parse(saved);
-            sbFiles.forEach(f => {
-              f.createdAt = new Date(f.createdAt);
-              if (f.deletedAt) f.deletedAt = new Date(f.deletedAt);
-            });
-          } catch (e) {
-            console.error("Error parsing sandbox files, resetting:", e);
-            sbFiles = getSandboxInitialFiles();
-            safeLocalStorage.setItem('sristy_sandbox_files', JSON.stringify(sbFiles));
-          }
-        } else {
-          sbFiles = getSandboxInitialFiles();
-          safeLocalStorage.setItem('sristy_sandbox_files', JSON.stringify(sbFiles));
-        }
-
-        const allActive = sbFiles.filter(f => !f.isDeleted);
-        const allDeleted = sbFiles.filter(f => f.isDeleted);
-
-        allActive.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-        allDeleted.sort((a, b) => {
-          const da = a.deletedAt ? a.deletedAt.getTime() : a.createdAt.getTime();
-          const dbTime = b.deletedAt ? b.deletedAt.getTime() : b.createdAt.getTime();
-          return dbTime - da;
-        });
-
-        // Filter files based on role (mirror the real production logic so they see exactly what they should)
-        const targetRole = currentUser.role;
-        let filteredActive = allActive;
-        let filteredDeleted = allDeleted;
-
-        if (targetRole === 'admin') {
-          filteredActive = allActive.filter(f => f.isApproved || f.branch === currentUser.branch);
-          filteredDeleted = allDeleted.filter(f => f.isApproved || f.branch === currentUser.branch);
-        } else if (targetRole === 'teacher') {
-          filteredActive = allActive.filter(f => f.isApproved || f.uploadedBy === currentUser.uid);
-          filteredDeleted = allDeleted.filter(f => f.isApproved || f.uploadedBy === currentUser.uid);
-        } else if (targetRole === 'viewer') {
-          filteredActive = allActive.filter(f => f.isApproved);
-          filteredDeleted = [];
-        }
-
-        setFiles(filteredActive);
-        setDeletedFiles(filteredDeleted);
-        setLoading(false);
-      };
-
-      loadSandboxFiles();
-      
-      const handleStorageChange = (e: StorageEvent) => {
-        if (e.key === 'sristy_sandbox_files') {
-          loadSandboxFiles();
-        }
-      };
-      window.addEventListener('storage', handleStorageChange);
-      return () => {
-        window.removeEventListener('storage', handleStorageChange);
-      };
-    }
-
     setLoading(true);
     const unsubscribers: (() => void)[] = [];
     
@@ -697,7 +517,7 @@ export default function App() {
   };
 
   const handleApproveFile = async (fileId: string) => {
-    // Optimistic update — update local state immediately to prevent flicker
+    // Optimistic update — prevent flicker
     setFiles(prev => prev.map(f => f.id === fileId ? { ...f, isApproved: true, approvedBy: currentUser?.uid || '' } : f));
 
     try {
@@ -709,7 +529,7 @@ export default function App() {
 
       // audit log
       const targetFile = files.find(f => f.id === fileId);
-      if (currentUser && targetFile && !disableNonEssentialLogsGlobal) {
+      if (currentUser && targetFile) {
         try {
           await addDoc(collection(db, 'activity_logs'), {
             action: 'file_approved',
@@ -737,7 +557,7 @@ export default function App() {
   // Approve All pending files at once
   const handleApproveAllFiles = async (fileIds: string[]) => {
     if (!fileIds.length) return;
-    
+
     // Optimistic update all at once
     setFiles(prev => prev.map(f => fileIds.includes(f.id) ? { ...f, isApproved: true, approvedBy: currentUser?.uid || '' } : f));
 
@@ -749,8 +569,7 @@ export default function App() {
         })
       ));
 
-      // Single bulk audit log
-      if (currentUser && !disableNonEssentialLogsGlobal) {
+      if (currentUser) {
         try {
           await addDoc(collection(db, 'activity_logs'), {
             action: 'file_approved',
@@ -759,7 +578,7 @@ export default function App() {
             actorRole: currentUser.role,
             actorBranch: currentUser.branch || '',
             fileId: fileIds.join(','),
-            fileName: \`Bulk approval of \${fileIds.length} files\`,
+            fileName: 'Bulk approval of ' + fileIds.length + ' files',
             fileSubject: 'multiple',
             fileBranch: currentUser.branch || 'all',
             createdAt: serverTimestamp()
@@ -776,52 +595,6 @@ export default function App() {
   };
 
   const handleRejectFile = async (fileId: string, customReason?: string) => {
-    if (safeLocalStorage.getItem('sristy_sandbox_active') === 'true') {
-      const targetFile = files.find(f => f.id === fileId) || deletedFiles.find(f => f.id === fileId);
-      if (!targetFile) return;
-      let reason: string | null = null;
-      if (customReason !== undefined) {
-        reason = customReason;
-      } else {
-        reason = window.prompt(
-          t("Are you sure you want to REJECT and permanently delete this file? Enter rejection reason (optional):")
-        );
-      }
-      if (reason === null) return;
-
-      const saved = safeLocalStorage.getItem('sristy_sandbox_files');
-      if (saved) {
-        try {
-          const allFiles: FileArchive[] = JSON.parse(saved);
-          const updated = allFiles.filter(f => f.id !== fileId);
-          safeLocalStorage.setItem('sristy_sandbox_files', JSON.stringify(updated));
-          
-          // Also log rejection in sandbox logs
-          const logsSaved = safeLocalStorage.getItem('sristy_sandbox_logs') || '[]';
-          const logs = JSON.parse(logsSaved);
-          logs.push({
-            id: 'log-' + Date.now(),
-            action: 'file_rejected',
-            actorId: currentUser?.uid,
-            actorName: currentUser?.fullName,
-            actorRole: currentUser?.role,
-            actorBranch: currentUser?.branch || '',
-            fileId: fileId,
-            fileName: targetFile.fileName,
-            fileSubject: targetFile.subject,
-            fileBranch: targetFile.branch,
-            rejectionReason: reason.trim() || 'No explanation specified',
-            createdAt: new Date().toISOString()
-          });
-          safeLocalStorage.setItem('sristy_sandbox_logs', JSON.stringify(logs));
-
-          setTriggerRefresh(p => p + 1);
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      return;
-    }
     const targetFile = files.find(f => f.id === fileId);
     if (!targetFile) return;
 
@@ -837,7 +610,7 @@ export default function App() {
 
     try {
       // 1. Audit Log Rejection text archive (preserving the history of the rejected file as text)
-      if (currentUser && !disableNonEssentialLogsGlobal) {
+      if (currentUser) {
         try {
           await addDoc(collection(db, 'activity_logs'), {
             action: 'file_rejected',
@@ -892,45 +665,6 @@ export default function App() {
 
   const handleDeleteFile = async (fileId: string, bypassConfirm?: boolean) => {
     if (!bypassConfirm && !window.confirm(t("Are you sure you want to move this file to trash? This can be recovered within 30 days."))) return;
-    if (safeLocalStorage.getItem('sristy_sandbox_active') === 'true') {
-      const saved = safeLocalStorage.getItem('sristy_sandbox_files');
-      if (saved) {
-        try {
-          const allFiles: FileArchive[] = JSON.parse(saved);
-          const updated = allFiles.map(f => f.id === fileId ? { 
-            ...f, 
-            isDeleted: true,
-            deletedAt: new Date().toISOString(),
-            deletedBy: currentUser?.uid || '',
-            deletedByName: currentUser?.fullName || ''
-          } : f);
-          safeLocalStorage.setItem('sristy_sandbox_files', JSON.stringify(updated));
-          
-          const logsSaved = safeLocalStorage.getItem('sristy_sandbox_logs') || '[]';
-          const logs = JSON.parse(logsSaved);
-          const targetFile = allFiles.find(f => f.id === fileId);
-          if (targetFile) {
-            logs.push({
-              id: 'log-' + Date.now(),
-              action: 'file_deleted',
-              actorId: currentUser?.uid,
-              actorName: currentUser?.fullName,
-              actorRole: currentUser?.role,
-              actorBranch: currentUser?.branch || '',
-              fileId: fileId,
-              fileName: targetFile.fileName,
-              createdAt: new Date().toISOString()
-            });
-            safeLocalStorage.setItem('sristy_sandbox_logs', JSON.stringify(logs));
-          }
-
-          setTriggerRefresh(p => p + 1);
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      return;
-    }
     try {
       // Find the file to see metadata
       const targetFile = files.find(f => f.id === fileId);
@@ -968,26 +702,6 @@ export default function App() {
   };
 
   const handleRestoreFile = async (fileId: string) => {
-    if (safeLocalStorage.getItem('sristy_sandbox_active') === 'true') {
-      const saved = safeLocalStorage.getItem('sristy_sandbox_files');
-      if (saved) {
-        try {
-          const allFiles: FileArchive[] = JSON.parse(saved);
-          const updated = allFiles.map(f => f.id === fileId ? { 
-            ...f, 
-            isDeleted: false,
-            deletedAt: null,
-            deletedBy: null,
-            deletedByName: null
-          } : f);
-          safeLocalStorage.setItem('sristy_sandbox_files', JSON.stringify(updated));
-          setTriggerRefresh(p => p + 1);
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      return;
-    }
     try {
       const targetFile = deletedFiles.find(f => f.id === fileId);
       if (!targetFile) return;
@@ -1025,20 +739,6 @@ export default function App() {
 
   const handleHardDeleteFile = async (fileId: string) => {
     if (!window.confirm(t("Are you sure you want to PERMANENTLY and IRREVERSIBLY delete this file from Sristy servers? This cannot be undone!"))) return;
-    if (safeLocalStorage.getItem('sristy_sandbox_active') === 'true') {
-      const saved = safeLocalStorage.getItem('sristy_sandbox_files');
-      if (saved) {
-        try {
-          const allFiles: FileArchive[] = JSON.parse(saved);
-          const updated = allFiles.filter(f => f.id !== fileId);
-          safeLocalStorage.setItem('sristy_sandbox_files', JSON.stringify(updated));
-          setTriggerRefresh(p => p + 1);
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      return;
-    }
     try {
       const targetFile = deletedFiles.find(f => f.id === fileId) || files.find(f => f.id === fileId);
       if (!targetFile) return;
@@ -1108,22 +808,6 @@ export default function App() {
     }
 
     if (!window.confirm(t("Are you sure you want to PERMANENTLY and IRREVERSIBLY empty the trash? This will delete all selected files from Sristy servers forever. This action cannot be undone!"))) {
-      return;
-    }
-
-    if (safeLocalStorage.getItem('sristy_sandbox_active') === 'true') {
-      const saved = safeLocalStorage.getItem('sristy_sandbox_files');
-      if (saved) {
-        try {
-          const allFiles: FileArchive[] = JSON.parse(saved);
-          const idsToDelete = targets.map(f => f.id);
-          const updated = allFiles.filter(f => !idsToDelete.includes(f.id));
-          safeLocalStorage.setItem('sristy_sandbox_files', JSON.stringify(updated));
-          setTriggerRefresh(p => p + 1);
-        } catch (e) {
-          console.error(e);
-        }
-      }
       return;
     }
 
@@ -1365,7 +1049,6 @@ export default function App() {
 
       {/* Primary Area Container spacing */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 sm:pt-28 pb-16 flex-1 w-full bg-transparent gradient-bg">
-
         {isSystemShutDown && (
           <div className="mb-6 bg-red-50 dark:bg-red-955/20 border border-red-200 dark:border-red-900/30 text-red-700 dark:text-red-400 text-xs font-semibold p-4 rounded-xl flex items-center gap-2.5 animate-pulse select-none">
             <AlertCircle className="w-4 h-4 shrink-0" />
@@ -1911,48 +1594,9 @@ export default function App() {
             files={files}
             onDownload={handleDownloadAttempt}
             onPreview={handlePreviewAttempt}
-            user={currentUser}
           />
         )}
       </AnimatePresence>
-
-      {/* Custom Graphical Confirmation Modal */}
-      {confirmModal.isOpen && (
-        <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-2xl max-w-md w-full overflow-hidden p-6 space-y-6 text-left transform animate-in zoom-in-95 duration-200">
-            <div className="flex items-start gap-4">
-              <div className={`p-3 rounded-full shrink-0 ${confirmModal.isDanger ? 'bg-red-500/10 text-red-600 dark:text-red-400' : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'}`}>
-                <AlertCircle className="w-6 h-6" />
-              </div>
-              <div className="space-y-1.5">
-                <h3 className="font-extrabold text-base text-gray-900 dark:text-white font-display leading-snug">
-                  {confirmModal.title}
-                </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                  {confirmModal.message}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={confirmModal.onCancel}
-                className="px-4 py-2 bg-white hover:bg-gray-50 dark:bg-slate-900 dark:hover:bg-slate-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-slate-800 font-bold text-xs rounded-xl transition-all cursor-pointer select-none"
-              >
-                {confirmModal.cancelText}
-              </button>
-              <button
-                type="button"
-                onClick={confirmModal.onConfirm}
-                className={`px-5 py-2 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer select-none ${confirmModal.isDanger ? 'bg-red-600 hover:bg-red-700 active:bg-red-800' : 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800'}`}
-              >
-                {confirmModal.confirmText}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   );
