@@ -20,7 +20,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { db, auth, storage } from './firebase';
 import { safeLocalStorage, forceClearSystemCache } from './utils';
 import { UserProfile, FileArchive } from './types';
-import { BRANCHES, SUBJECTS } from './constants';
+import { BRANCHES, SUBJECTS, CLASS_LEVELS } from './constants';
 import Navbar from './components/Navbar';
 import AuthScreen from './components/AuthScreen';
 import NoticeBoard from './components/NoticeBoard';
@@ -79,6 +79,7 @@ export default function App() {
   const [guestSearch, setGuestSearch] = useState('');
   const [guestBranch, setGuestBranch] = useState('');
   const [guestSubject, setGuestSubject] = useState('');
+  const [guestClass, setGuestClass] = useState('');
 
   // 1. URL Query Cache-Reset Listener: Clears cache immediately if link contains "?clear-cache=true" or "?reset=true"
   useEffect(() => {
@@ -924,8 +925,9 @@ export default function App() {
 
       const matchesBranch = guestBranch === '' || file.branch === guestBranch;
       const matchesSubject = guestSubject === '' || file.subject === guestSubject;
+      const matchesClass = guestClass === '' || file.classLevel === guestClass;
 
-      return matchesSearch && matchesBranch && matchesSubject;
+      return matchesSearch && matchesBranch && matchesSubject && matchesClass;
     });
 
     // Apply guest sorting selection
@@ -1119,6 +1121,9 @@ export default function App() {
                 onDownload={handleDownloadAttempt}
                 onPreview={handlePreviewAttempt}
                 onViewTeacherDetails={setViewingTeacherUid}
+                onFileEdit={handleEditFile}
+                onDeleteUser={handleDeleteUser}
+                onUploadSuccess={() => setTriggerRefresh(t => t + 1)}
               />
             )}
 
@@ -1397,6 +1402,26 @@ export default function App() {
                       </span>
                     </div>
 
+                    {/* Class Filter */}
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
+                        <Layers className="w-4 h-4 text-brand-500" />
+                      </span>
+                      <select
+                        value={guestClass}
+                        onChange={(e) => setGuestClass(e.target.value)}
+                        className="w-full pl-10 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-705 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold text-gray-750 dark:text-gray-100 appearance-none cursor-pointer transition-all"
+                      >
+                        <option value="">{t("-- Apply Class Filter --")}</option>
+                        {CLASS_LEVELS.map((cls, idx) => (
+                          <option key={idx} value={cls}>{t(cls)}</option>
+                        ))}
+                      </select>
+                      <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+
                     {/* Sort Selection */}
                     <div className="relative">
                       <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
@@ -1421,13 +1446,14 @@ export default function App() {
                   </div>
 
                   {/* Reset Buttons */}
-                  {(guestSearch || guestBranch || guestSubject || guestSortBy !== 'date_desc') && (
+                  {(guestSearch || guestBranch || guestSubject || guestClass || guestSortBy !== 'date_desc') && (
                     <div className="flex justify-end pt-1">
                       <button
                         onClick={() => {
                           setGuestSearch('');
                           setGuestBranch('');
                           setGuestSubject('');
+                          setGuestClass('');
                           setGuestSortBy('date_desc');
                         }}
                         className="text-[10px] font-bold text-brand-600 hover:text-brand-700 hover:underline cursor-pointer"
