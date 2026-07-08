@@ -144,6 +144,22 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
       const userDocSnap = await getDoc(userDocRef);
       
       let matchedUser: UserProfile | null = null;
+
+      const buildProfile = (data: any, uid: string): UserProfile => ({
+        uid,
+        username: data.username || lookedUpUsername || userObj.email?.split('@')[0] || 'user',
+        fullName: data.fullName || userObj.displayName || 'Unnamed User',
+        email: userObj.email || data.email,
+        role: data.role as UserRole,
+        branch: data.branch,
+        subject: data.subject,
+        subjects: data.subjects,
+        status: data.status,
+        profilePic: data.profilePic,
+        bio: data.bio,
+        createdAt: data.createdAt?.toDate() || new Date(),
+      });
+
       if (userDocSnap.exists()) {
         const data = userDocSnap.data();
         if (data.status === 'inactive') {
@@ -151,20 +167,27 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           setLoading(false);
           return;
         }
-        matchedUser = {
-          uid: userObj.uid,
-          username: data.username || lookedUpUsername || userObj.email?.split('@')[0] || 'user',
-          fullName: data.fullName || userObj.displayName || 'Unnamed User',
-          email: userObj.email || data.email,
-          role: data.role as UserRole,
-          branch: data.branch,
-          subject: data.subject,
-          subjects: data.subjects,
-          status: data.status,
-          profilePic: data.profilePic,
-          bio: data.bio,
-          createdAt: data.createdAt?.toDate() || new Date(),
-        };
+        matchedUser = buildProfile(data, userObj.uid);
+      }
+
+      // Fallback: search by email (handles migrated users whose UID changed)
+      if (!matchedUser && userObj.email) {
+        const emailQuery = query(collection(primaryDb, 'users'), where('email', '==', userObj.email), limit(1));
+        const emailSnap = await getDocs(emailQuery);
+        if (!emailSnap.empty) {
+          const oldDoc = emailSnap.docs[0];
+          const data = oldDoc.data();
+          if (data.status === 'inactive') {
+            setErrorMsg(t("This account has been deactivated by the branch admin."));
+            setLoading(false);
+            return;
+          }
+          matchedUser = buildProfile(data, userObj.uid);
+          // Update document with new UID so future logins work instantly
+          try {
+            await setDoc(doc(primaryDb, 'users', userObj.uid), { ...data, uid: userObj.uid });
+          } catch(e) { console.warn('Could not update UID in profile:', e); }
+        }
       }
 
       if (!matchedUser && userObj.email === 'superadmin@sristynotes.com') {

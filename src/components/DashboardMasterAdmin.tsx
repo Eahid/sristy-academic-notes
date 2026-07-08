@@ -94,6 +94,7 @@ export default function DashboardMasterAdmin({
 
   // Super-Admin additional states
   const [isShutDownActive, setIsShutDownActive] = useState(false);
+  const [shutdownCustomMessage, setShutdownCustomMessage] = useState('');
   const [selectedRoleToCreate, setSelectedRoleToCreate] = useState<any>('admin');
   const [selectedSubjectToCreate, setSelectedSubjectToCreate] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -1020,9 +1021,12 @@ export default function DashboardMasterAdmin({
     fetchAdmins();
     const unsub = onSnapshot(doc(db, 'system_config', 'status'), (docSnap) => {
       if (docSnap.exists()) {
-        setIsShutDownActive(!!docSnap.data().isShutDown);
+        const data = docSnap.data();
+        setIsShutDownActive(!!data.isShutDown);
+        setShutdownCustomMessage(data.customMessage || '');
       } else {
         setIsShutDownActive(false);
+        setShutdownCustomMessage('');
       }
     }, (err) => {
       console.warn("Could not retrieve system configuration snapshot: ", err);
@@ -1036,6 +1040,7 @@ export default function DashboardMasterAdmin({
       await setDoc(doc(db, 'system_config', 'status'), {
         id: 'status',
         isShutDown: nextState,
+        customMessage: shutdownCustomMessage,
         updatedAt: serverTimestamp(),
         updatedBy: user.uid
       });
@@ -1190,7 +1195,7 @@ export default function DashboardMasterAdmin({
 
       {/* SHUTDOWN EMERGENCY CONTROL SYSTEM (RESTRICTED TO SUPER ADMINS) */}
       {user.role === 'super_admin' && (
-        <div className="bg-red-50 dark:bg-red-950/15 border border-red-150 dark:border-red-900/35 rounded-2xl p-6 transition-colors">
+        <div className="bg-red-50 dark:bg-red-955/15 border border-red-150 dark:border-red-900/35 rounded-2xl p-6 transition-colors space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="space-y-1">
               <h4 className="text-sm font-bold text-red-800 dark:text-red-400 font-display flex items-center gap-2 select-none">
@@ -1211,6 +1216,45 @@ export default function DashboardMasterAdmin({
             >
               {isShutDownActive ? t("Restore Portal Online") : t("Initiate Full Shut Down")}
             </button>
+          </div>
+
+          <div className="pt-3 border-t border-red-100/40 dark:border-red-950/20 space-y-2">
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+              {t("Custom Shutdown Message")}
+            </label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                value={shutdownCustomMessage}
+                onChange={(e) => setShutdownCustomMessage(e.target.value)}
+                placeholder={t("e.g., Sristy portal is undergoing server upgrades from 2 AM to 5 AM...")}
+                className="flex-1 px-3 py-2 bg-white dark:bg-slate-850 border border-gray-200 dark:border-slate-750 text-xs font-semibold rounded-lg focus:outline-none focus:border-[#15803d] text-gray-800 dark:text-gray-100"
+              />
+              {isShutDownActive && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await setDoc(doc(db, 'system_config', 'status'), {
+                        id: 'status',
+                        isShutDown: true,
+                        customMessage: shutdownCustomMessage,
+                        updatedAt: serverTimestamp(),
+                        updatedBy: user.uid
+                      });
+                      alert(t("Shutdown message updated successfully!"));
+                    } catch (err: any) {
+                      alert(t("Failed to update message: ") + err.message);
+                    }
+                  }}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shrink-0"
+                >
+                  {t("Update Message")}
+                </button>
+              )}
+            </div>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">
+              {t("This custom message will be displayed prominently to any visitor who attempts to load the portal while shutdown is active.")}
+            </p>
           </div>
         </div>
       )}

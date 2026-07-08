@@ -75,6 +75,7 @@ export default function App() {
   const [viewingTeacherUid, setViewingTeacherUid] = useState<string | null>(null);
 
   const [isSystemShutDown, setIsSystemShutDown] = useState(false);
+  const [customShutDownMessage, setCustomShutDownMessage] = useState('');
   const [guestSearch, setGuestSearch] = useState('');
   const [guestBranch, setGuestBranch] = useState('');
   const [guestSubject, setGuestSubject] = useState('');
@@ -140,9 +141,12 @@ export default function App() {
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'system_config', 'status'), (docSnap) => {
       if (docSnap.exists()) {
-        setIsSystemShutDown(!!docSnap.data().isShutDown);
+        const data = docSnap.data();
+        setIsSystemShutDown(!!data.isShutDown);
+        setCustomShutDownMessage(data.customMessage || '');
       } else {
         setIsSystemShutDown(false);
+        setCustomShutDownMessage('');
       }
     }, (err) => {
       console.warn("Could not fetch System Configuration state:", err);
@@ -318,13 +322,13 @@ export default function App() {
 
   // Automatically trigger the login modal when loading completes if there is no active authenticated user
   useEffect(() => {
-    if (!loading && !currentUser && !hasAutoOpened.current) {
+    if (!loading && !currentUser && !hasAutoOpened.current && !isSystemShutDown) {
       hasAutoOpened.current = true;
       setAuthModalOpen(true);
     } else if (currentUser) {
       setAuthModalOpen(false);
     }
-  }, [loading, currentUser]);
+  }, [loading, currentUser, isSystemShutDown]);
 
   // 2. Fetch all system files archives with multiple secure sub-queries depending on role
   useEffect(() => {
@@ -940,7 +944,7 @@ export default function App() {
             </p>
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed font-semibold">
-            {t("The Sristy Family academic portal has been temporarily shut down by the Super Administrator for system modifications or security updates. Please try again soon.")}
+            {customShutDownMessage ? t(customShutDownMessage) : t("The Sristy Family academic portal has been temporarily shut down by the Super Administrator for system modifications or security updates. Please try again soon.")}
           </p>
           <div className="border-t border-gray-100 dark:border-slate-800 pt-4 flex flex-col items-center gap-3">
             <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">
@@ -1005,9 +1009,16 @@ export default function App() {
       {/* Primary Area Container spacing */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 sm:pt-28 pb-16 flex-1 w-full bg-transparent gradient-bg">
         {isSystemShutDown && (
-          <div className="mb-6 bg-red-50 dark:bg-red-955/20 border border-red-200 dark:border-red-900/30 text-red-700 dark:text-red-400 text-xs font-semibold p-4 rounded-xl flex items-center gap-2.5 animate-pulse select-none">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{t("Global Emergency Shut Down / Maintenance Mode is active. Normal visitors are barred from viewing catalog files or uploading documents.")}</span>
+          <div className="mb-6 bg-red-50 dark:bg-red-955/20 border border-red-200 dark:border-red-900/30 text-red-700 dark:text-red-400 text-xs font-semibold p-4 rounded-xl flex flex-col sm:flex-row sm:items-center gap-2.5 animate-pulse select-none">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span className="font-bold">{t("Global Emergency Shut Down / Maintenance Mode is active")}</span>
+            </div>
+            {customShutDownMessage && (
+              <span className="text-[11px] font-medium text-red-650 dark:text-red-350 bg-red-100/30 dark:bg-red-950/40 px-2 py-0.5 rounded-lg border border-red-200/20">
+                {t("Message:")} {customShutDownMessage}
+              </span>
+            )}
           </div>
         )}
         
