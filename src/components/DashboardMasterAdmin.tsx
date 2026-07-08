@@ -47,6 +47,7 @@ import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
 import SristyBoardDirectory from './SristyBoardDirectory';
 import { useThemeLanguage } from './ThemeLanguageContext';
+import { CLASS_LEVELS } from '../constants';
 
 interface DashboardMasterAdminProps {
   user: UserProfile;
@@ -109,6 +110,7 @@ export default function DashboardMasterAdmin({
 
   const [activeTab, setActiveTab] = useState<'admins' | 'all_files' | 'trash_bin' | 'activity_logs' | 'database_backups' | 'rejection_history' | 'teacher_rankings' | 'board_directory'>('admins');
   const { t } = useThemeLanguage();
+  const { subjects } = useBranchSubject();
 
   // Master Admin dedicated search and filter states for Storage
   const [masterSearch, setMasterSearch] = useState('');
@@ -116,6 +118,8 @@ export default function DashboardMasterAdmin({
   const [masterFileType, setMasterFileType] = useState('');
   const [masterStartDate, setMasterStartDate] = useState('');
   const [masterEndDate, setMasterEndDate] = useState('');
+  const [masterSubject, setMasterSubject] = useState('');
+  const [masterClassLevel, setMasterClassLevel] = useState('');
   const [masterBranch, setMasterBranch] = useState('');
   const [masterStatusFilter, setMasterStatusFilter] = useState<'all' | 'pending' | 'approved'>('all');
   const [masterSortBy, setMasterSortBy] = useState<'date_desc' | 'date_asc' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc'>('date_desc');
@@ -135,6 +139,16 @@ export default function DashboardMasterAdmin({
     // Branch filter
     if (masterBranch !== '') {
       list = list.filter(f => f.branch === masterBranch);
+    }
+
+    // Subject filter
+    if (masterSubject !== '') {
+      list = list.filter(f => f.subject === masterSubject);
+    }
+
+    // Class level filter
+    if (masterClassLevel !== '') {
+      list = list.filter(f => f.classLevel === masterClassLevel);
     }
 
     // Search query (file name, topic, description, chapter)
@@ -215,7 +229,7 @@ export default function DashboardMasterAdmin({
   const [rankingsSortBy, setRankingsSortBy] = useState<'uploads' | 'approved' | 'size'>('uploads');
   const [showAllRankings, setShowAllRankings] = useState(false);
 
-  const { branches, subjects, addBranch, addSubject, removeBranch, removeSubject } = useBranchSubject();
+  const { branches, addBranch, addSubject, removeBranch, removeSubject } = useBranchSubject();
   const [newBranchName, setNewBranchName] = useState('');
   const [newSubjectName, setNewSubjectName] = useState('');
   const [metaLoading, setMetaLoading] = useState(false);
@@ -2730,7 +2744,7 @@ export default function DashboardMasterAdmin({
 
           {/* Dedicated Search and Filter Panel (Similar to Public Explorer) */}
           <div className="bg-gray-50 dark:bg-slate-950 p-4 rounded-xl border border-gray-150 dark:border-slate-800/80 mb-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
               {/* Search input (File Name, Topic, Chapter, etc.) */}
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 dark:text-gray-505">
@@ -2754,6 +2768,40 @@ export default function DashboardMasterAdmin({
                   placeholder={t("Filter by teacher name...")}
                   className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-gray-750 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#15803d]"
                 />
+              </div>
+
+              {/* Subject Filter */}
+              <div className="relative">
+                <select
+                  value={masterSubject}
+                  onChange={(e) => setMasterSubject(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-gray-750 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-[#15803d] appearance-none cursor-pointer"
+                >
+                  <option value="">{t("All Subjects")}</option>
+                  {subjects.map((sub: string) => (
+                    <option key={sub} value={sub}>{t(sub)}</option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400 dark:text-gray-505">
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </div>
+              </div>
+
+              {/* Class Filter */}
+              <div className="relative">
+                <select
+                  value={masterClassLevel}
+                  onChange={(e) => setMasterClassLevel(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-gray-750 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-[#15803d] appearance-none cursor-pointer"
+                >
+                  <option value="">{t("All Classes")}</option>
+                  {CLASS_LEVELS.map((cls: string) => (
+                    <option key={cls} value={cls}>{t(cls)}</option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400 dark:text-gray-505">
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </div>
               </div>
 
               {/* Branch filter */}
@@ -2850,7 +2898,7 @@ export default function DashboardMasterAdmin({
             </div>
 
             {/* Active Filters Summary & Reset */}
-            {(masterSearch || masterTeacher || masterBranch || masterStatusFilter !== 'all' || masterFileType || masterStartDate || masterEndDate || masterSortBy !== 'date_desc') && (
+            {(masterSearch || masterTeacher || masterSubject || masterClassLevel || masterBranch || masterStatusFilter !== 'all' || masterFileType || masterStartDate || masterEndDate || masterSortBy !== 'date_desc') && (
               <div className="flex items-center justify-between border-t border-gray-100 dark:border-slate-800/60 pt-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xxs font-bold text-gray-400 uppercase tracking-wider">{t("Active Filters")}:</span>
@@ -2864,6 +2912,18 @@ export default function DashboardMasterAdmin({
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#15803d]/10 text-[#15803d] dark:text-emerald-400 text-xxs font-bold rounded-full animate-fade-in">
                       Teacher: {masterTeacher}
                       <button onClick={() => setMasterTeacher('')} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  {masterSubject && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#15803d]/10 text-[#15803d] dark:text-emerald-400 text-xxs font-bold rounded-full animate-fade-in">
+                      Subject: {t(masterSubject)}
+                      <button onClick={() => setMasterSubject('')} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  {masterClassLevel && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#15803d]/10 text-[#15803d] dark:text-emerald-400 text-xxs font-bold rounded-full animate-fade-in">
+                      Class: {t(masterClassLevel)}
+                      <button onClick={() => setMasterClassLevel('')} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
                     </span>
                   )}
                   {masterBranch && (
@@ -2901,6 +2961,8 @@ export default function DashboardMasterAdmin({
                   onClick={() => {
                     setMasterSearch('');
                     setMasterTeacher('');
+                    setMasterSubject('');
+                    setMasterClassLevel('');
                     setMasterBranch('');
                     setMasterStatusFilter('all');
                     setMasterFileType('');

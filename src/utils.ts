@@ -125,9 +125,21 @@ export function getFilteredSubjectsForClass(classLevel: string, allSubjects: str
   if (isHscClass(classLevel)) {
     // For HSC: only 1st/2nd Paper, no general versions, no "Science" subject
     return allSubjects.filter(sub => !SSC_ONLY_SUBJECTS.includes(sub));
+  } else if (classLevel === "Class 9" || classLevel === "Class 10") {
+    // For SSC: General Math, Higher Math, Physics, Chemistry, Biology, Science etc. No "Math" or 1st/2nd Paper
+    const sscExcluded = ["Math", ...HSC_ONLY_SUBJECTS];
+    return allSubjects.filter(sub => !sscExcluded.includes(sub));
   } else {
-    // For SSC/Lower: no 1st/2nd Paper, only "Physics", "Chemistry", "General Math", "Higher Math", "Science", etc.
-    return allSubjects.filter(sub => !HSC_ONLY_SUBJECTS.includes(sub) && sub !== "Math");
+    // For Class 3 to 8: general "Math", "Science", Bangla, English etc. No SSC specific subjects like Physics/Chemistry/Biology or Higher Math
+    const lowerExcluded = [
+      "General Math",
+      "Higher Math",
+      "Physics",
+      "Chemistry",
+      "Biology",
+      ...HSC_ONLY_SUBJECTS
+    ];
+    return allSubjects.filter(sub => !lowerExcluded.includes(sub));
   }
 }
 
@@ -137,10 +149,18 @@ export function getFilteredClassesForSubject(subjectName: string, allClasses: st
   if (HSC_ONLY_SUBJECTS.includes(subjectName)) {
     // Only HSC classes
     return allClasses.filter(cls => isHscClass(cls));
-  } else if (SSC_ONLY_SUBJECTS.includes(subjectName)) {
-    // Only SSC/lower classes
-    return allClasses.filter(cls => !isHscClass(cls));
   }
+
+  const sscSpecific = ["Physics", "Chemistry", "Biology", "General Math", "Higher Math"];
+  if (sscSpecific.includes(subjectName)) {
+    return allClasses.filter(cls => cls === "Class 9" || cls === "Class 10");
+  }
+
+  const lowerSpecific = ["Math"];
+  if (lowerSpecific.includes(subjectName)) {
+    return allClasses.filter(cls => !isHscClass(cls) && cls !== "Class 9" && cls !== "Class 10");
+  }
+
   return allClasses;
 }
 

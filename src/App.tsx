@@ -75,6 +75,7 @@ export default function App() {
   const [viewingTeacherUid, setViewingTeacherUid] = useState<string | null>(null);
 
   const [isSystemShutDown, setIsSystemShutDown] = useState(false);
+  const [shutdownCustomMessage, setShutdownCustomMessage] = useState('');
   const [guestSearch, setGuestSearch] = useState('');
   const [guestBranch, setGuestBranch] = useState('');
   const [guestSubject, setGuestSubject] = useState('');
@@ -140,9 +141,12 @@ export default function App() {
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'system_config', 'status'), (docSnap) => {
       if (docSnap.exists()) {
-        setIsSystemShutDown(!!docSnap.data().isShutDown);
+        const data = docSnap.data();
+        setIsSystemShutDown(!!data.isShutDown);
+        setShutdownCustomMessage(data.customMessage || '');
       } else {
         setIsSystemShutDown(false);
+        setShutdownCustomMessage('');
       }
     }, (err) => {
       console.warn("Could not fetch System Configuration state:", err);
@@ -971,9 +975,9 @@ export default function App() {
 
   if (isSystemShutDown && currentUser?.role !== 'super_admin' && currentUser?.role !== 'master_admin') {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-slate-950 flex flex-col justify-center items-center p-6 text-center select-none" id="site-shut-down-mode">
-        <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-red-100 dark:border-red-950/30 rounded-2xl p-8 shadow-xl space-y-6">
-          <div className="w-16 h-16 bg-red-100 dark:bg-red-950/20 rounded-full flex items-center justify-center mx-auto text-red-600 dark:text-red-400">
+      <div className="min-h-screen bg-gray-50 dark:bg-slate-950 flex flex-col justify-center items-center p-4 sm:p-6 text-center select-none" id="site-shut-down-mode">
+        <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-red-100 dark:border-red-950/30 rounded-2xl p-6 sm:p-8 shadow-xl space-y-6">
+          <div className="w-16 h-16 bg-red-100 dark:bg-red-955/20 rounded-full flex items-center justify-center mx-auto text-red-600 dark:text-red-400">
             <AlertCircle className="w-8 h-8" />
           </div>
           <div className="space-y-2">
@@ -984,51 +988,43 @@ export default function App() {
               {t("Temporarily Off-line")}
             </p>
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed font-semibold">
-            {t("The Sristy Family academic portal has been temporarily shut down by the Super Administrator for system modifications or security updates. Please try again soon.")}
-          </p>
-          <div className="border-t border-gray-100 dark:border-slate-800 pt-4 flex flex-col items-center gap-3">
-            <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">
-              {t("Contract-Compliance ID: SEC-14-SHUTDOWN")}
+          
+          <div className="bg-red-55/40 dark:bg-red-955/5 border border-red-100/30 dark:border-red-900/20 p-4 rounded-xl text-left space-y-1">
+            <span className="block text-[9px] font-bold text-red-500 uppercase tracking-widest">{t("Administrator Message")}:</span>
+            <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 leading-relaxed font-semibold">
+              {shutdownCustomMessage || t("The Sristy Family academic portal has been temporarily shut down by the Super Administrator for system modifications or security updates. Please try again soon.")}
             </p>
-            {currentUser && (
+          </div>
+
+          {currentUser ? (
+            <div className="border-t border-gray-100 dark:border-slate-800 pt-6 space-y-4">
+              <p className="text-xs text-red-500 font-bold">
+                {t("Your account is not authorized to bypass Emergency Maintenance Mode.")}
+              </p>
               <button 
                 onClick={handleLogout}
-                className="text-xs text-brand-600 dark:text-brand-400 font-bold hover:underline cursor-pointer"
+                className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-colors cursor-pointer"
               >
                 {t("Sign out / Exit User Session")}
               </button>
-            )}
-            {!currentUser && (
-              <button 
-                onClick={() => setAuthModalOpen(true)}
-                className="text-xs text-brand-605 dark:text-brand-400 font-semibold hover:underline cursor-pointer"
-              >
-                {t("Site Administrator Login")}
-              </button>
-            )}
-          </div>
-        </div>
-        <AnimatePresence>
-          {authModalOpen && (
-            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-start sm:items-center justify-center p-4 overflow-y-auto">
-              <div className="relative w-full max-w-md my-auto">
-                <button
-                  onClick={() => setAuthModalOpen(false)}
-                  className="absolute top-4 right-4 z-50 p-2 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
-                >
-                  ✕
-                </button>
-                <AuthScreen 
-                  onAuthSuccess={(userProfile) => {
-                    setCurrentUser(userProfile);
-                    setAuthModalOpen(false);
-                  }}
-                />
-              </div>
+            </div>
+          ) : (
+            <div className="border-t border-gray-100 dark:border-slate-800 pt-6 text-left">
+              <h2 className="text-xs font-black text-gray-500 dark:text-gray-400 mb-4 uppercase tracking-wider text-center">{t("System Administrator Sign In")}</h2>
+              <AuthScreen 
+                onAuthSuccess={(userProfile) => {
+                  setCurrentUser(userProfile);
+                }}
+              />
             </div>
           )}
-        </AnimatePresence>
+
+          <div className="pt-2 flex flex-col items-center gap-1">
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">
+              {t("Contract-Compliance ID: SEC-14-SHUTDOWN")}
+            </p>
+          </div>
+        </div>
       </div>
     );
   }

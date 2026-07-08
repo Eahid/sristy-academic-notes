@@ -8,6 +8,7 @@ import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import { useBranchSubject } from './BranchSubjectContext';
+import { CLASS_LEVELS } from '../constants';
 
 interface DashboardTeacherProps {
   user: UserProfile;
@@ -58,6 +59,10 @@ export default function DashboardTeacher({
   const [isNewItemTypeForm, setIsNewItemTypeForm] = useState(false);
   const [newItemTypeText, setNewItemTypeText] = useState('');
 
+  const [uploadClassLevel, setUploadClassLevel] = useState('');
+  const [filterSubject, setFilterSubject] = useState('');
+  const [filterClassLevel, setFilterClassLevel] = useState('');
+
   const PRESET_ITEM_TYPES = [
     "Word Meaning",
     "Short Question",
@@ -101,6 +106,17 @@ export default function DashboardTeacher({
   // Filter with search query
   const currentFilteredFiles = activeTabFiles.filter(file => {
     if (!file) return false;
+
+    // Subject Filter
+    if (filterSubject && file.subject !== filterSubject) {
+      return false;
+    }
+
+    // Class Level Filter
+    if (filterClassLevel && file.classLevel !== filterClassLevel) {
+      return false;
+    }
+
     if (!searchTerm.trim()) return true;
     const queryStr = searchTerm.toLowerCase();
     
@@ -362,6 +378,11 @@ export default function DashboardTeacher({
       setLoading(false);
       return;
     }
+    if (!uploadClassLevel) {
+      setUploadError(t("Class level is required. Select a target class."));
+      setLoading(false);
+      return;
+    }
     if (!finalCh) {
       setUploadError(t("Chapter is required. Select or type a custom chapter."));
       setLoading(false);
@@ -489,6 +510,7 @@ export default function DashboardTeacher({
           uploaderRole: 'teacher',
           branch: user.branch || 'Sristy Academic School, Tangail',
           subject: finalSub,
+          classLevel: uploadClassLevel,
           chapter: finalCh,
           topic: finalTopic,
           itemType: finalItemType,
@@ -539,6 +561,7 @@ export default function DashboardTeacher({
       );
       setSelectedFiles(failedFiles);
       setDescription('');
+      setUploadClassLevel('');
       
       setChapter('');
       setNewChapterText('');
@@ -864,6 +887,33 @@ export default function DashboardTeacher({
                 )}
               </div>
 
+              {/* Class Level */}
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                    <Layers className="w-3.5 h-3.5 text-brand-500" />
+                    {t("Class")}
+                  </span>
+                </div>
+                <div className="relative">
+                  <select
+                    value={uploadClassLevel}
+                    onChange={(e) => setUploadClassLevel(e.target.value)}
+                    className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                    required
+                    disabled={loading}
+                  >
+                    <option value="">{t("-- Select Class --")}</option>
+                    {CLASS_LEVELS.map((cls, idx) => (
+                      <option key={idx} value={cls}>{t(cls)}</option>
+                    ))}
+                  </select>
+                  <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </span>
+                </div>
+              </div>
+
               {/* 2. Chapter */}
               <div>
                 <div className="flex justify-between items-center mb-1.5">
@@ -1143,41 +1193,94 @@ export default function DashboardTeacher({
               </div>
             </div>
 
-            {/* Filter Search Field */}
-            <div className="flex flex-col sm:flex-row items-center gap-4 justify-between">
-              <div className="relative w-full max-w-md">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
-                  <Search className="w-4 h-4 text-gray-450 dark:text-slate-500" />
-                </span>
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder={
-                    archiveTab === 'my_submissions'
-                      ? t("Search my submissions by name, topic...")
-                      : archiveTab === 'recent_activity'
-                      ? t("Search recently active files...")
-                      : t("Search department files by name, author...")
-                  }
-                  className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-lg focus:outline-none focus:border-[#15803d] dark:focus:border-brand-500 text-xs font-semibold text-gray-700 dark:text-gray-200"
-                />
-                {searchTerm && (
-                  <button
-                    onClick={() => setSearchTerm('')}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-450 hover:text-gray-600 dark:hover:text-gray-200 text-xs font-bold cursor-pointer"
+            {/* Filter Search Field & Dropdown Filters */}
+            <div className="space-y-3">
+              <div className="flex flex-col md:flex-row items-center gap-3">
+                {/* Search Bar */}
+                <div className="relative w-full md:flex-1">
+                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
+                    <Search className="w-4 h-4 text-gray-450 dark:text-slate-500" />
+                  </span>
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder={
+                      archiveTab === 'my_submissions'
+                        ? t("Search my submissions by name, topic...")
+                        : archiveTab === 'recent_activity'
+                        ? t("Search recently active files...")
+                        : t("Search department files by name, author...")
+                    }
+                    className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-lg focus:outline-none focus:border-[#15803d] dark:focus:border-brand-500 text-xs font-semibold text-gray-700 dark:text-gray-200"
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm('')}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-450 hover:text-gray-600 dark:hover:text-gray-200 text-xs font-bold cursor-pointer"
+                    >
+                      {t("Clear")}
+                    </button>
+                  )}
+                </div>
+
+                {/* Subject Dropdown Filter */}
+                <div className="relative w-full md:w-48">
+                  <select
+                    value={filterSubject}
+                    onChange={(e) => setFilterSubject(e.target.value)}
+                    className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 text-gray-700 dark:text-gray-200 rounded-lg focus:outline-none focus:border-[#15803d] dark:focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer"
                   >
-                    {t("Clear")}
-                  </button>
-                )}
+                    <option value="">{t("All Subjects")}</option>
+                    {(teacherSubjects.length > 0 ? teacherSubjects : subjects).map((sub, idx) => (
+                      <option key={idx} value={sub}>{t(sub)}</option>
+                    ))}
+                  </select>
+                  <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </span>
+                </div>
+
+                {/* Class Dropdown Filter */}
+                <div className="relative w-full md:w-48">
+                  <select
+                    value={filterClassLevel}
+                    onChange={(e) => setFilterClassLevel(e.target.value)}
+                    className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 text-gray-700 dark:text-gray-200 rounded-lg focus:outline-none focus:border-[#15803d] dark:focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer"
+                  >
+                    <option value="">{t("All Classes")}</option>
+                    {CLASS_LEVELS.map((cls, idx) => (
+                      <option key={idx} value={cls}>{t(cls)}</option>
+                    ))}
+                  </select>
+                  <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </span>
+                </div>
               </div>
 
-              <div className="text-[10px] bg-brand-100 dark:bg-brand-950/40 text-[#15803d] dark:text-brand-400 px-3 py-1 rounded-full font-bold select-none capitalize border border-[#15803d]/10">
-                {archiveTab === 'my_submissions'
-                  ? `${t("My Submissions")}: ${user.subject || t("General")}`
-                  : archiveTab === 'recent_activity'
-                  ? t("Recent Department Activity Feed")
-                  : `${t("Assigned")}: ${teacherSubjects.join(', ')}`}
+              <div className="flex flex-col sm:flex-row items-center gap-4 justify-between">
+                <div className="flex gap-2">
+                  {(filterSubject || filterClassLevel || searchTerm) && (
+                    <button
+                      onClick={() => {
+                        setFilterSubject('');
+                        setFilterClassLevel('');
+                        setSearchTerm('');
+                      }}
+                      className="text-xs font-bold text-red-500 hover:underline cursor-pointer"
+                    >
+                      {t("Reset Filters")}
+                    </button>
+                  )}
+                </div>
+                <div className="text-[10px] bg-brand-100 dark:bg-brand-950/40 text-[#15803d] dark:text-brand-400 px-3 py-1 rounded-full font-bold select-none capitalize border border-[#15803d]/10">
+                  {archiveTab === 'my_submissions'
+                    ? `${t("My Submissions")}: ${user.subject || t("General")}`
+                    : archiveTab === 'recent_activity'
+                    ? t("Recent Department Activity Feed")
+                    : `${t("Assigned")}: ${teacherSubjects.join(', ')}`}
+                </div>
               </div>
             </div>
           </div>

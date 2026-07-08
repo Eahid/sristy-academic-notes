@@ -34,6 +34,7 @@ export interface FileArchive {
   chapter?: string;
   topic?: string;
   itemType?: string;
+  classLevel?: string;
   isApproved: boolean;
   approvedBy?: string; // UID of admin who approved it
   downloadCount: number;

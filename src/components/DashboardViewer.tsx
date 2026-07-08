@@ -5,6 +5,7 @@ import { Search, SlidersHorizontal, BookOpen, School, FileCheck, CheckCircle2, C
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
 import { useThemeLanguage } from './ThemeLanguageContext';
+import { CLASS_LEVELS } from '../constants';
 
 interface DashboardViewerProps {
   user: UserProfile;
@@ -20,6 +21,7 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
+  const [selectedClassLevel, setSelectedClassLevel] = useState('');
   const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc'>('date_desc');
   const { t } = useThemeLanguage();
   const { branches, subjects } = useBranchSubject();
@@ -34,8 +36,9 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
 
     const matchesBranch = selectedBranch === '' || file.branch === selectedBranch;
     const matchesSubject = selectedSubject === '' || file.subject === selectedSubject;
+    const matchesClassLevel = selectedClassLevel === '' || file.classLevel === selectedClassLevel;
 
-    return matchesSearch && matchesBranch && matchesSubject;
+    return matchesSearch && matchesBranch && matchesSubject && matchesClassLevel;
   });
 
   // Sort files dynamically
@@ -68,7 +71,7 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
           <span>{t("Interactive Resource Directory Search")}</span>
         </h3>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           {/* Text Search */}
           <div className="relative">
             <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400">
@@ -79,7 +82,7 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t("Search file name, topic, notes...")}
-              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500"
+              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold text-gray-750 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500"
             />
           </div>
 
@@ -123,6 +126,26 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
             </span>
           </div>
 
+          {/* Class Filter */}
+          <div className="relative">
+            <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
+              <BookOpen className="w-4 h-4 text-brand-500" />
+            </span>
+            <select
+              value={selectedClassLevel}
+              onChange={(e) => setSelectedClassLevel(e.target.value)}
+              className="w-full pl-10 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold text-gray-750 dark:text-gray-200 appearance-none cursor-pointer transition-all"
+            >
+              <option value="">{t("-- Apply Class Filter --")}</option>
+              {CLASS_LEVELS.map((cls, idx) => (
+                <option key={idx} value={cls}>{t(cls)}</option>
+              ))}
+            </select>
+            <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+              <ChevronDown className="w-3.5 h-3.5" />
+            </span>
+          </div>
+
           {/* Sort selection */}
           <div className="relative">
             <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-[#15803d] dark:text-emerald-450 pointer-events-none">
@@ -147,13 +170,14 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
         </div>
 
         {/* Clear Filters Shortcuts */}
-        {(searchQuery || selectedBranch || selectedSubject || sortBy !== 'date_desc') && (
+        {(searchQuery || selectedBranch || selectedSubject || selectedClassLevel || sortBy !== 'date_desc') && (
           <div className="flex justify-end pt-1">
             <button
               onClick={() => {
                 setSearchQuery('');
                 setSelectedBranch('');
                 setSelectedSubject('');
+                setSelectedClassLevel('');
                 setSortBy('date_desc');
               }}
               className="text-[10px] font-bold text-brand-600 hover:text-brand-700 hover:underline cursor-pointer"

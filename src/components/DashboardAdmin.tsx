@@ -302,6 +302,8 @@ export default function DashboardAdmin({
   const [adminFileType, setAdminFileType] = useState('');
   const [adminStartDate, setAdminStartDate] = useState('');
   const [adminEndDate, setAdminEndDate] = useState('');
+  const [adminSubject, setAdminSubject] = useState('');
+  const [adminClassLevel, setAdminClassLevel] = useState('');
   const [adminSortBy, setAdminSortBy] = useState<'date_desc' | 'date_asc' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc'>('date_desc');
 
   useEffect(() => {
@@ -350,6 +352,16 @@ export default function DashboardAdmin({
         if (type === 'image') return ['png', 'jpg', 'jpeg', 'webp'].includes(ext);
         return true;
       });
+    }
+
+    // Subject filter
+    if (adminSubject !== '') {
+      list = list.filter(f => f.subject === adminSubject);
+    }
+
+    // Class filter
+    if (adminClassLevel !== '') {
+      list = list.filter(f => f.classLevel === adminClassLevel);
     }
 
     // 5. Date Range filter
@@ -1719,7 +1731,7 @@ export default function DashboardAdmin({
 
           {/* Dedicated Search and Filter Panel (Similar to Public Explorer) */}
           <div className="bg-gray-50 dark:bg-slate-950 p-4 rounded-xl border border-gray-150 dark:border-slate-800/80 mb-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
               {/* Search input (File Name, Topic, Chapter, etc.) */}
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 dark:text-gray-505">
@@ -1743,6 +1755,40 @@ export default function DashboardAdmin({
                   placeholder={t("Filter by teacher name...")}
                   className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-gray-750 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#15803d]"
                 />
+              </div>
+
+              {/* Subject dropdown filter */}
+              <div className="relative">
+                <select
+                  value={adminSubject}
+                  onChange={(e) => setAdminSubject(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-gray-750 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-[#15803d] appearance-none cursor-pointer"
+                >
+                  <option value="">{t("All Subjects")}</option>
+                  {subjects.map((sub, idx) => (
+                    <option key={idx} value={sub}>{t(sub)}</option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400 dark:text-gray-505">
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </div>
+              </div>
+
+              {/* Class dropdown filter */}
+              <div className="relative">
+                <select
+                  value={adminClassLevel}
+                  onChange={(e) => setAdminClassLevel(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-gray-750 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-[#15803d] appearance-none cursor-pointer"
+                >
+                  <option value="">{t("All Classes")}</option>
+                  {CLASS_LEVELS.map((cls, idx) => (
+                    <option key={idx} value={cls}>{t(cls)}</option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400 dark:text-gray-505">
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </div>
               </div>
 
               {/* File Type filter */}
@@ -1806,7 +1852,7 @@ export default function DashboardAdmin({
             </div>
 
             {/* Active Filters Summary & Reset */}
-            {(adminSearch || adminTeacher || adminFileType || adminStartDate || adminEndDate || adminSortBy !== 'date_desc') && (
+            {(adminSearch || adminTeacher || adminSubject || adminClassLevel || adminFileType || adminStartDate || adminEndDate || adminSortBy !== 'date_desc') && (
               <div className="flex items-center justify-between border-t border-gray-100 dark:border-slate-800/60 pt-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xxs font-bold text-gray-400 uppercase tracking-wider">{t("Active Filters")}:</span>
@@ -1820,6 +1866,18 @@ export default function DashboardAdmin({
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#15803d]/10 text-[#15803d] dark:text-emerald-400 text-xxs font-bold rounded-full animate-fade-in">
                       Teacher: {adminTeacher}
                       <button onClick={() => setAdminTeacher('')} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  {adminSubject && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#15803d]/10 text-[#15803d] dark:text-emerald-400 text-xxs font-bold rounded-full animate-fade-in">
+                      Subject: {t(adminSubject)}
+                      <button onClick={() => setAdminSubject('')} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  {adminClassLevel && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#15803d]/10 text-[#15803d] dark:text-emerald-400 text-xxs font-bold rounded-full animate-fade-in">
+                      Class: {t(adminClassLevel)}
+                      <button onClick={() => setAdminClassLevel('')} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
                     </span>
                   )}
                   {adminFileType && (
@@ -1845,6 +1903,8 @@ export default function DashboardAdmin({
                   onClick={() => {
                     setAdminSearch('');
                     setAdminTeacher('');
+                    setAdminSubject('');
+                    setAdminClassLevel('');
                     setAdminFileType('');
                     setAdminStartDate('');
                     setAdminEndDate('');

@@ -198,6 +198,12 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
                 <span className="truncate font-bold text-emerald-600 dark:text-emerald-400" title={t(file.itemType)}>{t(file.itemType)}</span>
               </div>
             )}
+            {file.classLevel && (
+              <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 col-span-2 mt-0.5">
+                <span className="font-bold text-[9px] bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded uppercase">{t("Class")}</span>
+                <span className="truncate font-bold text-purple-600 dark:text-purple-405" title={t(file.classLevel)}>{t(file.classLevel)}</span>
+              </div>
+            )}
           </div>
         </div>
 
