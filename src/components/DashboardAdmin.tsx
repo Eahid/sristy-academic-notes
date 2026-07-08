@@ -40,6 +40,7 @@ interface DashboardAdminProps {
   files: FileArchive[];
   deletedFiles: FileArchive[];
   onFileApprove: (fileId: string) => void;
+  onApproveAll?: (fileIds: string[]) => void;
   onFileReject: (fileId: string) => void;
   onFileDelete: (fileId: string, bypassConfirm?: boolean) => void;
   onFileRestore: (fileId: string) => void;
@@ -55,6 +56,7 @@ export default function DashboardAdmin({
   files,
   deletedFiles,
   onFileApprove,
+  onApproveAll,
   onFileReject,
   onFileDelete,
   onFileRestore,
@@ -580,6 +582,16 @@ export default function DashboardAdmin({
         </div>
       </div>
 
+      {pendingFiles.length > 0 && onApproveAll && (
+        <div className="mb-4 flex justify-end">
+          <button
+            onClick={() => onApproveAll(pendingFiles.map(f => f.id))}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg shadow transition-colors cursor-pointer"
+          >
+            ✅ Approve All ({pendingFiles.length})
+          </button>
+        </div>
+      )}
       {pendingFiles.length > 0 && (
         <motion.div 
           initial={{ opacity: 0, y: -10 }}

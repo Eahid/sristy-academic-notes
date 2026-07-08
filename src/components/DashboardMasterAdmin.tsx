@@ -53,6 +53,7 @@ interface DashboardMasterAdminProps {
   files: FileArchive[];
   deletedFiles: FileArchive[];
   onFileApprove: (fileId: string) => void;
+  onApproveAll?: (fileIds: string[]) => void;
   onFileReject: (fileId: string) => void;
   onFileDelete: (fileId: string) => void;
   onFileRestore: (fileId: string) => void;
@@ -69,6 +70,7 @@ export default function DashboardMasterAdmin({
   files, 
   deletedFiles,
   onFileApprove,
+  onApproveAll,
   onFileReject,
   onFileDelete,
   onFileRestore,
@@ -1276,14 +1278,24 @@ export default function DashboardMasterAdmin({
               </p>
             </div>
           </div>
-          {activeTab !== 'all_files' && (
-            <button
-              onClick={() => setActiveTab('all_files')}
-              className="bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-sm shrink-0 uppercase tracking-wider cursor-pointer mt-1 sm:mt-0"
-            >
-              {t("Review Now")}
-            </button>
-          )}
+          <div className="flex gap-2 shrink-0 mt-1 sm:mt-0">
+            {onApproveAll && (
+              <button
+                onClick={() => onApproveAll(pendingFiles.map(f => f.id))}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-sm uppercase tracking-wider cursor-pointer"
+              >
+                ✅ {t("Approve All")} ({pendingFiles.length})
+              </button>
+            )}
+            {activeTab !== 'all_files' && (
+              <button
+                onClick={() => setActiveTab('all_files')}
+                className="bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-sm uppercase tracking-wider cursor-pointer"
+              >
+                {t("Review Now")}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
