@@ -268,25 +268,55 @@ export default function TeacherDetailsModal({
                       </p>
                     </div>
 
-                    <div className="bg-gray-50/50 dark:bg-slate-950/10 border border-gray-100 dark:border-slate-850 p-3.5 rounded-xl space-y-1 md:col-span-2">
-                      <p className="text-[10px] text-gray-400 dark:text-gray-550 font-bold uppercase tracking-wider">{t("Subjects Assigned Specialty")}</p>
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {teacher.subjects && teacher.subjects.length > 0 ? (
-                          teacher.subjects.map((s, idx) => (
-                            <span key={idx} className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-750 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-md flex items-center gap-1">
+                    <div className="bg-gray-50/50 dark:bg-slate-950/10 border border-gray-100 dark:border-slate-850 p-3.5 rounded-xl space-y-3 md:col-span-2">
+                      <p className="text-[10px] text-gray-400 dark:text-gray-550 font-bold uppercase tracking-wider">{t("Subject & Class Assignments")}</p>
+                      
+                      {/* Show classAssignments (subject → class pairs) if available */}
+                      {teacher.classAssignments && teacher.classAssignments.length > 0 ? (
+                        <div className="flex flex-col gap-1.5">
+                          {teacher.classAssignments.map((asg, idx) => (
+                            <div key={idx} className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-indigo-100 dark:border-indigo-900/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold w-fit">
                               <BookOpen className="w-3 h-3 text-indigo-500 shrink-0" />
-                              <span>{t(s)}</span>
+                              <span className="text-indigo-700 dark:text-indigo-400">{t(asg.subject)}</span>
+                              <span className="text-gray-400">→</span>
+                              <span className="text-[#15803d] dark:text-brand-400">{t(asg.classLevel)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        /* Fallback: show subjects array or single subject */
+                        <div className="flex flex-wrap gap-1.5">
+                          {teacher.subjects && teacher.subjects.length > 0 ? (
+                            teacher.subjects.map((s, idx) => (
+                              <span key={idx} className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-750 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-md flex items-center gap-1">
+                                <BookOpen className="w-3 h-3 text-indigo-500 shrink-0" />
+                                <span>{t(s)}</span>
+                              </span>
+                            ))
+                          ) : teacher.subject ? (
+                            <span className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-750 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-md flex items-center gap-1">
+                              <BookOpen className="w-3 h-3 text-indigo-500 shrink-0" />
+                              <span>{t(teacher.subject)}</span>
                             </span>
-                          ))
-                        ) : teacher.subject ? (
-                          <span className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-750 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-md flex items-center gap-1">
-                            <BookOpen className="w-3 h-3 text-indigo-500 shrink-0" />
-                            <span>{t(teacher.subject)}</span>
-                          </span>
-                        ) : (
-                          <span className="text-gray-400 italic text-[11px]">{t("No specific subject assigned officially.")}</span>
-                        )}
-                      </div>
+                          ) : (
+                            <span className="text-gray-400 italic text-[11px]">{t("No specific subject assigned officially.")}</span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Show classes separately if no classAssignments */}
+                      {(!teacher.classAssignments || teacher.classAssignments.length === 0) && teacher.classes && teacher.classes.length > 0 && (
+                        <div>
+                          <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mb-1">{t("Classes")}</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {teacher.classes.map((c, idx) => (
+                              <span key={idx} className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30 text-[10px] px-2.5 py-0.5 rounded-md font-bold">
+                                {t(c)}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
