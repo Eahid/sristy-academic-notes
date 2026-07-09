@@ -51,8 +51,7 @@ import {
   Landmark,
   Loader2,
   ArrowUpDown,
-  Users,
-  Layers
+  Users
 } from 'lucide-react';
 
 export default function App() {
@@ -157,6 +156,16 @@ export default function App() {
   }, []);
 
   const handlePreviewAttempt = (file: FileArchive) => {
+    // Block guests and viewers from previewing (preview triggers download)
+    if (!currentUser) {
+      alert(t("Please log in to view study materials."));
+      return;
+    }
+    if (currentUser.role === 'viewer') {
+      alert(t("You do not have permission to view files. Please contact your branch admin."));
+      return;
+    }
+
     // 1. Trigger the download automatically upon clicking preview
     handleDownloadAttempt(file);
 
@@ -464,6 +473,18 @@ export default function App() {
   };
 
   const handleDownloadAttempt = async (file: FileArchive) => {
+    // Block guests (not logged in) from downloading
+    if (!currentUser) {
+      alert(t("Please log in to download study materials."));
+      return;
+    }
+
+    // Block viewers from downloading
+    if (currentUser.role === 'viewer') {
+      alert(t("You do not have permission to download files. Please contact your branch admin."));
+      return;
+    }
+
     try {
       // Increment download counter securely in Firestore
       try {
@@ -704,30 +725,6 @@ export default function App() {
       }
     } catch (err) {
       console.error("Failed to soft delete file: ", err);
-    }
-  };
-
-  const handleEditFile = async (fileId: string, updates: { fileName?: string; description?: string; subject?: string; classLevel?: string }) => {
-    try {
-      await updateDoc(doc(db, 'files', fileId), {
-        ...updates,
-        updatedAt: serverTimestamp(),
-      });
-      // Optimistic update
-      setFiles(prev => prev.map(f => f.id === fileId ? { ...f, ...updates } : f));
-    } catch (err) {
-      console.error("Failed to edit file:", err);
-      alert(t("Failed to update file. Please try again."));
-    }
-  };
-
-  const handleDeleteUser = async (uid: string) => {
-    if (!window.confirm(t("Are you sure you want to delete this user? This cannot be undone."))) return;
-    try {
-      await deleteDoc(doc(db, 'users', uid));
-    } catch (err) {
-      console.error("Failed to delete user:", err);
-      alert(t("Failed to delete user."));
     }
   };
 
@@ -1101,9 +1098,6 @@ export default function App() {
                 onDownload={handleDownloadAttempt}
                 onPreview={handlePreviewAttempt}
                 onViewTeacherDetails={setViewingTeacherUid}
-                onFileEdit={handleEditFile}
-                onDeleteUser={handleDeleteUser}
-                onUploadSuccess={() => setTriggerRefresh(t => t + 1)}
               />
             )}
 
@@ -1122,9 +1116,6 @@ export default function App() {
                 onDownload={handleDownloadAttempt}
                 onPreview={handlePreviewAttempt}
                 onViewTeacherDetails={setViewingTeacherUid}
-                onFileEdit={handleEditFile}
-                onDeleteUser={handleDeleteUser}
-                onUploadSuccess={() => setTriggerRefresh(t => t + 1)}
               />
             )}
 
@@ -1134,7 +1125,6 @@ export default function App() {
                 files={files} 
                 onUploadSuccess={() => setTriggerRefresh(t => t + 1)}
                 onFileDelete={handleDeleteFile}
-                onFileEdit={handleEditFile}
                 onDownload={handleDownloadAttempt}
                 onPreview={handlePreviewAttempt}
                 onViewTeacherDetails={setViewingTeacherUid}
@@ -1406,14 +1396,14 @@ export default function App() {
                     {/* Class Filter */}
                     <div className="relative">
                       <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
-                        <Layers className="w-4 h-4 text-brand-500" />
+                        <BookOpen className="w-4 h-4 text-brand-500" />
                       </span>
                       <select
                         value={guestClass}
                         onChange={(e) => setGuestClass(e.target.value)}
                         className="w-full pl-10 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-705 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold text-gray-750 dark:text-gray-100 appearance-none cursor-pointer transition-all"
                       >
-                        <option value="">{t("-- Apply Class Filter --")}</option>
+                        <option value="">{t("-- Filter by Class --")}</option>
                         {CLASS_LEVELS.map((cls, idx) => (
                           <option key={idx} value={cls}>{t(cls)}</option>
                         ))}
