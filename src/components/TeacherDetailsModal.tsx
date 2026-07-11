@@ -15,6 +15,8 @@ import {
   ShieldAlert, 
   Clock, 
   CheckCircle2, 
+  XCircle,
+  Trash2,
   Eye, 
   Download 
 } from 'lucide-react';
@@ -25,6 +27,10 @@ interface TeacherDetailsModalProps {
   files: FileArchive[];
   onDownload: (file: FileArchive) => void;
   onPreview?: (file: FileArchive) => void;
+  onFileDelete?: (fileId: string) => void;
+  onFileApprove?: (fileId: string) => void;
+  onFileReject?: (fileId: string, reason?: string) => void;
+  viewerRole?: string;
 }
 
 export default function TeacherDetailsModal({ 
@@ -32,7 +38,11 @@ export default function TeacherDetailsModal({
   onClose, 
   files, 
   onDownload, 
-  onPreview 
+  onPreview,
+  onFileDelete,
+  onFileApprove,
+  onFileReject,
+  viewerRole,
 }: TeacherDetailsModalProps) {
   const { t } = useThemeLanguage();
   const [teacher, setTeacher] = useState<UserProfile | null>(null);
@@ -40,6 +50,9 @@ export default function TeacherDetailsModal({
   const [rejections, setRejections] = useState<any[]>([]);
   const [loadingRejections, setLoadingRejections] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'uploads' | 'rejections'>('overview');
+  const [rejectingFileId, setRejectingFileId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const canManage = viewerRole === 'master_admin' || viewerRole === 'super_admin' || viewerRole === 'admin';
 
   // Filter study materials uploaded by this teacher from real-time files prop
   const teacherFiles = files.filter(f => f.uploadedBy === teacherUid && !f.isDeleted);
@@ -268,55 +281,25 @@ export default function TeacherDetailsModal({
                       </p>
                     </div>
 
-                    <div className="bg-gray-50/50 dark:bg-slate-950/10 border border-gray-100 dark:border-slate-850 p-3.5 rounded-xl space-y-3 md:col-span-2">
-                      <p className="text-[10px] text-gray-400 dark:text-gray-550 font-bold uppercase tracking-wider">{t("Subject & Class Assignments")}</p>
-                      
-                      {/* Show classAssignments (subject → class pairs) if available */}
-                      {teacher.classAssignments && teacher.classAssignments.length > 0 ? (
-                        <div className="flex flex-col gap-1.5">
-                          {teacher.classAssignments.map((asg, idx) => (
-                            <div key={idx} className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-indigo-100 dark:border-indigo-900/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold w-fit">
+                    <div className="bg-gray-50/50 dark:bg-slate-950/10 border border-gray-100 dark:border-slate-850 p-3.5 rounded-xl space-y-1 md:col-span-2">
+                      <p className="text-[10px] text-gray-400 dark:text-gray-550 font-bold uppercase tracking-wider">{t("Subjects Assigned Specialty")}</p>
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {teacher.subjects && teacher.subjects.length > 0 ? (
+                          teacher.subjects.map((s, idx) => (
+                            <span key={idx} className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-750 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-md flex items-center gap-1">
                               <BookOpen className="w-3 h-3 text-indigo-500 shrink-0" />
-                              <span className="text-indigo-700 dark:text-indigo-400">{t(asg.subject)}</span>
-                              <span className="text-gray-400">→</span>
-                              <span className="text-[#15803d] dark:text-brand-400">{t(asg.classLevel)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        /* Fallback: show subjects array or single subject */
-                        <div className="flex flex-wrap gap-1.5">
-                          {teacher.subjects && teacher.subjects.length > 0 ? (
-                            teacher.subjects.map((s, idx) => (
-                              <span key={idx} className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-750 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-md flex items-center gap-1">
-                                <BookOpen className="w-3 h-3 text-indigo-500 shrink-0" />
-                                <span>{t(s)}</span>
-                              </span>
-                            ))
-                          ) : teacher.subject ? (
-                            <span className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-750 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-md flex items-center gap-1">
-                              <BookOpen className="w-3 h-3 text-indigo-500 shrink-0" />
-                              <span>{t(teacher.subject)}</span>
+                              <span>{t(s)}</span>
                             </span>
-                          ) : (
-                            <span className="text-gray-400 italic text-[11px]">{t("No specific subject assigned officially.")}</span>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Show classes separately if no classAssignments */}
-                      {(!teacher.classAssignments || teacher.classAssignments.length === 0) && teacher.classes && teacher.classes.length > 0 && (
-                        <div>
-                          <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mb-1">{t("Classes")}</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {teacher.classes.map((c, idx) => (
-                              <span key={idx} className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30 text-[10px] px-2.5 py-0.5 rounded-md font-bold">
-                                {t(c)}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                          ))
+                        ) : teacher.subject ? (
+                          <span className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-750 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-md flex items-center gap-1">
+                            <BookOpen className="w-3 h-3 text-indigo-500 shrink-0" />
+                            <span>{t(teacher.subject)}</span>
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 italic text-[11px]">{t("No specific subject assigned officially.")}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -381,7 +364,8 @@ export default function TeacherDetailsModal({
                             {f.isApproved ? t("Approved") : t("Pending")}
                           </span>
 
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                            {/* Preview */}
                             {['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes((f.fileType || '').toLowerCase()) && onPreview && (
                               <button
                                 onClick={() => onPreview(f)}
@@ -391,6 +375,8 @@ export default function TeacherDetailsModal({
                                 <Eye className="w-3.5 h-3.5" />
                               </button>
                             )}
+
+                            {/* Download */}
                             <button
                               onClick={() => onDownload(f)}
                               className="p-1.5 bg-[#15803d] hover:bg-[#166534] text-white rounded-lg transition-colors cursor-pointer"
@@ -398,7 +384,74 @@ export default function TeacherDetailsModal({
                             >
                               <Download className="w-3.5 h-3.5" />
                             </button>
+
+                            {/* Approve — for pending files */}
+                            {canManage && !f.isApproved && onFileApprove && (
+                              <button
+                                onClick={() => onFileApprove(f.id)}
+                                className="p-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors cursor-pointer"
+                                title={t("Approve file")}
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {/* Reject */}
+                            {canManage && onFileReject && (
+                              <button
+                                onClick={() => { setRejectingFileId(f.id); setRejectReason(''); }}
+                                className="p-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors cursor-pointer"
+                                title={t("Reject file")}
+                              >
+                                <XCircle className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {/* Delete */}
+                            {canManage && onFileDelete && (
+                              <button
+                                onClick={() => {
+                                  if (window.confirm(t("Move this file to recycle bin?"))) {
+                                    onFileDelete(f.id);
+                                  }
+                                }}
+                                className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors cursor-pointer"
+                                title={t("Delete file")}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
+
+                          {/* Rejection reason input */}
+                          {rejectingFileId === f.id && (
+                            <div className="mt-2 flex gap-2 w-full">
+                              <input
+                                type="text"
+                                value={rejectReason}
+                                onChange={e => setRejectReason(e.target.value)}
+                                placeholder={t("Enter rejection reason...")}
+                                className="flex-1 px-2 py-1 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-red-500"
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => {
+                                  if (onFileReject) onFileReject(f.id, rejectReason);
+                                  setRejectingFileId(null);
+                                  setRejectReason('');
+                                }}
+                                className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-lg cursor-pointer"
+                              >
+                                {t("Confirm")}
+                              </button>
+                              <button
+                                onClick={() => setRejectingFileId(null)}
+                                className="px-3 py-1 bg-gray-200 hover:bg-gray-300 dark:bg-slate-700 text-gray-700 dark:text-gray-300 text-xs font-bold rounded-lg cursor-pointer"
+                              >
+                                {t("Cancel")}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))

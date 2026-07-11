@@ -20,7 +20,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { db, auth, storage } from './firebase';
 import { safeLocalStorage, forceClearSystemCache } from './utils';
 import { UserProfile, FileArchive } from './types';
-import { BRANCHES, SUBJECTS, CLASS_LEVELS } from './constants';
+import { BRANCHES, SUBJECTS } from './constants';
 import Navbar from './components/Navbar';
 import AuthScreen from './components/AuthScreen';
 import NoticeBoard from './components/NoticeBoard';
@@ -79,7 +79,6 @@ export default function App() {
   const [guestSearch, setGuestSearch] = useState('');
   const [guestBranch, setGuestBranch] = useState('');
   const [guestSubject, setGuestSubject] = useState('');
-  const [guestClass, setGuestClass] = useState('');
 
   // 1. URL Query Cache-Reset Listener: Clears cache immediately if link contains "?clear-cache=true" or "?reset=true"
   useEffect(() => {
@@ -156,16 +155,6 @@ export default function App() {
   }, []);
 
   const handlePreviewAttempt = (file: FileArchive) => {
-    // Block guests and viewers from previewing (preview triggers download)
-    if (!currentUser) {
-      alert(t("Please log in to view study materials."));
-      return;
-    }
-    if (currentUser.role === 'viewer') {
-      alert(t("You do not have permission to view files. Please contact your branch admin."));
-      return;
-    }
-
     // 1. Trigger the download automatically upon clicking preview
     handleDownloadAttempt(file);
 
@@ -473,18 +462,6 @@ export default function App() {
   };
 
   const handleDownloadAttempt = async (file: FileArchive) => {
-    // Block guests (not logged in) from downloading
-    if (!currentUser) {
-      alert(t("Please log in to download study materials."));
-      return;
-    }
-
-    // Block viewers from downloading
-    if (currentUser.role === 'viewer') {
-      alert(t("You do not have permission to download files. Please contact your branch admin."));
-      return;
-    }
-
     try {
       // Increment download counter securely in Firestore
       try {
@@ -923,9 +900,8 @@ export default function App() {
 
       const matchesBranch = guestBranch === '' || file.branch === guestBranch;
       const matchesSubject = guestSubject === '' || file.subject === guestSubject;
-      const matchesClass = guestClass === '' || file.classLevel === guestClass;
 
-      return matchesSearch && matchesBranch && matchesSubject && matchesClass;
+      return matchesSearch && matchesBranch && matchesSubject;
     });
 
     // Apply guest sorting selection
@@ -1393,26 +1369,6 @@ export default function App() {
                       </span>
                     </div>
 
-                    {/* Class Filter */}
-                    <div className="relative">
-                      <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
-                        <BookOpen className="w-4 h-4 text-brand-500" />
-                      </span>
-                      <select
-                        value={guestClass}
-                        onChange={(e) => setGuestClass(e.target.value)}
-                        className="w-full pl-10 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-705 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold text-gray-750 dark:text-gray-100 appearance-none cursor-pointer transition-all"
-                      >
-                        <option value="">{t("-- Filter by Class --")}</option>
-                        {CLASS_LEVELS.map((cls, idx) => (
-                          <option key={idx} value={cls}>{t(cls)}</option>
-                        ))}
-                      </select>
-                      <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </span>
-                    </div>
-
                     {/* Sort Selection */}
                     <div className="relative">
                       <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
@@ -1437,14 +1393,13 @@ export default function App() {
                   </div>
 
                   {/* Reset Buttons */}
-                  {(guestSearch || guestBranch || guestSubject || guestClass || guestSortBy !== 'date_desc') && (
+                  {(guestSearch || guestBranch || guestSubject || guestSortBy !== 'date_desc') && (
                     <div className="flex justify-end pt-1">
                       <button
                         onClick={() => {
                           setGuestSearch('');
                           setGuestBranch('');
                           setGuestSubject('');
-                          setGuestClass('');
                           setGuestSortBy('date_desc');
                         }}
                         className="text-[10px] font-bold text-brand-600 hover:text-brand-700 hover:underline cursor-pointer"
@@ -1635,6 +1590,10 @@ export default function App() {
             files={files}
             onDownload={handleDownloadAttempt}
             onPreview={handlePreviewAttempt}
+            onFileDelete={handleDeleteFile}
+            onFileApprove={handleApproveFile}
+            onFileReject={handleRejectFile}
+            viewerRole={currentUser?.role}
           />
         )}
       </AnimatePresence>
