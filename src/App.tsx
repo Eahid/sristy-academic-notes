@@ -668,11 +668,18 @@ export default function App() {
   };
 
   const handleDeleteFile = async (fileId: string, bypassConfirm?: boolean) => {
+    // Find the file to check branch permissions
+    const targetFile = files.find(f => f.id === fileId) || deletedFiles.find(f => f.id === fileId);
+    if (!targetFile) return;
+
+    // Branch admin can only delete files from their own branch
+    if (currentUser?.role === 'admin' && targetFile.branch !== currentUser?.branch) {
+      alert(t("You can only delete files from your own branch."));
+      return;
+    }
+
     if (!bypassConfirm && !window.confirm(t("Are you sure you want to move this file to trash? This can be recovered within 30 days."))) return;
     try {
-      // Find the file to see metadata
-      const targetFile = files.find(f => f.id === fileId);
-      if (!targetFile) return;
 
       await updateDoc(doc(db, 'files', fileId), {
         isDeleted: true,
@@ -1590,10 +1597,6 @@ export default function App() {
             files={files}
             onDownload={handleDownloadAttempt}
             onPreview={handlePreviewAttempt}
-            onFileDelete={handleDeleteFile}
-            onFileApprove={handleApproveFile}
-            onFileReject={handleRejectFile}
-            viewerRole={currentUser?.role}
           />
         )}
       </AnimatePresence>

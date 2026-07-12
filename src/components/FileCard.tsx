@@ -102,6 +102,7 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
   const isFileApprover = user?.role === 'file_approver';
   const isBranchAdminOfFile = user?.role === 'admin' && user?.branch === file.branch;
   const canApproveOrReject = isSuperOrMaster || isFileApprover || isBranchAdminOfFile;
+  const canDelete = isSuperOrMaster || isBranchAdminOfFile; // Master/Super can delete any, branch admin only own branch
 
   return (
     <motion.div 
@@ -348,25 +349,14 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
           </button>
         )}
 
-        {/* Main Download Button — blocked for viewers and guests */}
-        {(!user || user.role === 'viewer') ? (
-          <button
-            onClick={() => alert(!user ? 'Please log in to download study materials.' : 'You do not have permission to download files. Contact your branch admin.')}
-            className="bg-gray-300 dark:bg-slate-700 text-gray-500 dark:text-gray-400 py-2.5 px-3.5 rounded-lg font-semibold flex items-center justify-center gap-1.5 text-xs cursor-not-allowed flex-1 select-none"
-            title={!user ? 'Login required' : 'No download permission'}
-          >
-            <Download className="w-3.5 h-3.5 shrink-0 opacity-50" />
-            <span className="truncate">{!user ? t("Login to Download") : t("No Permission")}</span>
-          </button>
-        ) : (
-          <button
-            onClick={() => onDownload(file)}
-            className="bg-[#15803d] hover:bg-[#166534] text-white py-2.5 px-3.5 rounded-lg font-semibold flex items-center justify-center gap-1.5 text-xs shadow-xs hover:shadow-md transition-all cursor-pointer flex-1"
-          >
-            <Download className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">{t("Download")}</span>
-          </button>
-        )}
+        {/* Main Download Button */}
+        <button
+          onClick={() => onDownload(file)}
+          className="bg-[#15803d] hover:bg-[#166534] text-white py-2.5 px-3.5 rounded-lg font-semibold flex items-center justify-center gap-1.5 text-xs shadow-xs hover:shadow-md transition-all cursor-pointer flex-1"
+        >
+          <Download className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">{t("Download")}</span>
+        </button>
       </div>
 
       {/* High-Fidelity Centered Review & Action Modal (For Admins/Approvers) */}
@@ -537,7 +527,7 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
                   )}
 
                   {/* Trash Bin Delete for Super/Master Admins */}
-                  {isSuperOrMaster && onDelete && (
+                  {canDelete && onDelete && (
                     <button
                       onClick={() => {
                         if (window.confirm(t("Delete this file permanently?"))) {
