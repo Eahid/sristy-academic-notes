@@ -77,7 +77,7 @@ export default function DashboardAdmin({
   const [loadingTeachers, setLoadingTeachers] = useState(false);
 
   // See everyone's file toggle state
-  const [seeEveryoneFiles, setSeeEveryoneFiles] = useState(user.role === 'file_approver');
+  const seeEveryoneFiles = user.role === 'file_approver'; // Only file_approver sees all branches
 
   // Form states to create branch members (teachers/viewers)
   const [newUsername, setNewUsername] = useState('');
@@ -455,6 +455,16 @@ export default function DashboardAdmin({
       alert(t("This topic does not have any files."));
       return;
     }
+
+    // Branch admin can only delete files from their own branch
+    if (user.role === 'admin') {
+      const otherBranch = notes.filter(n => n.branch !== user.branch);
+      if (otherBranch.length > 0) {
+        alert(t("You can only delete files from your own branch."));
+        return;
+      }
+    }
+
     const confirmMsg = t("Are you sure you want to delete the topic '{{topic}}' under '{{chapter}}'? This will move all {{count}} notes/files in this topic to the Recycle Bin.")
       .replace('{{topic}}', topic)
       .replace('{{chapter}}', chapter)
@@ -462,7 +472,6 @@ export default function DashboardAdmin({
     
     if (!window.confirm(confirmMsg)) return;
 
-    // Loop and delete all associated notes without double confirmation
     for (const note of notes) {
       onFileDelete(note.id, true);
     }
@@ -470,7 +479,6 @@ export default function DashboardAdmin({
   };
 
   const handleDeleteChapter = async (subject: string, chapterName: string, chapterData: any) => {
-    // Collect all notes in all topics under this chapter
     const notes: FileArchive[] = [];
     Object.values(chapterData.topics).forEach((top: any) => {
       notes.push(...top.notes);
@@ -480,6 +488,15 @@ export default function DashboardAdmin({
     if (count === 0) {
       alert(t("This chapter does not have any files."));
       return;
+    }
+
+    // Branch admin can only delete files from their own branch
+    if (user.role === 'admin') {
+      const otherBranch = notes.filter((n: any) => n.branch !== user.branch);
+      if (otherBranch.length > 0) {
+        alert(t("You can only delete files from your own branch. This chapter contains files from other branches."));
+        return;
+      }
     }
     
     const confirmMsg = t("CRITICAL ACTION: Are you sure you want to delete the entire chapter '{{chapter}}' in subject '{{subject}}'? This will move all {{count}} notes & lectures inside all its topics to the Recycle Bin.")
@@ -578,26 +595,7 @@ export default function DashboardAdmin({
           </p>
         </div>
 
-        {/* View Selection Toggle */}
-        <div className="bg-white/10 p-4 rounded-xl backdrop-blur-xs border border-white/10 flex items-center gap-4">
-          <div className="text-left">
-            <p className="text-[10px] text-brand-100 uppercase tracking-widest font-bold">{t("Global Archive Visibility")}</p>
-            <p className="text-xs font-medium text-white/90">
-              {seeEveryoneFiles ? t("Currently Browsing: EVERYONE") : t("Currently Browsing: BRANCH ARCHIVE")}
-            </p>
-          </div>
-          <button 
-            onClick={() => setSeeEveryoneFiles(!seeEveryoneFiles)}
-            className="text-white hover:text-brand-100 transition-colors focus:outline-none cursor-pointer"
-            title="Toggle directory files scope"
-          >
-            {seeEveryoneFiles ? (
-              <ToggleRight className="w-10 h-10 text-white animate-pulse" />
-            ) : (
-              <ToggleLeft className="w-10 h-10 text-white/40" />
-            )}
-          </button>
-        </div>
+
       </div>
 
       {pendingFiles.length > 0 && onApproveAll && (
@@ -2216,14 +2214,16 @@ export default function DashboardAdmin({
                                   </div>
                                 </div>
 
-                                {/* Delete Chapter Button */}
-                                <button
-                                  onClick={() => handleDeleteChapter(subName, chNode.name, chNode)}
-                                  className="px-2.5 py-1 text-red-655 hover:text-white hover:bg-red-600 border border-red-200 dark:border-red-900/30 hover:border-red-600 rounded-md text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1 uppercase"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                  <span>{t("Delete Chapter")}</span>
-                                </button>
+                                {/* Delete Chapter Button — only own branch */}
+                                {(user.role !== 'admin' || Object.values(chNode.topics).some((top: any) => top.notes.some((n: any) => n.branch === user.branch))) && (
+                                  <button
+                                    onClick={() => handleDeleteChapter(subName, chNode.name, chNode)}
+                                    className="px-2.5 py-1 text-red-655 hover:text-white hover:bg-red-600 border border-red-200 dark:border-red-900/30 hover:border-red-600 rounded-md text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1 uppercase"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                    <span>{t("Delete Chapter")}</span>
+                                  </button>
+                                )}
                               </div>
 
                               {/* Topics Container */}
@@ -2242,14 +2242,16 @@ export default function DashboardAdmin({
                                             <span className="ml-1.5 text-xxs text-gray-400 font-mono">({topNode.notes.length} {t("files")})</span>
                                           </div>
 
-                                          {/* Delete Topic Button */}
-                                          <button
-                                            onClick={() => handleDeleteTopic(subName, chNode.name, topNode.name, topNode.notes)}
-                                            className="px-2 py-0.5 text-red-500 hover:text-red-750 hover:bg-red-50 dark:hover:bg-red-950/20 rounded text-[10px] font-semibold cursor-pointer transition-all flex items-center gap-1 uppercase"
-                                          >
-                                            <Trash2 className="w-3 h-3" />
-                                            <span>{t("Delete Topic")}</span>
-                                          </button>
+                                          {/* Delete Topic Button — only own branch */}
+                                          {(user.role !== 'admin' || topNode.notes.some((n: any) => n.branch === user.branch)) && (
+                                            <button
+                                              onClick={() => handleDeleteTopic(subName, chNode.name, topNode.name, topNode.notes)}
+                                              className="px-2 py-0.5 text-red-500 hover:text-red-750 hover:bg-red-50 dark:hover:bg-red-950/20 rounded text-[10px] font-semibold cursor-pointer transition-all flex items-center gap-1 uppercase"
+                                            >
+                                              <Trash2 className="w-3 h-3" />
+                                              <span>{t("Delete Topic")}</span>
+                                            </button>
+                                          )}
                                         </div>
 
                                         {/* Notes List under Topic */}
