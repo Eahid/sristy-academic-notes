@@ -77,7 +77,7 @@ export default function DashboardAdmin({
   const [loadingTeachers, setLoadingTeachers] = useState(false);
 
   // See everyone's file toggle state
-  const seeEveryoneFiles = user.role === 'file_approver'; // Only file_approver sees all branches
+  const [seeEveryoneFiles, setSeeEveryoneFiles] = useState(true); // Branch admin can see all branches by default
 
   // Form states to create branch members (teachers/viewers)
   const [newUsername, setNewUsername] = useState('');
@@ -595,6 +595,26 @@ export default function DashboardAdmin({
           </p>
         </div>
 
+        {/* View Toggle — see all branches or own branch only */}
+        <div className="bg-white/10 p-3 rounded-xl backdrop-blur-xs border border-white/10 flex items-center gap-3">
+          <div className="text-left">
+            <p className="text-[10px] text-brand-100 uppercase tracking-widest font-bold">{t("Archive View")}</p>
+            <p className="text-xs font-medium text-white/90">
+              {seeEveryoneFiles ? t("All Branches") : t("My Branch Only")}
+            </p>
+          </div>
+          <button
+            onClick={() => setSeeEveryoneFiles(!seeEveryoneFiles)}
+            className="text-white hover:text-brand-100 transition-colors focus:outline-none cursor-pointer"
+            title="Toggle archive view"
+          >
+            {seeEveryoneFiles ? (
+              <ToggleRight className="w-9 h-9 text-white" />
+            ) : (
+              <ToggleLeft className="w-9 h-9 text-white/40" />
+            )}
+          </button>
+        </div>
 
       </div>
 
