@@ -181,8 +181,14 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
               <Layers className="w-3.5 h-3.5 shrink-0 text-brand-500" />
               <span className="font-semibold text-gray-750 dark:text-gray-300 truncate" title={t(file.subject)}>{t(file.subject)}</span>
             </div>
-            {file.chapter && (
+            {file.classLevel && (
               <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                <span className="font-bold text-[9px] bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded uppercase">{t("Class")}</span>
+                <span className="truncate font-bold text-purple-600 dark:text-purple-405" title={t(file.classLevel)}>{t(file.classLevel)}</span>
+              </div>
+            )}
+            {file.chapter && (
+              <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 col-span-2 mt-0.5">
                 <span className="font-bold text-[9px] bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded uppercase">{t("Ch")}</span>
                 <span className="truncate font-medium text-gray-700 dark:text-gray-300" title={file.chapter}>{file.chapter}</span>
               </div>
@@ -197,12 +203,6 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
               <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 col-span-2 mt-0.5">
                 <span className="font-bold text-[9px] bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-450 px-1.5 py-0.5 rounded uppercase">{t("Type")}</span>
                 <span className="truncate font-bold text-emerald-600 dark:text-emerald-400" title={t(file.itemType)}>{t(file.itemType)}</span>
-              </div>
-            )}
-            {file.classLevel && (
-              <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 col-span-2 mt-0.5">
-                <span className="font-bold text-[9px] bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded uppercase">{t("Class")}</span>
-                <span className="truncate font-bold text-purple-600 dark:text-purple-405" title={t(file.classLevel)}>{t(file.classLevel)}</span>
               </div>
             )}
           </div>

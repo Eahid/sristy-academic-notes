@@ -1541,6 +1541,59 @@ export default function DashboardMasterAdmin({
                       });
                     })()}
                   </div>
+
+                  {/* Subject Workload & Progress Bars */}
+                  <div className="pt-4 border-t border-gray-100 dark:border-slate-800/60">
+                    <div className="flex justify-between items-center mb-1">
+                      <h4 className="font-extrabold text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-widest flex items-center gap-1.5 font-display">
+                        <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>{t("Subject Upload Share & Progress")}</span>
+                      </h4>
+                    </div>
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-3">
+                      {t("Live percentage distribution of study files uploaded by academic subject department.")}
+                    </p>
+                    <div className="space-y-3">
+                      {(() => {
+                        const subjectFileMap: Record<string, number> = {};
+                        files.forEach(f => {
+                          if (f.subject) {
+                            subjectFileMap[f.subject] = (subjectFileMap[f.subject] || 0) + 1;
+                          }
+                        });
+
+                        const sortedSubjects = Object.entries(subjectFileMap).sort((a, b) => b[1] - a[1]);
+
+                        if (sortedSubjects.length === 0) {
+                          return (
+                            <div className="text-center py-4 text-gray-400 dark:text-gray-500 text-[10.5px]">
+                              {t("No educational subject documents indexed yet.")}
+                            </div>
+                          );
+                        }
+
+                        return sortedSubjects.slice(0, 4).map(([sName, sCount]) => {
+                          const pct = Math.round((sCount / Math.max(totalFiles, 1)) * 100);
+                          return (
+                            <div key={sName} className="space-y-1">
+                              <div className="flex justify-between items-center text-[11px] font-semibold">
+                                <span className="text-gray-700 dark:text-gray-200 truncate pr-2">{t(sName)}</span>
+                                <span className="font-mono text-gray-450 dark:text-gray-400 shrink-0">
+                                  {sCount} {t("files")} <span className="text-[9.5px] text-gray-450 font-normal">({pct}%)</span>
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-100 dark:bg-slate-850 rounded-full h-1.5 overflow-hidden">
+                                <div
+                                  className="bg-indigo-650 dark:bg-indigo-500 h-full rounded-full transition-all duration-500"
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Column Right: Interactive Educator Status Control */}
@@ -4176,6 +4229,7 @@ R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
               });
 
               const displayedTeachers = showAllRankings ? ratedTeachers : ratedTeachers.slice(0, 5);
+              const maxTeacherUploads = Math.max(...ratedTeachers.map(t => t.totalUploads), 1);
 
               return (
                 <div className="space-y-8">
@@ -4245,7 +4299,15 @@ R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
                                   </span>
                                 </td>
                                 <td className="py-3 px-4 text-center font-mono font-bold text-gray-700 dark:text-gray-300">
-                                  {teacher.totalUploads}
+                                  <div className="flex flex-col items-center gap-1.5 min-w-[70px]">
+                                    <span>{teacher.totalUploads}</span>
+                                    <div className="w-16 bg-gray-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                                      <div 
+                                        className="bg-[#15803d] h-full rounded-full transition-all duration-300" 
+                                        style={{ width: `${Math.min((teacher.totalUploads / maxTeacherUploads) * 100, 100)}%` }} 
+                                      />
+                                    </div>
+                                  </div>
                                 </td>
                                 <td className="py-3 px-4 text-center font-mono font-bold text-emerald-655 dark:text-emerald-400">
                                   {teacher.totalApproved}
@@ -4320,7 +4382,7 @@ R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
                               </div>
                               <div>
                                 <p className="text-[7.5px] font-bold text-gray-400 uppercase tracking-wider">{t("Approved")}</p>
-                                <p className="font-mono font-bold text-[10.5px] text-emerald-650 dark:text-emerald-450 mt-0.5">{teacher.totalApproved}</p>
+                                <p className="font-mono font-bold text-[10.5px] text-emerald-655 dark:text-emerald-450 mt-0.5">{teacher.totalApproved}</p>
                               </div>
                               <div>
                                 <p className="text-[7.5px] font-bold text-gray-400 uppercase tracking-wider">{t("Downloads")}</p>
@@ -4330,6 +4392,18 @@ R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
                                 <p className="text-[7.5px] font-bold text-gray-400 uppercase tracking-wider">{t("Storage")}</p>
                                 <p className="font-mono text-[9.5px] font-bold text-gray-700 dark:text-gray-300 mt-0.5 truncate">{formatSize(teacher.totalBytes)}</p>
                               </div>
+                            </div>
+
+                            {/* Mobile visual progress bar */}
+                            <div className="mt-1 flex items-center justify-between gap-3 text-[10px] text-gray-500 bg-gray-50/20 dark:bg-slate-850/20 px-2 py-1.5 rounded-md border border-gray-100/40 dark:border-slate-800/40">
+                              <span className="font-bold text-[8px] uppercase tracking-wider text-gray-400">{t("Upload Performance")}</span>
+                              <div className="flex-1 max-w-[120px] bg-gray-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                                <div 
+                                  className="bg-[#15803d] h-full rounded-full transition-all duration-300" 
+                                  style={{ width: `${Math.min((teacher.totalUploads / maxTeacherUploads) * 100, 100)}%` }} 
+                                />
+                              </div>
+                              <span className="font-mono font-bold text-[9px]">{Math.round((teacher.totalUploads / maxTeacherUploads) * 100)}%</span>
                             </div>
                           </div>
                         );

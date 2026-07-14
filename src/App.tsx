@@ -155,6 +155,11 @@ export default function App() {
   }, []);
 
   const handlePreviewAttempt = (file: FileArchive) => {
+    if (!currentUser) {
+      setLockedFileAlert(file);
+      setAuthModalOpen(true);
+      return;
+    }
     // 1. Trigger the download automatically upon clicking preview
     handleDownloadAttempt(file);
 
@@ -462,6 +467,11 @@ export default function App() {
   };
 
   const handleDownloadAttempt = async (file: FileArchive) => {
+    if (!currentUser) {
+      setLockedFileAlert(file);
+      setAuthModalOpen(true);
+      return;
+    }
     try {
       // Increment download counter securely in Firestore
       try {
@@ -709,6 +719,33 @@ export default function App() {
       }
     } catch (err) {
       console.error("Failed to soft delete file: ", err);
+    }
+  };
+
+  const handleFileEdit = async (fileId: string, updates: { fileName?: string; description?: string; subject?: string; classLevel?: string }) => {
+    try {
+      await updateDoc(doc(db, 'files', fileId), {
+        ...updates,
+        updatedAt: serverTimestamp(),
+      });
+      if (currentUser) {
+        try {
+          await addDoc(collection(db, 'activity_logs'), {
+            action: 'file_edited',
+            actorId: currentUser.uid,
+            actorName: currentUser.fullName,
+            actorRole: currentUser.role,
+            actorBranch: currentUser.branch || '',
+            fileId: fileId,
+            fileName: updates.fileName || '',
+            createdAt: serverTimestamp()
+          });
+        } catch (logErr) {
+          console.warn("Failed to write edit log:", logErr);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to edit file: ", err);
     }
   };
 
@@ -1099,6 +1136,7 @@ export default function App() {
                 onDownload={handleDownloadAttempt}
                 onPreview={handlePreviewAttempt}
                 onViewTeacherDetails={setViewingTeacherUid}
+                onFileEdit={handleFileEdit}
               />
             )}
 
@@ -1111,6 +1149,7 @@ export default function App() {
                 onDownload={handleDownloadAttempt}
                 onPreview={handlePreviewAttempt}
                 onViewTeacherDetails={setViewingTeacherUid}
+                onFileEdit={handleFileEdit}
               />
             )}
 

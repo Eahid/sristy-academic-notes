@@ -22,7 +22,7 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
   const [selectedBranch, setSelectedBranch] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedClassLevel, setSelectedClassLevel] = useState('');
-  const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc'>('date_desc');
+  const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc' | 'class_asc' | 'class_desc'>('date_desc');
   const { t } = useThemeLanguage();
   const { branches, subjects } = useBranchSubject();
 
@@ -58,6 +58,14 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
       return b.fileSize - a.fileSize;
     } else if (sortBy === 'size_asc') {
       return a.fileSize - b.fileSize;
+    } else if (sortBy === 'class_asc') {
+      const idxA = a.classLevel ? CLASS_LEVELS.indexOf(a.classLevel) : -1;
+      const idxB = b.classLevel ? CLASS_LEVELS.indexOf(b.classLevel) : -1;
+      return idxA - idxB;
+    } else if (sortBy === 'class_desc') {
+      const idxA = a.classLevel ? CLASS_LEVELS.indexOf(a.classLevel) : -1;
+      const idxB = b.classLevel ? CLASS_LEVELS.indexOf(b.classLevel) : -1;
+      return idxB - idxA;
     }
     return 0;
   });
@@ -162,6 +170,8 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
               <option value="name_desc">{t("Sort: Name Z to A")}</option>
               <option value="size_desc">{t("Sort: Largest First")}</option>
               <option value="size_asc">{t("Sort: Smallest First")}</option>
+              <option value="class_asc">{t("Sort: Class (Lowest First)")}</option>
+              <option value="class_desc">{t("Sort: Class (Highest First)")}</option>
             </select>
             <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#15803d] pointer-events-none">
               <ChevronDown className="w-3.5 h-3.5" />

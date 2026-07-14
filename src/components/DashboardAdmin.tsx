@@ -205,7 +205,7 @@ export default function DashboardAdmin({
       if (memberRole === 'teacher') {
         payload.classAssignments = assignments;
         payload.subjects = Array.from(new Set(assignments.map(a => a.subject)));
-        payload.classes = Array.from(new Set(assignments.map(a => a.classLevel)));
+        payload.classes = Array.from(new Set(assignments.map(a => a.classLevel))).sort((a, b) => CLASS_LEVELS.indexOf(a as string) - CLASS_LEVELS.indexOf(b as string));
         payload.subject = assignments[0]?.subject || '';
       }
 
@@ -269,7 +269,7 @@ export default function DashboardAdmin({
     try {
       const updatedClassAssignments = editAssignments;
       const updatedSubjects = Array.from(new Set(editAssignments.map(a => a.subject)));
-      const updatedClasses = Array.from(new Set(editAssignments.map(a => a.classLevel)));
+      const updatedClasses = Array.from(new Set(editAssignments.map(a => a.classLevel))).sort((a, b) => CLASS_LEVELS.indexOf(a as string) - CLASS_LEVELS.indexOf(b as string));
       const updatedSubject = editAssignments[0]?.subject || '';
 
       await updateDoc(doc(db, 'users', editingTeacher.uid), {
@@ -1228,7 +1228,7 @@ export default function DashboardAdmin({
                                           ))}
                                           {tea.classes && tea.classes.length > 0 && (
                                             <div className="flex flex-wrap gap-1 mt-0.5">
-                                              {tea.classes.map((c, cIdx) => (
+                                              {[...tea.classes].sort((a, b) => CLASS_LEVELS.indexOf(a) - CLASS_LEVELS.indexOf(b)).map((c, cIdx) => (
                                                 <span key={cIdx} className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-[9px] px-1.5 py-0.5 rounded font-bold border border-emerald-100 dark:border-emerald-900/30">
                                                   {t(c)}
                                                 </span>
@@ -1525,7 +1525,7 @@ export default function DashboardAdmin({
                                     ))}
                                     {tea.classes && tea.classes.length > 0 && (
                                       <div className="flex flex-wrap gap-1 mt-0.5">
-                                        {tea.classes.map((c, cIdx) => (
+                                        {[...tea.classes].sort((a, b) => CLASS_LEVELS.indexOf(a) - CLASS_LEVELS.indexOf(b)).map((c, cIdx) => (
                                           <span key={cIdx} className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-[9px] px-1.5 py-0.5 rounded font-bold border border-emerald-100 dark:border-emerald-900/30">
                                             {t(c)}
                                           </span>
@@ -1995,7 +1995,6 @@ export default function DashboardAdmin({
                       onApprove={onFileApprove}
                       onReject={onFileReject}
                       onDelete={onFileDelete}
-                      onFileEdit={onFileEdit}
                       isSelected={selectedFileIds.includes(file.id)}
                       onSelectToggle={(id) => {
                         setSelectedFileIds(prev =>
@@ -2301,18 +2300,21 @@ export default function DashboardAdmin({
                                                   {t("Preview")}
                                                 </button>
       )}
-                                                <button
-                                                  onClick={() => {
-                                                    const confirmNote = t("Are you sure you want to move the note '{{name}}' to the Recycle Bin?").replace('{{name}}', note.fileName);
-                                                    if (window.confirm(confirmNote)) {
-                                                      onFileDelete(note.id);
-                                                    }
-                                                  }}
-                                                  className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/25 rounded cursor-pointer transition-all"
-                                                  title={t("Delete Note")}
-                                                >
-                                                  <Trash2 className="w-3 h-3" />
-                                                </button>
+                                                {/* Delete — only own branch for admin role */}
+                                                {(user.role !== 'admin' || note.branch === user.branch) && (
+                                                  <button
+                                                    onClick={() => {
+                                                      const confirmNote = t("Are you sure you want to move the note '{{name}}' to the Recycle Bin?").replace('{{name}}', note.fileName);
+                                                      if (window.confirm(confirmNote)) {
+                                                        onFileDelete(note.id);
+                                                      }
+                                                    }}
+                                                    className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/25 rounded cursor-pointer transition-all"
+                                                    title={t("Delete Note")}
+                                                  >
+                                                    <Trash2 className="w-3 h-3" />
+                                                  </button>
+                                                )}
                                               </div>
                                             </div>
                                           ))}
