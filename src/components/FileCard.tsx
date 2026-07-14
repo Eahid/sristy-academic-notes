@@ -177,12 +177,12 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
             <span className="truncate" title={t(file.branch)}>{t(file.branch)}</span>
           </div>
           <div className="grid grid-cols-2 gap-x-2 gap-y-1 pt-1.5 border-t border-gray-50 dark:border-slate-800">
-            <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+            <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 col-span-2">
               <Layers className="w-3.5 h-3.5 shrink-0 text-brand-500" />
               <span className="font-semibold text-gray-750 dark:text-gray-300 truncate" title={t(file.subject)}>{t(file.subject)}</span>
             </div>
             {file.classLevel && (
-              <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+              <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 col-span-2 mt-0.5">
                 <span className="font-bold text-[9px] bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded uppercase">{t("Class")}</span>
                 <span className="truncate font-bold text-purple-600 dark:text-purple-405" title={t(file.classLevel)}>{t(file.classLevel)}</span>
               </div>
