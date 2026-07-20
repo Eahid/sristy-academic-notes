@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { collection, getDocs, doc, setDoc, query, where, updateDoc, serverTimestamp, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, query, where, updateDoc, serverTimestamp, onSnapshot, orderBy, addDoc } from 'firebase/firestore';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { motion, AnimatePresence } from 'motion/react';
-import { db, createSecondaryUser } from '../firebase';
+import { db, createSecondaryUser, storage } from '../firebase';
 import { UserProfile, FileArchive } from '../types';
 import { useBranchSubject } from './BranchSubjectContext';
 import { 
@@ -27,7 +28,12 @@ import {
   Clock,
   X,
   Calendar,
-  ArrowUpDown
+  ArrowUpDown,
+  Upload,
+  Sparkles,
+  Layers,
+  Loader2,
+  FileImage
 } from 'lucide-react';
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
@@ -117,7 +123,402 @@ export default function DashboardAdmin({
     user.role === 'file_approver' ? 'files' : 'teachers'
   );
   const { t } = useThemeLanguage();
-  const { subjects } = useBranchSubject();
+  const { subjects, addSubject } = useBranchSubject();
+
+  // File upload states for Admin
+  const [showUploadPanel, setShowUploadPanel] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [fileValidationErrors, setFileValidationErrors] = useState<{ [fileName: string]: string }>({});
+  const [fileProgresses, setFileProgresses] = useState<{ [fileName: string]: number }>({});
+  const [fileStatuses, setFileStatuses] = useState<{ [fileName: string]: 'pending' | 'uploading' | 'success' | 'error' }>({});
+  const [description, setDescription] = useState('');
+  const [isDragActive, setIsDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [selectedSubject, setSelectedSubject] = useState('');
+  const [isNewSubjectForm, setIsNewSubjectForm] = useState(false);
+  const [newSubjectText, setNewSubjectText] = useState('');
+
+  const [chapter, setChapter] = useState('');
+  const [isNewChapterForm, setIsNewChapterForm] = useState(false);
+  const [newChapterText, setNewChapterText] = useState('');
+
+  const [topic, setTopic] = useState('');
+  const [isNewTopicForm, setIsNewTopicForm] = useState(false);
+  const [newTopicText, setNewTopicText] = useState('');
+
+  const [itemType, setItemType] = useState('');
+  const [isNewItemTypeForm, setIsNewItemTypeForm] = useState(false);
+  const [newItemTypeText, setNewItemTypeText] = useState('');
+
+  const [uploadClassLevel, setUploadClassLevel] = useState('');
+  const [uploadError, setUploadError] = useState('');
+  const [uploadSuccess, setUploadSuccess] = useState('');
+  const [uploadLoading, setUploadLoading] = useState(false);
+
+  const ALLOWED_EXTENSIONS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'png', 'jpg', 'jpeg'];
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB limit
+
+  const PRESET_ITEM_TYPES = [
+    "Word Meaning",
+    "Short Question",
+    "Long Question",
+    "Creative Question",
+    "Lecture Note",
+    "Practice Sheet",
+    "Syllabus & Suggestion"
+  ];
+
+  const finalSubject = isNewSubjectForm ? newSubjectText.trim() : selectedSubject;
+  const finalChapter = isNewChapterForm ? newChapterText.trim() : chapter;
+
+  const existingChapters = Array.from(new Set(
+    files
+      .filter(f => f.subject && finalSubject && f.subject.toLowerCase() === finalSubject.toLowerCase() && f.chapter)
+      .map(f => f.chapter as string)
+  ));
+
+  const existingTopics = Array.from(new Set(
+    files
+      .filter(f => f.subject && finalSubject && f.subject.toLowerCase() === finalSubject.toLowerCase() &&
+                   f.chapter && finalChapter && f.chapter.toLowerCase() === finalChapter.toLowerCase() && f.topic)
+      .map(f => f.topic as string)
+  ));
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragActive(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragActive(false);
+    if (uploadLoading) return;
+    const filesList = e.dataTransfer.files;
+    if (filesList && filesList.length > 0) {
+      validateAndAddFiles(Array.from(filesList));
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (uploadLoading) return;
+    const filesList = e.target.files;
+    if (filesList && filesList.length > 0) {
+      validateAndAddFiles(Array.from(filesList));
+    }
+  };
+
+  const validateAndAddFiles = (filesList: File[]) => {
+    setUploadError('');
+    setUploadSuccess('');
+    
+    const newValidFiles: File[] = [];
+    const newErrors = { ...fileValidationErrors };
+
+    filesList.forEach(file => {
+      const parts = file.name.split('.');
+      const ext = parts[parts.length - 1].toLowerCase();
+      
+      if (!ALLOWED_EXTENSIONS.includes(ext)) {
+        newErrors[file.name] = t("Invalid file extension. Only PDF, DOC/DOCX, PPT/PPTX and images are allowed.");
+        return;
+      }
+
+      if (file.size > MAX_FILE_SIZE) {
+        newErrors[file.name] = t("File exceeds SLA limit of 10MB (Contract Clause 11.2). Please compress your resource file.");
+        return;
+      }
+
+      // Check for duplicates in current selection
+      if (selectedFiles.some(f => f.name === file.name && f.size === file.size)) {
+        return; // Skip duplicate
+      }
+
+      newValidFiles.push(file);
+      // Clean up previous error if any
+      delete newErrors[file.name];
+    });
+
+    if (newValidFiles.length > 0) {
+      setSelectedFiles(prev => [...prev, ...newValidFiles]);
+      setFileStatuses(prev => {
+        const next = { ...prev };
+        newValidFiles.forEach(f => {
+          next[f.name] = 'pending';
+        });
+        return next;
+      });
+    }
+    setFileValidationErrors(newErrors);
+  };
+
+  const handleRemoveFile = (index: number) => {
+    if (uploadLoading) return;
+    const fileToRemove = selectedFiles[index];
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+    if (fileToRemove) {
+      setFileProgresses(prev => {
+        const next = { ...prev };
+        delete next[fileToRemove.name];
+        return next;
+      });
+      setFileStatuses(prev => {
+        const next = { ...prev };
+        delete next[fileToRemove.name];
+        return next;
+      });
+      setFileValidationErrors(prev => {
+        const next = { ...prev };
+        delete next[fileToRemove.name];
+        return next;
+      });
+    }
+  };
+
+  const handleUploadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedFiles.length === 0) {
+      setUploadError(t("Please choose or drag-and-drop educational files first."));
+      return;
+    }
+
+    setUploadLoading(true);
+    setUploadError('');
+    setUploadSuccess('');
+
+    let finalSub = selectedSubject;
+    if (isNewSubjectForm) {
+      finalSub = newSubjectText.trim();
+      if (!finalSub) {
+        setUploadError(t("Custom subject name cannot be empty."));
+        setUploadLoading(false);
+        return;
+      }
+      try {
+        await addSubject(finalSub);
+      } catch (addErr: any) {
+        console.warn("Subject already exists or failed to save to metadata:", addErr);
+      }
+    }
+
+    let finalCh = isNewChapterForm ? newChapterText.trim() : chapter;
+    let finalTopic = isNewTopicForm ? newTopicText.trim() : topic;
+    let finalItemType = isNewItemTypeForm ? newItemTypeText.trim() : itemType;
+
+    if (!finalSub) {
+      setUploadError(t("Subject is required. Select or type a custom subject."));
+      setUploadLoading(false);
+      return;
+    }
+    if (!uploadClassLevel) {
+      setUploadError(t("Class level is required. Select a target class."));
+      setUploadLoading(false);
+      return;
+    }
+    if (!finalCh) {
+      setUploadError(t("Chapter is required. Select or type a custom chapter."));
+      setUploadLoading(false);
+      return;
+    }
+    if (!finalTopic) {
+      setUploadError(t("Topic is required. Select or type a custom topic."));
+      setUploadLoading(false);
+      return;
+    }
+    if (!finalItemType) {
+      setUploadError(t("Item type is required. Choose preset or create custom."));
+      setUploadLoading(false);
+      return;
+    }
+
+    let successCount = 0;
+    const failedFiles: File[] = [];
+    const newErrors = { ...fileValidationErrors };
+
+    for (const file of selectedFiles) {
+      setFileStatuses(prev => ({ ...prev, [file.name]: 'uploading' }));
+      setFileProgresses(prev => ({ ...prev, [file.name]: 0 }));
+
+      try {
+        const parts = file.name.split('.');
+        const fileType = parts[parts.length - 1].toLowerCase();
+
+        let downloadUrl = '';
+        let fileRefPath = '';
+
+        try {
+          const r2Response = await fetch('/api/r2/presigned-upload-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileName: file.name, fileType: file.type }),
+          });
+
+          if (r2Response.ok) {
+            const r2Data = await r2Response.json();
+            await new Promise<void>((resolve, reject) => {
+              const xhr = new XMLHttpRequest();
+              xhr.open('PUT', r2Data.uploadUrl);
+              xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+
+              xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable) {
+                  const percentComplete = Math.round((event.loaded / event.total) * 100);
+                  setFileProgresses(prev => ({ ...prev, [file.name]: percentComplete }));
+                }
+              };
+
+              xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                  resolve();
+                } else {
+                  reject(new Error(`R2 direct PUT upload raw fetch failed: ${xhr.status}`));
+                }
+              };
+
+              xhr.onerror = () => {
+                reject(new Error('R2 direct PUT upload network error'));
+              };
+
+              xhr.send(file);
+            });
+
+            downloadUrl = r2Data.fileUrl;
+            fileRefPath = r2Data.storagePath;
+            console.log('Secure Direct R2 upload pipeline complete:', fileRefPath);
+          } else {
+            console.warn('S3 R2 Storage is unconfigured. Defaulting back to client-driven Firebase Storage routing.');
+            const fileRefPathFallback = `files/${user.uid}_${Date.now()}_${file.name}`;
+            const storageRef = ref(storage, fileRefPathFallback);
+            const uploadTask = uploadBytesResumable(storageRef, file);
+            await new Promise<void>((resolve, reject) => {
+              uploadTask.on('state_changed',
+                (snapshot) => {
+                  const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+                  setFileProgresses(prev => ({ ...prev, [file.name]: progress }));
+                },
+                (error) => {
+                  reject(error);
+                },
+                () => {
+                  resolve();
+                }
+              );
+            });
+            downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+            fileRefPath = fileRefPathFallback;
+          }
+        } catch (r2Err: any) {
+          console.warn('Cloudflare R2 Direct Upload bypassed because of network/setup error, triggering Firebase Storage fallback: ', r2Err);
+          const fileRefPathFallback = `files/${user.uid}_${Date.now()}_${file.name}`;
+          const storageRef = ref(storage, fileRefPathFallback);
+          const uploadTask = uploadBytesResumable(storageRef, file);
+          await new Promise<void>((resolve, reject) => {
+            uploadTask.on('state_changed',
+              (snapshot) => {
+                const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+                setFileProgresses(prev => ({ ...prev, [file.name]: progress }));
+              },
+              (error) => {
+                reject(error);
+              },
+              () => {
+                resolve();
+              }
+            );
+          });
+          downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+          fileRefPath = fileRefPathFallback;
+        }
+
+        const payload: any = {
+          fileName: file.name,
+          fileType,
+          fileSize: file.size,
+          fileUrl: downloadUrl,
+          storagePath: fileRefPath,
+          description: description.trim(),
+          uploadedBy: user.uid,
+          uploaderName: user.fullName,
+          uploaderRole: user.role,
+          branch: user.branch || 'Sristy Academic School, Tangail',
+          subject: finalSub,
+          classLevel: uploadClassLevel,
+          chapter: finalCh,
+          topic: finalTopic,
+          itemType: finalItemType,
+          isApproved: true, // Auto-approved for Admin!
+          approvedBy: user.fullName,
+          downloadCount: 0,
+          createdAt: serverTimestamp(),
+        };
+
+        const docRef = await addDoc(collection(db, 'files'), payload);
+
+        try {
+          await addDoc(collection(db, 'activity_logs'), {
+            action: 'file_uploaded',
+            actorId: user.uid,
+            actorName: user.fullName,
+            actorRole: user.role,
+            actorBranch: user.branch || '',
+            fileId: docRef.id,
+            fileName: payload.fileName,
+            fileSubject: payload.subject,
+            fileBranch: payload.branch,
+            createdAt: serverTimestamp()
+          });
+        } catch (logErr) {
+          console.warn("Could not write upload log:", logErr);
+        }
+
+        setFileStatuses(prev => ({ ...prev, [file.name]: 'success' }));
+        successCount++;
+      } catch (err: any) {
+        console.error(`Firebase Storage Upload Error for ${file.name}:`, err);
+        setFileStatuses(prev => ({ ...prev, [file.name]: 'error' }));
+        newErrors[file.name] = err.message || String(err);
+        failedFiles.push(file);
+      }
+    }
+
+    setFileValidationErrors(newErrors);
+    setUploadLoading(false);
+
+    if (successCount > 0) {
+      setUploadSuccess(
+        t("Upload successful! {count} file(s) are uploaded and auto-approved.")
+          .replace('{count}', String(successCount))
+      );
+      // Clear fields
+      setSelectedFiles([]);
+      setFileProgresses({});
+      setDescription('');
+      setSelectedSubject('');
+      setIsNewSubjectForm(false);
+      setNewSubjectText('');
+      setChapter('');
+      setIsNewChapterForm(false);
+      setNewChapterText('');
+      setTopic('');
+      setIsNewTopicForm(false);
+      setNewTopicText('');
+      setItemType('');
+      setIsNewItemTypeForm(false);
+      setNewItemTypeText('');
+      setUploadClassLevel('');
+      
+      if (onUploadSuccess) {
+        onUploadSuccess();
+      }
+    } else {
+      setUploadError(t("All file uploads in the batch failed. Please inspect the errors below."));
+    }
+  };
 
   // Load teachers of this branch
   const fetchBranchTeachers = async () => {
@@ -1725,11 +2126,21 @@ export default function DashboardAdmin({
         /* File oversight display */
         <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border border-gray-100 dark:border-slate-800 shadow-xs transition-colors">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-            <div>
-              <h3 className="font-bold text-base text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase">{t("Oversight Admin Terminal")}</h3>
-              <p className="text-xs text-gray-400 dark:text-gray-505 mt-1">
-                {t("Currently compiling note's of")}: <span className="underline decoration-brand-500 decoration-2 font-semibold text-gray-700 dark:text-gray-300">{seeEveryoneFiles ? t("Currently Browsing: EVERYONE") : t(user.branch)}</span>.
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              <div>
+                <h3 className="font-bold text-base text-gray-800 dark:text-gray-100 tracking-tight font-display uppercase">{t("Oversight Admin Terminal")}</h3>
+                <p className="text-xs text-gray-400 dark:text-gray-550 mt-1">
+                  {t("Currently compiling note's of")}: <span className="underline decoration-brand-500 decoration-2 font-semibold text-gray-700 dark:text-gray-300">{seeEveryoneFiles ? t("Currently Browsing: EVERYONE") : t(user.branch)}</span>.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowUploadPanel(!showUploadPanel)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold bg-[#15803d] hover:bg-[#15803d]/90 text-white rounded-lg shadow-sm transition-all cursor-pointer select-none uppercase tracking-wider mt-2 sm:mt-0"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                {showUploadPanel ? t("Close Upload Panel") : t("Upload Study Material")}
+              </button>
             </div>
 
             {/* Verification Filters */}
@@ -1766,6 +2177,482 @@ export default function DashboardAdmin({
               </button>
             </div>
           </div>
+
+          {/* Admin Upload Panel */}
+          <AnimatePresence>
+            {showUploadPanel && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden mb-6"
+              >
+                <div className="bg-gray-50 dark:bg-slate-950/40 border border-gray-150 dark:border-slate-800/85 rounded-xl p-5 space-y-4 shadow-xxs">
+                  <div className="flex justify-between items-center pb-2 border-b border-gray-200/50 dark:border-slate-800/50">
+                    <h4 className="font-bold text-xs text-[#15803d] uppercase tracking-wider flex items-center gap-1.5">
+                      <Upload className="w-4 h-4" />
+                      {t("Upload & Auto-Approve New Material")}
+                    </h4>
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-md uppercase">
+                      {t("Branch Admin Direct Pipeline")}
+                    </span>
+                  </div>
+
+                  {uploadError && (
+                    <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/30 rounded-lg flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                      <p className="text-xs text-red-600 dark:text-red-400 font-semibold">{uploadError}</p>
+                    </div>
+                  )}
+
+                  {uploadSuccess && (
+                    <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 rounded-lg flex items-start gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                      <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">{uploadSuccess}</p>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleUploadSubmit} className="space-y-4">
+                    {/* Drag & Drop Visual Zone */}
+                    <div
+                      onDragOver={uploadLoading ? undefined : handleDragOver}
+                      onDragLeave={uploadLoading ? undefined : handleDragLeave}
+                      onDrop={uploadLoading ? undefined : handleDrop}
+                      onClick={uploadLoading ? undefined : () => fileInputRef.current?.click()}
+                      className={`border-2 border-dashed rounded-xl p-6 text-center transition-all duration-300 ${
+                        uploadLoading
+                          ? 'border-gray-200 dark:border-slate-800 bg-gray-50/20 dark:bg-slate-900/20 cursor-not-allowed opacity-60'
+                          : isDragActive 
+                            ? 'border-brand-500 bg-[#15803d]/5 dark:bg-[#15803d]/10 cursor-pointer' 
+                            : selectedFiles.length > 0 
+                              ? 'border-emerald-400 bg-emerald-50/25 dark:bg-emerald-955/10 cursor-pointer' 
+                              : 'border-gray-200 dark:border-slate-700 hover:border-[#15803d]/50 dark:hover:border-[#15803d]/50 bg-white dark:bg-slate-900 cursor-pointer'
+                      }`}
+                    >
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileChange}
+                        className="hidden"
+                        accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg"
+                        disabled={uploadLoading}
+                        multiple
+                      />
+
+                      <div className="flex flex-col items-center justify-center space-y-2">
+                        <div className={`p-3 rounded-full ${selectedFiles.length > 0 ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600' : 'bg-[#15803d]/10 text-[#15803d]'}`}>
+                          <Upload className="w-6 h-6" />
+                        </div>
+                        {selectedFiles.length > 0 ? (
+                          <div>
+                            <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                              {selectedFiles.length} {selectedFiles.length === 1 ? t("file selected") : t("files selected")}
+                            </p>
+                            <p className="text-[10px] text-emerald-605 dark:text-emerald-400 font-medium tracking-wide mt-1">
+                              {t("Total Size")}: {(selectedFiles.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024)).toFixed(2)} MB
+                            </p>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">{t("Drag & Drop educational file")}</p>
+                            <p className="text-[10px] text-gray-400 dark:text-gray-505 mt-1">{t("or click to browse local files")}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-[9px] text-gray-400 dark:text-gray-550 leading-normal">
+                      {t("Supported file types: PDF, Word, PPT or Image (Max 10MB due to SLA limit)")}
+                    </p>
+
+                    {/* Interactive File Queue List */}
+                    {selectedFiles.length > 0 && (
+                      <div className="space-y-2 mt-4 max-h-[250px] overflow-y-auto pr-1 border border-gray-150 dark:border-slate-800 rounded-xl p-3 bg-white dark:bg-slate-900">
+                        <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-slate-800">
+                          <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            {t("Upload Queue")} ({selectedFiles.length})
+                          </span>
+                          {!uploadLoading && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedFiles([]);
+                                setFileValidationErrors({});
+                                setFileProgresses({});
+                                setFileStatuses({});
+                              }}
+                              className="text-[10px] font-bold text-red-500 hover:underline cursor-pointer"
+                            >
+                              {t("Clear All")}
+                            </button>
+                          )}
+                        </div>
+                        {selectedFiles.map((file, idx) => {
+                          const parts = file.name.split('.');
+                          const ext = parts[parts.length - 1].toLowerCase();
+                          const isImg = ['png', 'jpg', 'jpeg'].includes(ext);
+                          const isPdf = ext === 'pdf';
+                          const isWord = ['doc', 'docx'].includes(ext);
+                          const isPpt = ['ppt', 'pptx'].includes(ext);
+
+                          let themeClass = "text-gray-500 bg-gray-50 dark:bg-slate-800";
+                          if (isPdf) themeClass = "text-red-600 bg-red-50 dark:bg-red-950/30";
+                          else if (isWord) themeClass = "text-blue-600 bg-blue-50 dark:bg-blue-950/30";
+                          else if (isPpt) themeClass = "text-amber-600 bg-amber-50 dark:bg-amber-950/30";
+                          else if (isImg) themeClass = "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30";
+
+                          const progress = fileProgresses[file.name] || 0;
+                          const status = fileStatuses[file.name] || 'pending';
+                          const fileErr = fileValidationErrors[file.name];
+
+                          return (
+                            <div key={idx} className="flex flex-col p-2.5 bg-gray-50 dark:bg-slate-950 border border-gray-100 dark:border-slate-900 rounded-lg shadow-xxs">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className={`p-2 rounded-lg shrink-0 ${themeClass}`}>
+                                    {isImg ? <FileImage className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-xxs font-bold text-gray-700 dark:text-gray-200 truncate max-w-[150px] sm:max-w-[200px]" title={file.name}>
+                                      {file.name}
+                                    </p>
+                                    <p className="text-[9px] text-gray-400 dark:text-gray-500 font-medium">
+                                      {(file.size / (1024 * 1024)).toFixed(2)} MB
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {status === 'uploading' && (
+                                    <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1">
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                      {progress}%
+                                    </span>
+                                  )}
+                                  {status === 'success' && (
+                                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 bg-emerald-50 dark:bg-emerald-955/30 px-2 py-0.5 rounded-md">
+                                      <CheckCircle2 className="w-3 h-3" />
+                                      {t("Success")}
+                                    </span>
+                                  )}
+                                  {status === 'error' && (
+                                    <span className="text-[10px] text-red-600 dark:text-red-400 font-bold flex items-center gap-1 bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded-md">
+                                      <AlertCircle className="w-3 h-3" />
+                                      {t("Failed")}
+                                    </span>
+                                  )}
+                                  {status === 'pending' && !uploadLoading && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveFile(idx)}
+                                      className="p-1 text-gray-400 hover:text-red-500 dark:hover:text-red-400 cursor-pointer"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Progress bar for active upload */}
+                              {status === 'uploading' && (
+                                <div className="w-full bg-gray-100 dark:bg-slate-800 h-1 rounded-full overflow-hidden mt-2">
+                                  <div 
+                                    className="bg-brand-500 h-full transition-all duration-300" 
+                                    style={{ width: `${progress}%` }}
+                                  />
+                                </div>
+                              )}
+
+                              {/* Validation or upload error messages */}
+                              {fileErr && (
+                                <p className="text-[9px] text-red-600 dark:text-red-400 mt-1.5 font-medium leading-relaxed">
+                                  ⚠️ {fileErr}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Hierarchical metadata steps */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 border-t border-b border-gray-200/50 dark:border-slate-800/50 py-4">
+                      {/* 1. Subject */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1.5">
+                          <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                            <BookOpen className="w-3.5 h-3.5 text-brand-500" />
+                            {t("Subject")}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={uploadLoading}
+                            onClick={() => {
+                              setIsNewSubjectForm(!isNewSubjectForm);
+                              setSelectedSubject('');
+                              setNewSubjectText('');
+                            }}
+                            className={`text-[10px] font-bold text-[#15803d] hover:underline cursor-pointer ${uploadLoading ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          >
+                            {isNewSubjectForm ? t("Choose Existing") : t("+ Create Custom")}
+                          </button>
+                        </div>
+                        {isNewSubjectForm ? (
+                          <input
+                            type="text"
+                            value={newSubjectText}
+                            onChange={(e) => setNewSubjectText(e.target.value)}
+                            placeholder={t("e.g. Physics, Chemistry...")}
+                            className="w-full px-4 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
+                            required
+                            disabled={uploadLoading}
+                          />
+                        ) : (
+                          <div className="relative">
+                            <select
+                              value={selectedSubject}
+                              onChange={(e) => setSelectedSubject(e.target.value)}
+                              className="w-full pl-3 pr-10 py-2.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-[#15803d] text-xs font-bold appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                              required
+                              disabled={uploadLoading}
+                            >
+                              <option value="">{t("-- Select Subject --")}</option>
+                              {subjects.map((sub, idx) => (
+                                <option key={idx} value={sub}>{t(sub)}</option>
+                              ))}
+                            </select>
+                            <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Class Level */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1.5">
+                          <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                            <Layers className="w-3.5 h-3.5 text-brand-500" />
+                            {t("Class")}
+                          </span>
+                        </div>
+                        <div className="relative">
+                          <select
+                            value={uploadClassLevel}
+                            onChange={(e) => setUploadClassLevel(e.target.value)}
+                            className="w-full pl-3 pr-10 py-2.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-[#15803d] text-xs font-bold appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                            required
+                            disabled={uploadLoading}
+                          >
+                            <option value="">{t("-- Select Class --")}</option>
+                            {CLASS_LEVELS.map((cls, idx) => (
+                              <option key={idx} value={cls}>{t(cls)}</option>
+                            ))}
+                          </select>
+                          <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 2. Chapter */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1.5">
+                          <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                            <Layers className="w-3.5 h-3.5 text-brand-500" />
+                            {t("Chapter")}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={uploadLoading}
+                            onClick={() => {
+                              setIsNewChapterForm(!isNewChapterForm);
+                              setChapter('');
+                              setNewChapterText('');
+                            }}
+                            className={`text-[10px] font-bold text-[#15803d] hover:underline cursor-pointer ${uploadLoading ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          >
+                            {isNewChapterForm ? t("Choose Existing") : t("+ Create New")}
+                          </button>
+                        </div>
+                        {isNewChapterForm ? (
+                          <input
+                            type="text"
+                            value={newChapterText}
+                            onChange={(e) => setNewChapterText(e.target.value)}
+                            placeholder={t("e.g. Chapter 1: Introduction")}
+                            className="w-full px-4 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
+                            required
+                            disabled={uploadLoading}
+                          />
+                        ) : (
+                          <div className="relative">
+                            <select
+                              value={chapter}
+                              onChange={(e) => setChapter(e.target.value)}
+                              className="w-full pl-3 pr-10 py-2.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-[#15803d] text-xs font-bold appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                              required
+                              disabled={uploadLoading}
+                            >
+                              <option value="">{t("-- Select Chapter --")}</option>
+                              {existingChapters.map((ch, idx) => (
+                                <option key={idx} value={ch}>{ch}</option>
+                              ))}
+                              {existingChapters.length === 0 && (
+                                <option disabled value="">{t("No chapters found in this Subject. Create one!")}</option>
+                              )}
+                            </select>
+                            <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 3. Topic */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1.5">
+                          <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5 text-brand-500" />
+                            {t("Topic")}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={uploadLoading}
+                            onClick={() => {
+                              setIsNewTopicForm(!isNewTopicForm);
+                              setTopic('');
+                              setNewTopicText('');
+                            }}
+                            className={`text-[10px] font-bold text-[#15803d] hover:underline cursor-pointer ${uploadLoading ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          >
+                            {isNewTopicForm ? t("Choose Existing") : t("+ Create New")}
+                          </button>
+                        </div>
+                        {isNewTopicForm ? (
+                          <input
+                            type="text"
+                            value={newTopicText}
+                            onChange={(e) => setNewTopicText(e.target.value)}
+                            placeholder={t("e.g. Kazi Nazrul Islam")}
+                            className="w-full px-4 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
+                            required
+                            disabled={uploadLoading}
+                          />
+                        ) : (
+                          <div className="relative">
+                            <select
+                              value={topic}
+                              onChange={(e) => setTopic(e.target.value)}
+                              className="w-full pl-3 pr-10 py-2.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-[#15803d] text-xs font-bold appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                              required
+                              disabled={uploadLoading}
+                            >
+                              <option value="">{t("-- Select Topic--")}</option>
+                              {existingTopics.map((tp, idx) => (
+                                <option key={idx} value={tp}>{tp}</option>
+                              ))}
+                              {existingTopics.length === 0 && (
+                                <option disabled value="">{t("No topics found in this Chapter. Create one!")}</option>
+                              )}
+                            </select>
+                            <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 4. Item Type */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1.5">
+                          <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                            <Layers className="w-3.5 h-3.5 text-brand-500" />
+                            {t("Note/Resource Type")}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={uploadLoading}
+                            onClick={() => {
+                              setIsNewItemTypeForm(!isNewItemTypeForm);
+                              setItemType('');
+                              setNewItemTypeText('');
+                            }}
+                            className={`text-[10px] font-bold text-[#15803d] hover:underline cursor-pointer ${uploadLoading ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          >
+                            {isNewItemTypeForm ? t("Choose Preset") : t("+ Custom Type")}
+                          </button>
+                        </div>
+                        {isNewItemTypeForm ? (
+                          <input
+                            type="text"
+                            value={newItemTypeText}
+                            onChange={(e) => setNewItemTypeText(e.target.value)}
+                            placeholder={t("e.g. Word Meaning, Short Question...")}
+                            className="w-full px-4 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
+                            required
+                            disabled={uploadLoading}
+                          />
+                        ) : (
+                          <div className="relative">
+                            <select
+                              value={itemType}
+                              onChange={(e) => setItemType(e.target.value)}
+                              className="w-full pl-3 pr-10 py-2.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-[#15803d] text-xs font-bold appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                              required
+                              disabled={uploadLoading}
+                            >
+                              <option value="">{t("-- Select Note ItemType --")}</option>
+                              {PRESET_ITEM_TYPES.map((it, idx) => (
+                                <option key={idx} value={it}>{t(it)}</option>
+                              ))}
+                            </select>
+                            <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Description Notes */}
+                      <div className="md:col-span-2 lg:col-span-3">
+                        <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-450 uppercase tracking-wider mb-1.5">{t("Description Notes")}</label>
+                        <textarea
+                          value={description}
+                          onChange={(e) => setDescription(e.target.value)}
+                          placeholder={t("Briefly state target topics, chapters, and summary of the note...")}
+                          rows={2}
+                          className="w-full px-4 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-805 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
+                          disabled={uploadLoading}
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={uploadLoading || selectedFiles.length === 0}
+                      className={`w-full py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        (selectedFiles.length > 0 && !uploadLoading)
+                          ? 'bg-[#15803d] hover:bg-[#15803d]/90 text-white shadow-md' 
+                          : 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-50'
+                      }`}
+                    >
+                      {uploadLoading ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>{t("Uploading...")}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>{t("Upload & Auto-Approve Note")}</span>
+                        </>
+                      )}
+                    </button>
+                  </form>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Dedicated Search and Filter Panel (Similar to Public Explorer) */}
           <div className="bg-gray-50 dark:bg-slate-950 p-4 rounded-xl border border-gray-150 dark:border-slate-800/80 mb-6 space-y-4">
