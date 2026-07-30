@@ -88,19 +88,52 @@ export default function DashboardTeacher({
     : (user?.subject ? [user.subject] : [])
   ).filter((sub): sub is string => typeof sub === 'string');
 
+  const teacherClasses = (Array.isArray(user?.classes)
+    ? user.classes
+    : []
+  ).filter((cls): cls is string => typeof cls === 'string');
+
+  const classAssignments = Array.isArray(user?.classAssignments)
+    ? user.classAssignments
+    : [];
+
   // Filter files
   // 1. My archive (all files uploaded by me)
   const myUploadedFiles = files.filter(f => f && f.uploadedBy === user.uid);
   const myPendingFiles = myUploadedFiles.filter(f => !f.isApproved && !f.isDeleted);
   const myApprovedFiles = myUploadedFiles.filter(f => f.isApproved && !f.isDeleted);
 
-  // 2. Department Library (all approved files from my assigned department)
-  const departmentFiles = files.filter(f => 
-    f && 
-    f.isApproved && 
-    typeof f.subject === 'string' && 
-    teacherSubjects.some(sub => typeof sub === 'string' && sub.toLowerCase() === f.subject.toLowerCase())
-  );
+  // 2. Department Library (all approved files matching assigned subject(s) AND class(es))
+  const departmentFiles = files.filter(f => {
+    if (!f || !f.isApproved || f.isDeleted) return false;
+    if (typeof f.subject !== 'string') return false;
+
+    // A. If teacher has detailed subject-class pairings in classAssignments
+    if (classAssignments.length > 0) {
+      return classAssignments.some(asg => {
+        if (!asg.subject) return false;
+        const subMatch = asg.subject.toLowerCase() === f.subject.toLowerCase();
+        if (!subMatch) return false;
+
+        // If assignment specifies a classLevel, enforce that the file's classLevel matches
+        if (asg.classLevel && asg.classLevel.trim() !== '') {
+          return !!f.classLevel && f.classLevel.toLowerCase() === asg.classLevel.toLowerCase();
+        }
+        return true;
+      });
+    }
+
+    // B. Check teacherSubjects
+    const matchesSubject = teacherSubjects.length === 0 || teacherSubjects.some(sub => sub.toLowerCase() === f.subject.toLowerCase());
+
+    // C. Check teacherClasses (if teacher has assigned classes)
+    if (teacherClasses.length > 0) {
+      const matchesClass = !!f.classLevel && teacherClasses.some(cls => cls.toLowerCase() === f.classLevel!.toLowerCase());
+      return matchesSubject && matchesClass;
+    }
+
+    return matchesSubject;
+  });
 
   // Active files prior to search
   const activeTabFiles = archiveTab === 'my_submissions' 
@@ -944,7 +977,18 @@ export default function DashboardTeacher({
                     disabled={loading}
                   >
                     <option value="">{t("-- Select Class --")}</option>
-                    {CLASS_LEVELS.map((cls, idx) => (
+                    {(
+                      (() => {
+                        if (selectedSubject && classAssignments.length > 0) {
+                          const matchedClasses = classAssignments
+                            .filter(a => a.subject.toLowerCase() === selectedSubject.toLowerCase() && a.classLevel)
+                            .map(a => a.classLevel);
+                          if (matchedClasses.length > 0) return Array.from(new Set(matchedClasses));
+                        }
+                        if (teacherClasses.length > 0) return teacherClasses;
+                        return CLASS_LEVELS;
+                      })()
+                    ).map((cls, idx) => (
                       <option key={idx} value={cls}>{t(cls)}</option>
                     ))}
                   </select>
@@ -1341,7 +1385,11 @@ export default function DashboardTeacher({
                     ? `${t("My Submissions")}: ${user.subject || t("General")}`
                     : archiveTab === 'recent_activity'
                     ? t("Recent Department Activity Feed")
-                    : `${t("Assigned")}: ${teacherSubjects.join(', ')}`}
+                    : `${t("Assigned")}: ${
+                        classAssignments.length > 0
+                          ? classAssignments.map(a => `${t(a.subject)} (${t(a.classLevel)})`).join(', ')
+                          : `${teacherSubjects.map(s => t(s)).join(', ')}${teacherClasses.length > 0 ? ` [${teacherClasses.map(c => t(c)).join(', ')}]` : ''}`
+                      }`}
                 </div>
               </div>
             </div>
