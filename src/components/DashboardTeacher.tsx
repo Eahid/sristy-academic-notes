@@ -15,7 +15,6 @@ interface DashboardTeacherProps {
   files: FileArchive[];
   onUploadSuccess: () => void;
   onFileDelete: (fileId: string) => void;
-  onFileEdit: (fileId: string, updates: { fileName?: string; description?: string; subject?: string; classLevel?: string }) => void;
   onDownload: (file: FileArchive) => void;
   onPreview?: (file: FileArchive) => void;
   onViewTeacherDetails?: (teacherUid: string) => void;
@@ -26,19 +25,12 @@ export default function DashboardTeacher({
   files,
   onUploadSuccess,
   onFileDelete,
-  onFileEdit,
   onDownload,
   onPreview,
   onViewTeacherDetails
 }: DashboardTeacherProps) {
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
-  const [archiveTab, setArchiveTab] = useState<'my_submissions' | 'department_materials' | 'recent_activity' | 'pending' | 'approved'>('my_submissions');
-  const [editingFile, setEditingFile] = useState<FileArchive | null>(null);
-  const [editFileName, setEditFileName] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editSubject, setEditSubject] = useState('');
-  const [editClassLevel, setEditClassLevel] = useState('');
-  const [editSaving, setEditSaving] = useState(false);
+  const [archiveTab, setArchiveTab] = useState<'my_submissions' | 'department_materials' | 'recent_activity'>('my_submissions');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -88,84 +80,61 @@ export default function DashboardTeacher({
     : (user?.subject ? [user.subject] : [])
   ).filter((sub): sub is string => typeof sub === 'string');
 
-  const teacherClasses = (Array.isArray(user?.classes)
-    ? user.classes
-    : []
-  ).filter((cls): cls is string => typeof cls === 'string');
+  // All classes assigned to this teacher across all subjects
+  const teacherClasses = Array.isArray(user?.classAssignments) && user.classAssignments.length > 0
+    ? Array.from(new Set(user.classAssignments.map(a => a.classLevel)))
+    : (Array.isArray(user?.classes) ? user.classes : []);
 
-  const classAssignments = Array.isArray(user?.classAssignments)
-    ? user.classAssignments
-    : [];
-
-  // Helper function to get assigned classes for a given subject (or all assigned classes if subject is empty/all)
-  const getAssignedClassesForSubject = (subj?: string) => {
-    if (subj && classAssignments.length > 0) {
-      const matched = classAssignments
-        .filter(a => a.subject && a.subject.toLowerCase() === subj.toLowerCase() && a.classLevel)
+  // Returns only the classes assigned to a SPECIFIC subject (via classAssignments)
+  const getAssignedClassesForSubject = (subject: string): string[] => {
+    if (!subject) return teacherClasses;
+    if (Array.isArray(user?.classAssignments) && user.classAssignments.length > 0) {
+      const matches = user.classAssignments
+        .filter(a => a.subject === subject)
         .map(a => a.classLevel);
-      if (matched.length > 0) {
-        return Array.from(new Set(matched)).sort((a, b) => CLASS_LEVELS.indexOf(a) - CLASS_LEVELS.indexOf(b));
-      }
+      if (matches.length > 0) return Array.from(new Set(matches));
     }
-    if (classAssignments.length > 0) {
-      const allAsgClasses = classAssignments
-        .filter(a => a.classLevel)
-        .map(a => a.classLevel);
-      if (allAsgClasses.length > 0) {
-        return Array.from(new Set(allAsgClasses)).sort((a, b) => CLASS_LEVELS.indexOf(a) - CLASS_LEVELS.indexOf(b));
-      }
-    }
-    if (teacherClasses.length > 0) {
-      return [...teacherClasses].sort((a, b) => CLASS_LEVELS.indexOf(a) - CLASS_LEVELS.indexOf(b));
-    }
-    return CLASS_LEVELS;
+    // Fallback: if no specific mapping, allow any of the teacher's assigned classes
+    return teacherClasses.length > 0 ? teacherClasses : CLASS_LEVELS;
   };
+
+  // Auto-default subject and class to teacher's assignment on mount / when assignments change
+  useEffect(() => {
+    if (teacherSubjects.length > 0 && !selectedSubject) {
+      setSelectedSubject(teacherSubjects[0]);
+    }
+  }, [teacherSubjects.join(',')]);
+
+  useEffect(() => {
+    const validClasses = getAssignedClassesForSubject(selectedSubject);
+    if (validClasses.length > 0 && (!uploadClassLevel || !validClasses.includes(uploadClassLevel))) {
+      setUploadClassLevel(validClasses[0]);
+    }
+  }, [selectedSubject, user?.classAssignments]);
 
   // Filter files
   // 1. My archive (all files uploaded by me)
   const myUploadedFiles = files.filter(f => f && f.uploadedBy === user.uid);
-  const myPendingFiles = myUploadedFiles.filter(f => !f.isApproved && !f.isDeleted);
-  const myApprovedFiles = myUploadedFiles.filter(f => f.isApproved && !f.isDeleted);
 
-  // 2. Department Library (all approved files matching assigned subject(s) AND class(es))
+  // 2. Department Library (approved files matching teacher's subject+class assignments)
   const departmentFiles = files.filter(f => {
-    if (!f || !f.isApproved || f.isDeleted) return false;
-    if (typeof f.subject !== 'string') return false;
+    if (!f || !f.isApproved || typeof f.subject !== 'string') return false;
 
-    // A. If teacher has detailed subject-class pairings in classAssignments
-    if (classAssignments.length > 0) {
-      return classAssignments.some(asg => {
-        if (!asg.subject) return false;
-        const subMatch = asg.subject.toLowerCase() === f.subject.toLowerCase();
-        if (!subMatch) return false;
-
-        // If assignment specifies a classLevel, enforce that the file's classLevel matches
-        if (asg.classLevel && asg.classLevel.trim() !== '') {
-          return !!f.classLevel && f.classLevel.toLowerCase() === asg.classLevel.toLowerCase();
-        }
-        return true;
-      });
+    // If teacher has specific classAssignments (subject → class pairs), match both
+    if (Array.isArray(user?.classAssignments) && user.classAssignments.length > 0) {
+      return user.classAssignments.some(a =>
+        a.subject.toLowerCase() === f.subject.toLowerCase() &&
+        (!f.classLevel || a.classLevel === f.classLevel)
+      );
     }
 
-    // B. Check teacherSubjects
-    const matchesSubject = teacherSubjects.length === 0 || teacherSubjects.some(sub => sub.toLowerCase() === f.subject.toLowerCase());
-
-    // C. Check teacherClasses (if teacher has assigned classes)
-    if (teacherClasses.length > 0) {
-      const matchesClass = !!f.classLevel && teacherClasses.some(cls => cls.toLowerCase() === f.classLevel!.toLowerCase());
-      return matchesSubject && matchesClass;
-    }
-
-    return matchesSubject;
+    // Fallback: match by subject only (legacy teachers without classAssignments)
+    return teacherSubjects.some(sub => typeof sub === 'string' && sub.toLowerCase() === f.subject.toLowerCase());
   });
 
   // Active files prior to search
   const activeTabFiles = archiveTab === 'my_submissions' 
     ? myUploadedFiles 
-    : archiveTab === 'pending'
-    ? myPendingFiles
-    : archiveTab === 'approved'
-    ? myApprovedFiles
     : archiveTab === 'recent_activity'
     ? [...myUploadedFiles, ...departmentFiles].filter((v, i, a) => a.findIndex(t => t.id === v.id) === i).sort((a, b) => {
         const dateA = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt || 0);
@@ -314,46 +283,6 @@ export default function DashboardTeacher({
       active = false;
     };
   }, [user.uid]);
-
-  // Auto-default selectedSubject and uploadClassLevel for upload form
-  const teacherSubjKey = teacherSubjects.join(',');
-  const teacherClsKey = teacherClasses.join(',');
-  const asgKey = JSON.stringify(classAssignments);
-
-  useEffect(() => {
-    if (teacherSubjects.length > 0) {
-      if (!selectedSubject || !teacherSubjects.includes(selectedSubject)) {
-        setSelectedSubject(teacherSubjects[0]);
-      }
-    }
-  }, [teacherSubjKey]);
-
-  useEffect(() => {
-    const validClasses = getAssignedClassesForSubject(selectedSubject);
-    if (validClasses.length > 0) {
-      if (!uploadClassLevel || !validClasses.includes(uploadClassLevel)) {
-        setUploadClassLevel(validClasses[0]);
-      }
-    }
-  }, [selectedSubject, teacherSubjKey, teacherClsKey, asgKey]);
-
-  // Auto-default filterSubject and filterClassLevel for repository view
-  useEffect(() => {
-    if (teacherSubjects.length === 1) {
-      setFilterSubject(teacherSubjects[0]);
-    } else if (filterSubject && !teacherSubjects.includes(filterSubject)) {
-      setFilterSubject('');
-    }
-  }, [teacherSubjKey]);
-
-  useEffect(() => {
-    const validFilterClasses = getAssignedClassesForSubject(filterSubject);
-    if (validFilterClasses.length === 1) {
-      setFilterClassLevel(validFilterClasses[0]);
-    } else if (filterClassLevel && !validFilterClasses.includes(filterClassLevel)) {
-      setFilterClassLevel('');
-    }
-  }, [filterSubject, teacherSubjKey, teacherClsKey, asgKey]);
 
   // Allowed file extensions
   const ALLOWED_EXTENSIONS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'png', 'jpg', 'jpeg'];
@@ -692,32 +621,6 @@ export default function DashboardTeacher({
     setLoading(false);
   };
 
-  const handleOpenEdit = (file: FileArchive) => {
-    setEditingFile(file);
-    setEditFileName(file.fileName);
-    setEditDescription(file.description || '');
-    setEditSubject(file.subject || '');
-    setEditClassLevel(file.classLevel || '');
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editingFile) return;
-    setEditSaving(true);
-    try {
-      await onFileEdit(editingFile.id, {
-        fileName: editFileName.trim(),
-        description: editDescription.trim(),
-        subject: editSubject,
-        classLevel: editClassLevel,
-      });
-      setEditingFile(null);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setEditSaving(false);
-    }
-  };
-
   return (
     <div className="space-y-8" id="teacher-dashboard">
       {/* Subject Header Banner */}
@@ -1004,11 +907,11 @@ export default function DashboardTeacher({
                   <select
                     value={selectedSubject}
                     onChange={(e) => setSelectedSubject(e.target.value)}
-                    className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
+                    className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                     required
-                    disabled={loading || teacherSubjects.length === 1}
+                    disabled={loading || teacherSubjects.length <= 1}
                   >
-                    {teacherSubjects.length === 0 && <option value="">{t("-- Select Subject --")}</option>}
+                    <option value="">{t("-- Select Subject --")}</option>
                     {(teacherSubjects.length > 0 ? teacherSubjects : subjects).map((sub, idx) => (
                       <option key={idx} value={sub}>{t(sub)}</option>
                     ))}
@@ -1032,29 +935,30 @@ export default function DashboardTeacher({
                     {t("Class")}
                   </span>
                 </div>
-                {(() => {
-                  const validUploadClasses = getAssignedClassesForSubject(selectedSubject);
-                  const isSingleClass = validUploadClasses.length === 1;
-                  return (
-                    <div className="relative">
-                      <select
-                        value={uploadClassLevel}
-                        onChange={(e) => setUploadClassLevel(e.target.value)}
-                        className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
-                        required
-                        disabled={loading || isSingleClass}
-                      >
-                        {validUploadClasses.length === 0 && <option value="">{t("-- Select Class --")}</option>}
-                        {validUploadClasses.map((cls, idx) => (
-                          <option key={idx} value={cls}>{t(cls)}</option>
-                        ))}
-                      </select>
-                      <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </span>
-                    </div>
-                  );
-                })()}
+                <div className="relative">
+                  {(() => {
+                    const assignedClasses = getAssignedClassesForSubject(selectedSubject);
+                    return (
+                      <>
+                        <select
+                          value={uploadClassLevel}
+                          onChange={(e) => setUploadClassLevel(e.target.value)}
+                          className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                          required
+                          disabled={loading || assignedClasses.length <= 1}
+                        >
+                          <option value="">{t("-- Select Class --")}</option>
+                          {assignedClasses.map((cls, idx) => (
+                            <option key={idx} value={cls}>{t(cls)}</option>
+                          ))}
+                        </select>
+                        <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </span>
+                      </>
+                    );
+                  })()}
+                </div>
               </div>
 
               {/* 2. Chapter */}
@@ -1293,28 +1197,6 @@ export default function DashboardTeacher({
                 )}
                 <button
                   type="button"
-                  onClick={() => { setArchiveTab('pending'); setSelectedFileIds([]); }}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    archiveTab === 'pending'
-                      ? 'bg-amber-500 text-white shadow-xs'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                  }`}
-                >
-                  ⏳ {t("Pending")} ({myPendingFiles.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setArchiveTab('approved'); setSelectedFileIds([]); }}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    archiveTab === 'approved'
-                      ? 'bg-green-500 text-white shadow-xs'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                  }`}
-                >
-                  ✅ {t("Approved")} ({myApprovedFiles.length})
-                </button>
-                <button
-                  type="button"
                   onClick={() => {
                     setArchiveTab('recent_activity');
                     setSelectedFileIds([]);
@@ -1390,51 +1272,38 @@ export default function DashboardTeacher({
                 </div>
 
                 {/* Subject Dropdown Filter */}
-                {(() => {
-                  const isSingleSubject = teacherSubjects.length === 1;
-                  return (
-                    <div className="relative w-full md:w-48">
-                      <select
-                        value={filterSubject}
-                        onChange={(e) => setFilterSubject(e.target.value)}
-                        disabled={isSingleSubject}
-                        className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 text-gray-700 dark:text-gray-200 rounded-lg focus:outline-none focus:border-[#15803d] dark:focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
-                      >
-                        {!isSingleSubject && <option value="">{t("All Assigned Subjects")}</option>}
-                        {(teacherSubjects.length > 0 ? teacherSubjects : subjects).map((sub, idx) => (
-                          <option key={idx} value={sub}>{t(sub)}</option>
-                        ))}
-                      </select>
-                      <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </span>
-                    </div>
-                  );
-                })()}
+                <div className="relative w-full md:w-48">
+                  <select
+                    value={filterSubject}
+                    onChange={(e) => setFilterSubject(e.target.value)}
+                    className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 text-gray-700 dark:text-gray-200 rounded-lg focus:outline-none focus:border-[#15803d] dark:focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer"
+                  >
+                    <option value="">{t("All Subjects")}</option>
+                    {(teacherSubjects.length > 0 ? teacherSubjects : subjects).map((sub, idx) => (
+                      <option key={idx} value={sub}>{t(sub)}</option>
+                    ))}
+                  </select>
+                  <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </span>
+                </div>
 
-                {/* Class Dropdown Filter */}
-                {(() => {
-                  const validFilterClasses = getAssignedClassesForSubject(filterSubject);
-                  const isSingleClass = validFilterClasses.length === 1;
-                  return (
-                    <div className="relative w-full md:w-48">
-                      <select
-                        value={filterClassLevel}
-                        onChange={(e) => setFilterClassLevel(e.target.value)}
-                        disabled={isSingleClass}
-                        className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 text-gray-700 dark:text-gray-200 rounded-lg focus:outline-none focus:border-[#15803d] dark:focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
-                      >
-                        {!isSingleClass && <option value="">{t("All Assigned Classes")}</option>}
-                        {validFilterClasses.map((cls, idx) => (
-                          <option key={idx} value={cls}>{t(cls)}</option>
-                        ))}
-                      </select>
-                      <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </span>
-                    </div>
-                  );
-                })()}
+                {/* Class Dropdown Filter — only teacher's assigned classes */}
+                <div className="relative w-full md:w-48">
+                  <select
+                    value={filterClassLevel}
+                    onChange={(e) => setFilterClassLevel(e.target.value)}
+                    className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 text-gray-700 dark:text-gray-200 rounded-lg focus:outline-none focus:border-[#15803d] dark:focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer"
+                  >
+                    <option value="">{t("All Classes")}</option>
+                    {(teacherClasses.length > 0 ? teacherClasses : CLASS_LEVELS).map((cls, idx) => (
+                      <option key={idx} value={cls}>{t(cls)}</option>
+                    ))}
+                  </select>
+                  <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </span>
+                </div>
               </div>
 
               <div className="flex flex-col sm:flex-row items-center gap-4 justify-between">
@@ -1442,9 +1311,8 @@ export default function DashboardTeacher({
                   {(filterSubject || filterClassLevel || searchTerm) && (
                     <button
                       onClick={() => {
-                        setFilterSubject(teacherSubjects.length === 1 ? teacherSubjects[0] : '');
-                        const defaultCls = getAssignedClassesForSubject(teacherSubjects.length === 1 ? teacherSubjects[0] : '');
-                        setFilterClassLevel(defaultCls.length === 1 ? defaultCls[0] : '');
+                        setFilterSubject('');
+                        setFilterClassLevel('');
                         setSearchTerm('');
                       }}
                       className="text-xs font-bold text-red-500 hover:underline cursor-pointer"
@@ -1458,11 +1326,7 @@ export default function DashboardTeacher({
                     ? `${t("My Submissions")}: ${user.subject || t("General")}`
                     : archiveTab === 'recent_activity'
                     ? t("Recent Department Activity Feed")
-                    : `${t("Assigned")}: ${
-                        classAssignments.length > 0
-                          ? classAssignments.map(a => `${t(a.subject)} (${t(a.classLevel)})`).join(', ')
-                          : `${teacherSubjects.map(s => t(s)).join(', ')}${teacherClasses.length > 0 ? ` [${teacherClasses.map(c => t(c)).join(', ')}]` : ''}`
-                      }`}
+                    : `${t("Assigned")}: ${teacherSubjects.join(', ')}`}
                 </div>
               </div>
             </div>
@@ -1756,22 +1620,13 @@ export default function DashboardTeacher({
                                     <Download className="w-3.5 h-3.5" />
                                   </button>
                                   {file.uploadedBy === user.uid && (
-                                    <>
-                                      <button
-                                        onClick={() => handleOpenEdit(file)}
-                                        className="p-1.5 bg-blue-50 dark:bg-blue-955/20 hover:bg-blue-100 dark:hover:bg-blue-955/40 text-blue-600 dark:text-blue-400 rounded border border-blue-100 dark:border-blue-900/30 cursor-pointer"
-                                        title={t("Edit")}
-                                      >
-                                        <Sparkles className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        onClick={() => onFileDelete(file.id)}
-                                        className="p-1.5 bg-red-50 dark:bg-red-955/20 hover:bg-red-100 dark:hover:bg-red-955/40 text-red-650 dark:text-red-400 rounded border border-red-105 dark:border-red-900/30 cursor-pointer"
-                                        title={t("Delete")}
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </>
+                                    <button
+                                      onClick={() => onFileDelete(file.id)}
+                                      className="p-1.5 bg-red-50 dark:bg-red-955/20 hover:bg-red-100 dark:hover:bg-red-955/40 text-red-650 dark:text-red-400 rounded border border-red-105 dark:border-red-900/30 cursor-pointer"
+                                      title={t("Delete")}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
                                   )}
                                 </div>
                               </td>
@@ -1864,84 +1719,6 @@ export default function DashboardTeacher({
                 className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-gray-700 dark:text-gray-200 text-xs font-bold rounded-lg cursor-pointer transition-all uppercase tracking-wider border border-transparent dark:border-slate-700"
               >
                 {t("Dismiss")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Edit File Modal ── */}
-      {editingFile && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-100 dark:border-slate-800">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-sm font-bold text-gray-800 dark:text-white">✏️ {t("Edit File Details")}</h3>
-              <button onClick={() => setEditingFile(null)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer">
-                <X className="w-4 h-4 text-gray-500" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("File Name")}</label>
-                <input
-                  type="text"
-                  value={editFileName}
-                  onChange={e => setEditFileName(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("Description / Notes")}</label>
-                <textarea
-                  value={editDescription}
-                  onChange={e => setEditDescription(e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("Subject")}</label>
-                <select
-                  value={editSubject}
-                  onChange={e => setEditSubject(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-brand-500"
-                >
-                  {teacherSubjects.map(s => (
-                    <option key={s} value={s}>{t(s)}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("Class")}</label>
-                <select
-                  value={editClassLevel}
-                  onChange={e => setEditClassLevel(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-brand-500"
-                >
-                  {getAssignedClassesForSubject(editSubject).map(c => (
-                    <option key={c} value={c}>{t(c)}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setEditingFile(null)}
-                className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 text-xs font-bold rounded-lg cursor-pointer transition-all"
-              >
-                {t("Cancel")}
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={editSaving || !editFileName.trim()}
-                className="flex-1 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-lg cursor-pointer transition-all disabled:opacity-50"
-              >
-                {editSaving ? t("Saving...") : t("Save Changes")}
               </button>
             </div>
           </div>
