@@ -20,7 +20,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { db, auth, storage } from './firebase';
 import { safeLocalStorage, forceClearSystemCache } from './utils';
 import { UserProfile, FileArchive } from './types';
-import { BRANCHES, SUBJECTS } from './constants';
+import { BRANCHES, SUBJECTS, CLASS_LEVELS } from './constants';
 import Navbar from './components/Navbar';
 import AuthScreen from './components/AuthScreen';
 import NoticeBoard from './components/NoticeBoard';
@@ -61,14 +61,11 @@ export default function App() {
   const [deletedFiles, setDeletedFiles] = useState<FileArchive[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Modals / Overlays triggers
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
 
-  // Locked item downloads warning overlay
   const [lockedFileAlert, setLockedFileAlert] = useState<FileArchive | null>(null);
 
-  // Seed DB status and fetch trigger
   const [triggerRefresh, setTriggerRefresh] = useState(0);
 
   const [previewFile, setPreviewFile] = useState<FileArchive | null>(null);
@@ -79,18 +76,16 @@ export default function App() {
   const [guestSearch, setGuestSearch] = useState('');
   const [guestBranch, setGuestBranch] = useState('');
   const [guestSubject, setGuestSubject] = useState('');
+  const [guestClass, setGuestClass] = useState('');
 
-  // 1. URL Query Cache-Reset Listener: Clears cache immediately if link contains "?clear-cache=true" or "?reset=true"
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       if (params.get('clear-cache') === 'true' || params.get('reset') === 'true' || params.get('clear') === 'true') {
         console.log("Auto cache reset query detected. Cleaning up system caches...");
-        // Clear LocalStorage & SessionStorage
         localStorage.clear();
         sessionStorage.clear();
         
-        // Clear Cookies
         const cookies = document.cookie.split(";");
         for (let i = 0; i < cookies.length; i++) {
           const cookie = cookies[i];
@@ -101,7 +96,6 @@ export default function App() {
           document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=." + window.location.hostname;
         }
 
-        // Unregister Service Workers
         if ("serviceWorker" in navigator) {
           navigator.serviceWorker.getRegistrations().then((registrations) => {
             for (const registration of registrations) {
@@ -110,7 +104,6 @@ export default function App() {
           });
         }
 
-        // Redirect to a clean landing URL
         setTimeout(() => {
           window.location.href = window.location.origin + window.location.pathname + "?v=" + Date.now();
         }, 300);
@@ -160,26 +153,25 @@ export default function App() {
       setAuthModalOpen(true);
       return;
     }
-    // 1. Trigger the download automatically upon clicking preview
+    if (currentUser.role === 'viewer') {
+      alert(t("You do not have permission to view files. Please contact your branch admin."));
+      return;
+    }
     handleDownloadAttempt(file);
 
-    // 2. Open in a new tab with the native view mode if fileUrl is available
     if (file.fileUrl) {
       let previewUrl = file.fileUrl;
       
-      // Wrap custom cloud storage urls in backend raw proxy streams to avoid frame blocks & credential sandbox leakage
       if (previewUrl && !previewUrl.startsWith('/') && !previewUrl.startsWith(window.location.origin)) {
         previewUrl = `/api/r2/file?url=${encodeURIComponent(previewUrl)}`;
       }
       
       window.open(previewUrl, '_blank');
     } else {
-      // Fallback to simulated reader modal showing local view mode of the topic
       setPreviewFile(file);
     }
   };
 
-  // 1. Boostrap & Seed Database if empty
   const bootstrapSystem = async () => {
     if (!auth.currentUser) {
       console.log('Skipping bootstrap: No authenticated administrator is active.');
@@ -191,7 +183,6 @@ export default function App() {
       return;
     }
     try {
-      // Create Master Admin Account User record if not exists
       const targetMasterUid = 'master_admin_uid';
       const masterDocRef = doc(db, 'users', targetMasterUid);
       const docSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'master_admin')));
@@ -200,7 +191,7 @@ export default function App() {
         await setDoc(masterDocRef, {
           uid: targetMasterUid,
           username: 'masteradmin',
-          password: 'sristy_master_2026', // Set initial bootstrap password
+          password: 'sristy_master_2026',
           fullName: 'Sristy Master Admin',
           email: 'admin@sristyfamily.com',
           role: 'master_admin',
@@ -210,15 +201,12 @@ export default function App() {
         });
         console.log('Seeded Master Admin profile successfully.');
       }
-
-      // Educational mockup files seeding has been removed to keep the homepage completely clean of demo data.
     } catch (err) {
       console.warn('System bootstrap process log: ', err);
     }
   };
 
   useEffect(() => {
-    // Read local bypass storage initially if any
     const localUserJSON = safeLocalStorage.getItem('sristy_local_user');
     if (localUserJSON) {
       try {
@@ -230,7 +218,6 @@ export default function App() {
       }
     }
 
-    // Only attempt bootstrap if user is signed in.
     if (auth.currentUser) {
       bootstrapSystem().then(() => {
         setTriggerRefresh(t => t + 1);
@@ -240,11 +227,9 @@ export default function App() {
     }
   }, []);
 
-  // Synchronize dynamic active user sessions from Firebase auth state directly
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Clear local bypass if dynamic Firebase connection succeeds
         safeLocalStorage.removeItem('sristy_local_user');
         try {
           const userDocSnap = await getDoc(doc(db, 'users', firebaseUser.uid));
@@ -270,7 +255,6 @@ export default function App() {
               currentRole = data.role;
             }
           } else {
-            // Automatic creation or update of Master Admin profile mapping if logged in via standard Admin email
             if (firebaseUser.email === 'eahidhasan@gmail.com' || firebaseUser.email === 'admin@sristyfamily.com') {
               const masterDocRef = doc(db, 'users', firebaseUser.uid);
               const isOwner = firebaseUser.email === 'eahidhasan@gmail.com';
@@ -298,7 +282,6 @@ export default function App() {
               currentRole = 'master_admin';
             }
           }
-          // After auth registers/resolves, attempt to seed resources securely ONLY if user is master admin
           if (currentRole === 'master_admin') {
             await bootstrapSystem();
           }
@@ -306,7 +289,6 @@ export default function App() {
           console.error("Auth state profile fetch error:", e);
         }
       } else {
-        // If Firebase Auth logged out or cleared, check if we still have local bypass active
         const localUserJSON = safeLocalStorage.getItem('sristy_local_user');
         if (localUserJSON) {
           try {
@@ -325,7 +307,6 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // Automatically trigger the login modal when loading completes if there is no active authenticated user
   useEffect(() => {
     if (!loading && !currentUser && !hasAutoOpened.current) {
       hasAutoOpened.current = true;
@@ -335,12 +316,10 @@ export default function App() {
     }
   }, [loading, currentUser]);
 
-  // 2. Fetch all system files archives with multiple secure sub-queries depending on role
   useEffect(() => {
     setLoading(true);
     const unsubscribers: (() => void)[] = [];
     
-    // Helper to process standard document into FileArchive structure
     const parseDoc = (doc: any): FileArchive => {
       const data = doc.data();
       return {
@@ -371,20 +350,17 @@ export default function App() {
       };
     };
 
-    // We maintain a map of lists from different queries to cleanly merge them
     const queryResultsMap: Record<string, FileArchive[]> = {};
 
     const updateMergedState = () => {
-      // Merge all lists from map
       const allActive: FileArchive[] = [];
       const allDeleted: FileArchive[] = [];
       const seenIds = new Set<string>();
       
-      // Order of sub-queries prioritizes actual active state
       Object.values(queryResultsMap).forEach((list) => {
         list.forEach((file) => {
           if (file.uploadedBy.startsWith('seed_uploader_')) {
-            return; // completely filter out demo files from showing up on homepage/platform
+            return;
           }
           if (!seenIds.has(file.id)) {
             seenIds.add(file.id);
@@ -397,7 +373,6 @@ export default function App() {
         });
       });
 
-      // Sort by createdAt desc
       allActive.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       allDeleted.sort((a, b) => {
         const da = a.deletedAt ? a.deletedAt.getTime() : a.createdAt.getTime();
@@ -433,23 +408,19 @@ export default function App() {
     const targetRole = currentUser?.role;
 
     if (targetRole === 'super_admin' || targetRole === 'master_admin' || targetRole === 'file_approver') {
-      // Super, Master, and File Approver get full unfiltered directory access
       const qMaster = query(collection(db, 'files'));
       registerQuery('master', qMaster);
     } else if (targetRole === 'admin') {
-      // Branch administrators stream all approved assets + ALL files from their branch (including unapproved)
       const qApproved = query(collection(db, 'files'), where('isApproved', '==', true));
       const qBranch = query(collection(db, 'files'), where('branch', '==', currentUser?.branch || ''));
       registerQuery('approved', qApproved);
       registerQuery('branch', qBranch);
     } else if (targetRole === 'teacher') {
-      // Teachers stream all approved files + their OWN uploads
       const qApproved = query(collection(db, 'files'), where('isApproved', '==', true));
       const qMyUploads = query(collection(db, 'files'), where('uploadedBy', '==', currentUser?.uid || ''));
       registerQuery('approved', qApproved);
       registerQuery('my_uploads', qMyUploads);
     } else {
-      // Viewers, unauthenticated guests, and other sessions only stream APPROVED records
       const qApproved = query(collection(db, 'files'), where('isApproved', '==', true));
       registerQuery('approved', qApproved);
     }
@@ -476,8 +447,11 @@ export default function App() {
       setAuthModalOpen(true);
       return;
     }
+    if (currentUser.role === 'viewer') {
+      alert(t("You do not have permission to download files. Please contact your branch admin."));
+      return;
+    }
     try {
-      // Increment download counter securely in Firestore
       try {
         const fileRef = doc(db, 'files', file.id);
         await updateDoc(fileRef, {
@@ -487,22 +461,18 @@ export default function App() {
         console.warn("Optional download log incremented offline:", safeErr);
       }
 
-      // If the file includes a valid fileUrl, trigger high-integrity download
       if (file.fileUrl) {
         let downloadLink = file.fileUrl;
         
-        // Wrap third-party URLs (like external Google Cloud/Firebase links) in same-origin proxy to circumvent cross-origin browser save blocks
         if (downloadLink && !downloadLink.startsWith('/') && !downloadLink.startsWith(window.location.origin)) {
           downloadLink = `/api/r2/file?url=${encodeURIComponent(downloadLink)}`;
         }
 
-        // If it routes through our API, append forced download attachment marker
         if (downloadLink.startsWith('/api/')) {
           const separator = downloadLink.includes('?') ? '&' : '?';
           downloadLink = `${downloadLink}${separator}download=true`;
         }
 
-        // Create virtual anchor to trigger authentic download save flow
         const link = document.createElement('a');
         link.href = downloadLink;
         link.setAttribute('download', file.fileName);
@@ -535,7 +505,6 @@ export default function App() {
   };
 
   const handleApproveFile = async (fileId: string) => {
-    // Optimistic update — prevent flicker
     setFiles(prev => prev.map(f => f.id === fileId ? { ...f, isApproved: true, approvedBy: currentUser?.uid || '' } : f));
 
     try {
@@ -545,7 +514,6 @@ export default function App() {
         approvedBy: currentUser?.uid || 'anonymous_admin'
       });
 
-      // audit log
       const targetFile = files.find(f => f.id === fileId);
       if (currentUser && targetFile) {
         try {
@@ -566,17 +534,14 @@ export default function App() {
         }
       }
     } catch (err) {
-      // Revert optimistic update on failure
       setFiles(prev => prev.map(f => f.id === fileId ? { ...f, isApproved: false } : f));
       console.error(err);
     }
   };
 
-  // Approve All pending files at once
   const handleApproveAllFiles = async (fileIds: string[]) => {
     if (!fileIds.length) return;
 
-    // Optimistic update all at once
     setFiles(prev => prev.map(f => fileIds.includes(f.id) ? { ...f, isApproved: true, approvedBy: currentUser?.uid || '' } : f));
 
     try {
@@ -606,7 +571,6 @@ export default function App() {
         }
       }
     } catch (err) {
-      // Revert all on failure
       setFiles(prev => prev.map(f => fileIds.includes(f.id) ? { ...f, isApproved: false } : f));
       console.error(err);
     }
@@ -624,10 +588,9 @@ export default function App() {
         t("Are you sure you want to REJECT and permanently delete this file? This will clean physical binaries from storage immediately. Enter rejection reason (optional):")
       );
     }
-    if (reason === null) return; // User cancelled
+    if (reason === null) return;
 
     try {
-      // 1. Audit Log Rejection text archive (preserving the history of the rejected file as text)
       if (currentUser) {
         try {
           await addDoc(collection(db, 'activity_logs'), {
@@ -650,7 +613,6 @@ export default function App() {
         }
       }
 
-      // 2. Clean physical file binary from S3 / R2 and Firebase Storage fallback
       if (targetFile.storagePath) {
         try {
           const r2DelRes = await fetch('/api/r2/delete', {
@@ -674,7 +636,6 @@ export default function App() {
         }
       }
 
-      // 3. Delete document from Firestore
       await deleteDoc(doc(db, 'files', fileId));
     } catch (err) {
       console.error("Failed to reject and delete file document:", err);
@@ -682,11 +643,9 @@ export default function App() {
   };
 
   const handleDeleteFile = async (fileId: string, bypassConfirm?: boolean) => {
-    // Find the file to check branch permissions
     const targetFile = files.find(f => f.id === fileId) || deletedFiles.find(f => f.id === fileId);
     if (!targetFile) return;
 
-    // Branch admin can only delete files from their own branch
     if (currentUser?.role === 'admin' && targetFile.branch !== currentUser?.branch) {
       alert(t("You can only delete files from your own branch."));
       return;
@@ -702,7 +661,6 @@ export default function App() {
         deletedByName: currentUser?.fullName || '',
       });
       
-      // audit log
       if (currentUser) {
         try {
           await addDoc(collection(db, 'activity_logs'), {
@@ -753,6 +711,16 @@ export default function App() {
     }
   };
 
+  const handleDeleteUser = async (uid: string) => {
+    if (!window.confirm(t("Are you sure you want to delete this user? This cannot be undone."))) return;
+    try {
+      await deleteDoc(doc(db, 'users', uid));
+    } catch (err) {
+      console.error("Failed to delete user:", err);
+      alert(t("Failed to delete user."));
+    }
+  };
+
   const handleRestoreFile = async (fileId: string) => {
     try {
       const targetFile = deletedFiles.find(f => f.id === fileId);
@@ -765,7 +733,6 @@ export default function App() {
         deletedByName: null,
       });
       
-      // audit log
       if (currentUser) {
         try {
           await addDoc(collection(db, 'activity_logs'), {
@@ -796,7 +763,6 @@ export default function App() {
       if (!targetFile) return;
 
       if (targetFile.storagePath) {
-        // Attempt clean up from Cloudflare R2
         try {
           const r2DelRes = await fetch('/api/r2/delete', {
             method: 'POST',
@@ -810,7 +776,6 @@ export default function App() {
           console.warn('R2 deletion request failed, continuing fallback processes: ', r2DelErr);
         }
 
-        // Keep standard Firebase Storage cleanup as a fallback
         try {
           const fileStorageRef = ref(storage, targetFile.storagePath);
           await deleteObject(fileStorageRef);
@@ -822,7 +787,6 @@ export default function App() {
       
       await deleteDoc(doc(db, 'files', fileId));
 
-      // audit log
       if (currentUser) {
         try {
           await addDoc(collection(db, 'activity_logs'), {
@@ -849,7 +813,6 @@ export default function App() {
   };
 
   const handleEmptyTrash = async (fileIds?: string[]) => {
-    // If specific fileIds are provided, we delete those. Otherwise we delete all files in deletedFiles.
     const targets = fileIds 
       ? deletedFiles.filter(f => fileIds.includes(f.id))
       : deletedFiles;
@@ -869,7 +832,6 @@ export default function App() {
     for (const targetFile of targets) {
       try {
         if (targetFile.storagePath) {
-          // Attempt clean up from Cloudflare R2
           try {
             const r2DelRes = await fetch('/api/r2/delete', {
               method: 'POST',
@@ -883,7 +845,6 @@ export default function App() {
             console.warn('R2 deletion request failed, continuing fallback processes: ', r2DelErr);
           }
 
-          // Keep standard Firebase Storage cleanup as a fallback
           try {
             const fileStorageRef = ref(storage, targetFile.storagePath);
             await deleteObject(fileStorageRef);
@@ -895,7 +856,6 @@ export default function App() {
 
         await deleteDoc(doc(db, 'files', targetFile.id));
 
-        // audit log
         if (currentUser) {
           try {
             await addDoc(collection(db, 'activity_logs'), {
@@ -924,7 +884,6 @@ export default function App() {
     alert(t("Successfully emptied trash! {successCount} files were permanently deleted.").replace("{successCount}", String(successCount)));
   };
 
-  // Group approved files by subject for visual catalog on homepage
   const getSubjectCounts = () => {
     const counts: { [key: string]: number } = {};
     SUBJECTS.forEach(sub => counts[sub] = 0);
@@ -938,7 +897,6 @@ export default function App() {
 
   const subjectCounts = getSubjectCounts();
 
-  // Filtered approved files for public guest explorer
   const publicApprovedFiles = files.filter(f => f.isApproved);
   const filteredPublicArchives = (() => {
     const list = publicApprovedFiles.filter((file) => {
@@ -948,11 +906,11 @@ export default function App() {
 
       const matchesBranch = guestBranch === '' || file.branch === guestBranch;
       const matchesSubject = guestSubject === '' || file.subject === guestSubject;
+      const matchesClass = guestClass === '' || file.classLevel === guestClass;
 
-      return matchesSearch && matchesBranch && matchesSubject;
+      return matchesSearch && matchesBranch && matchesSubject && matchesClass;
     });
 
-    // Apply guest sorting selection
     if (guestSortBy === 'date_desc') {
       list.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     } else if (guestSortBy === 'date_asc') {
@@ -973,7 +931,6 @@ export default function App() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-[#0b0f19] flex flex-col justify-center items-center p-6 relative overflow-hidden select-none" id="sristy-portal-initial-loader">
-        {/* Glowing background circles for visual depth */}
         <div className="absolute top-[20%] left-[10%] w-[350px] h-[350px] bg-brand-500/10 dark:bg-brand-500/5 rounded-full blur-[120px] animate-pulse pointer-events-none" />
         <div className="absolute bottom-[20%] right-[10%] w-[350px] h-[350px] bg-indigo-500/10 dark:bg-indigo-500/5 rounded-full blur-[120px] animate-pulse pointer-events-none" />
         
@@ -1006,7 +963,6 @@ export default function App() {
           </div>
           
           <div className="pt-1">
-            {/* Smooth animated loading slide */}
             <div className="relative w-48 h-1.5 bg-gray-200 dark:bg-slate-800 rounded-full mx-auto overflow-hidden">
               <motion.div 
                 initial={{ left: "-100%" }}
@@ -1080,7 +1036,6 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950 flex flex-col transition-colors duration-300" id="sristy-edu-app-root">
       
-      {/* Navbar header */}
       <Navbar 
         user={currentUser} 
         onLogout={handleLogout} 
@@ -1091,7 +1046,6 @@ export default function App() {
         }}
       />
 
-      {/* Primary Area Container spacing */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 sm:pt-28 pb-16 flex-1 w-full bg-transparent gradient-bg">
         {isSystemShutDown && (
           <div className="mb-6 bg-red-50 dark:bg-red-955/20 border border-red-200 dark:border-red-900/30 text-red-700 dark:text-red-400 text-xs font-semibold p-4 rounded-xl flex items-center gap-2.5 animate-pulse select-none">
@@ -1100,13 +1054,10 @@ export default function App() {
           </div>
         )}
         
-        {/* If USER is logged in, replace anonymous views with role-specified interior dashboard panel! */}
         {currentUser ? (
           <div className="space-y-8">
-            {/* Global Bulletins Notice board for all authenticated segments */}
             <NoticeBoard user={currentUser} />
 
-            {/* Dashboards Routing Router */}
             {(currentUser.role === 'super_admin' || currentUser.role === 'master_admin') && (
               <DashboardMasterAdmin 
                 user={currentUser} 
@@ -1122,6 +1073,9 @@ export default function App() {
                 onDownload={handleDownloadAttempt}
                 onPreview={handlePreviewAttempt}
                 onViewTeacherDetails={setViewingTeacherUid}
+                onFileEdit={handleFileEdit}
+                onDeleteUser={handleDeleteUser}
+                onUploadSuccess={() => setTriggerRefresh(t => t + 1)}
               />
             )}
 
@@ -1141,6 +1095,8 @@ export default function App() {
                 onPreview={handlePreviewAttempt}
                 onViewTeacherDetails={setViewingTeacherUid}
                 onFileEdit={handleFileEdit}
+                onDeleteUser={handleDeleteUser}
+                onUploadSuccess={() => setTriggerRefresh(t => t + 1)}
               />
             )}
 
@@ -1168,10 +1124,8 @@ export default function App() {
             )}
           </div>
         ) : (
-          /* ANONYMOUS GUEST VISITOR LANDING FRONT PAGE */
           <div className="space-y-12 sm:space-y-16 animate-in fade-in duration-500">
             
-            {/* Attractive Hero Section */}
             <div className="text-center py-6 sm:py-10 max-w-4xl mx-auto space-y-4 sm:space-y-6">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 text-[11px] font-bold text-brand-600 bg-brand-50 border border-brand-105 dark:border-brand-900/30 rounded-full uppercase tracking-wider dark:bg-brand-950/20">
                 <AnimatePresence mode="popLayout">
@@ -1215,7 +1169,6 @@ export default function App() {
 
 
 
-            {/* Unified Academic Platform Key Pillars */}
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 py-6 border-y border-gray-150/50 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-900/10 p-6 rounded-3xl">
               <div className="space-y-3">
                 <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 w-fit">
@@ -1305,7 +1258,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Guest Tab Navigation */}
             <div className="flex justify-center border-b border-gray-100 dark:border-slate-800 mb-8 mt-12 gap-6 select-none">
               <button
                 onClick={() => setGuestActiveTab('notes')}
@@ -1345,7 +1297,6 @@ export default function App() {
             </div>
 
             {guestActiveTab === 'notes' ? (
-              /* Interactive Search & Filters Portal (Public Resource Explorer) */
               <div className="space-y-6 scroll-mt-24" id="public-explorer">
                 <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-gray-100 dark:border-slate-800 shadow-xs space-y-4 transition-colors text-left">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -1363,7 +1314,6 @@ export default function App() {
                   </div>
 
                   <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4">
-                    {/* Text Search */}
                     <div className="relative">
                       <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -1379,7 +1329,6 @@ export default function App() {
                       />
                     </div>
 
-                    {/* Branch Filter */}
                     <div className="relative">
                       <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
                         <School className="w-4 h-4 text-brand-500" />
@@ -1399,7 +1348,6 @@ export default function App() {
                       </span>
                     </div>
 
-                    {/* Subject Filter */}
                     <div className="relative">
                       <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
                         <BookOpen className="w-4 h-4 text-brand-500" />
@@ -1419,7 +1367,25 @@ export default function App() {
                       </span>
                     </div>
 
-                    {/* Sort Selection */}
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
+                        <BookOpen className="w-4 h-4 text-brand-500" />
+                      </span>
+                      <select
+                        value={guestClass}
+                        onChange={(e) => setGuestClass(e.target.value)}
+                        className="w-full pl-10 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-705 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold text-gray-750 dark:text-gray-100 appearance-none cursor-pointer transition-all"
+                      >
+                        <option value="">{t("-- Filter by Class --")}</option>
+                        {CLASS_LEVELS.map((cls, idx) => (
+                          <option key={idx} value={cls}>{t(cls)}</option>
+                        ))}
+                      </select>
+                      <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+
                     <div className="relative">
                       <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
                         <ArrowUpDown className="w-4 h-4 text-brand-500" />
@@ -1442,14 +1408,14 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Reset Buttons */}
-                  {(guestSearch || guestBranch || guestSubject || guestSortBy !== 'date_desc') && (
+                  {(guestSearch || guestBranch || guestSubject || guestClass || guestSortBy !== 'date_desc') && (
                     <div className="flex justify-end pt-1">
                       <button
                         onClick={() => {
                           setGuestSearch('');
                           setGuestBranch('');
                           setGuestSubject('');
+                          setGuestClass('');
                           setGuestSortBy('date_desc');
                         }}
                         className="text-[10px] font-bold text-brand-600 hover:text-brand-700 hover:underline cursor-pointer"
@@ -1520,7 +1486,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Quick Sristy Branch Info Panel for Aesthetic Value */}
             <div className="p-8 rounded-2xl bg-brand-50/40 dark:bg-slate-900 border border-brand-100 dark:border-slate-800 flex flex-col md:flex-row justify-between items-center gap-6">
               <div className="text-left space-y-2 max-w-xl">
                 <h3 className="font-bold text-lg text-gray-900 dark:text-white font-display">{t("Campus Network Directories")}</h3>
@@ -1544,7 +1509,6 @@ export default function App() {
         )}
       </main>
 
-      {/* FOOTER */}
       <footer className={`hidden sm:block bg-white dark:bg-slate-950 border-t border-gray-100 dark:border-slate-900 pt-6 pb-6 text-center text-xs text-gray-400 dark:text-gray-500 transition-colors`} id="sristy-family-footer">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p>© 2026 Sristy Education Family. All rights reserved across board affiliates.</p>
@@ -1567,7 +1531,6 @@ export default function App() {
         </div>
       </footer>
 
-      {/* AUTH SCREEN DRAWER OVERLAY */}
       <AnimatePresence>
         {authModalOpen && (
           <motion.div 
@@ -1582,7 +1545,6 @@ export default function App() {
               exit={{ scale: 0.95 }}
               className="relative w-full max-w-md my-auto"
             >
-              {/* Close Button on background */}
               <button 
                 onClick={() => setAuthModalOpen(false)}
                 className="absolute top-4 right-4 z-50 p-2 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
@@ -1607,7 +1569,6 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* USER PROFILE RE-SET MODAL */}
       <AnimatePresence>
         {profileModalOpen && currentUser && (
           <ProfileModal 
@@ -1620,7 +1581,6 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* DOCUMENT PREVIEW MODAL */}
       <DocPreviewModal 
         file={previewFile}
         isOpen={!!previewFile}
@@ -1631,7 +1591,6 @@ export default function App() {
         onReject={handleRejectFile}
       />
 
-      {/* TEACHER/INSTRUCTOR DETAILS MODAL */}
       <AnimatePresence>
         {viewingTeacherUid && (
           <TeacherDetailsModal 
@@ -1648,7 +1607,6 @@ export default function App() {
   );
 }
 
-// Small inline Helper close icon to keep bundles fully self-contained
 function XButton() {
   return (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
