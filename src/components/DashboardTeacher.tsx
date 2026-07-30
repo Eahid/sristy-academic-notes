@@ -97,6 +97,30 @@ export default function DashboardTeacher({
     ? user.classAssignments
     : [];
 
+  // Helper function to get assigned classes for a given subject (or all assigned classes if subject is empty/all)
+  const getAssignedClassesForSubject = (subj?: string) => {
+    if (subj && classAssignments.length > 0) {
+      const matched = classAssignments
+        .filter(a => a.subject && a.subject.toLowerCase() === subj.toLowerCase() && a.classLevel)
+        .map(a => a.classLevel);
+      if (matched.length > 0) {
+        return Array.from(new Set(matched)).sort((a, b) => CLASS_LEVELS.indexOf(a) - CLASS_LEVELS.indexOf(b));
+      }
+    }
+    if (classAssignments.length > 0) {
+      const allAsgClasses = classAssignments
+        .filter(a => a.classLevel)
+        .map(a => a.classLevel);
+      if (allAsgClasses.length > 0) {
+        return Array.from(new Set(allAsgClasses)).sort((a, b) => CLASS_LEVELS.indexOf(a) - CLASS_LEVELS.indexOf(b));
+      }
+    }
+    if (teacherClasses.length > 0) {
+      return [...teacherClasses].sort((a, b) => CLASS_LEVELS.indexOf(a) - CLASS_LEVELS.indexOf(b));
+    }
+    return CLASS_LEVELS;
+  };
+
   // Filter files
   // 1. My archive (all files uploaded by me)
   const myUploadedFiles = files.filter(f => f && f.uploadedBy === user.uid);
@@ -290,6 +314,46 @@ export default function DashboardTeacher({
       active = false;
     };
   }, [user.uid]);
+
+  // Auto-default selectedSubject and uploadClassLevel for upload form
+  const teacherSubjKey = teacherSubjects.join(',');
+  const teacherClsKey = teacherClasses.join(',');
+  const asgKey = JSON.stringify(classAssignments);
+
+  useEffect(() => {
+    if (teacherSubjects.length > 0) {
+      if (!selectedSubject || !teacherSubjects.includes(selectedSubject)) {
+        setSelectedSubject(teacherSubjects[0]);
+      }
+    }
+  }, [teacherSubjKey]);
+
+  useEffect(() => {
+    const validClasses = getAssignedClassesForSubject(selectedSubject);
+    if (validClasses.length > 0) {
+      if (!uploadClassLevel || !validClasses.includes(uploadClassLevel)) {
+        setUploadClassLevel(validClasses[0]);
+      }
+    }
+  }, [selectedSubject, teacherSubjKey, teacherClsKey, asgKey]);
+
+  // Auto-default filterSubject and filterClassLevel for repository view
+  useEffect(() => {
+    if (teacherSubjects.length === 1) {
+      setFilterSubject(teacherSubjects[0]);
+    } else if (filterSubject && !teacherSubjects.includes(filterSubject)) {
+      setFilterSubject('');
+    }
+  }, [teacherSubjKey]);
+
+  useEffect(() => {
+    const validFilterClasses = getAssignedClassesForSubject(filterSubject);
+    if (validFilterClasses.length === 1) {
+      setFilterClassLevel(validFilterClasses[0]);
+    } else if (filterClassLevel && !validFilterClasses.includes(filterClassLevel)) {
+      setFilterClassLevel('');
+    }
+  }, [filterSubject, teacherSubjKey, teacherClsKey, asgKey]);
 
   // Allowed file extensions
   const ALLOWED_EXTENSIONS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'png', 'jpg', 'jpeg'];
@@ -940,11 +1004,11 @@ export default function DashboardTeacher({
                   <select
                     value={selectedSubject}
                     onChange={(e) => setSelectedSubject(e.target.value)}
-                    className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
                     required
-                    disabled={loading}
+                    disabled={loading || teacherSubjects.length === 1}
                   >
-                    <option value="">{t("-- Select Subject --")}</option>
+                    {teacherSubjects.length === 0 && <option value="">{t("-- Select Subject --")}</option>}
                     {(teacherSubjects.length > 0 ? teacherSubjects : subjects).map((sub, idx) => (
                       <option key={idx} value={sub}>{t(sub)}</option>
                     ))}
@@ -968,34 +1032,29 @@ export default function DashboardTeacher({
                     {t("Class")}
                   </span>
                 </div>
-                <div className="relative">
-                  <select
-                    value={uploadClassLevel}
-                    onChange={(e) => setUploadClassLevel(e.target.value)}
-                    className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                    required
-                    disabled={loading}
-                  >
-                    <option value="">{t("-- Select Class --")}</option>
-                    {(
-                      (() => {
-                        if (selectedSubject && classAssignments.length > 0) {
-                          const matchedClasses = classAssignments
-                            .filter(a => a.subject.toLowerCase() === selectedSubject.toLowerCase() && a.classLevel)
-                            .map(a => a.classLevel);
-                          if (matchedClasses.length > 0) return Array.from(new Set(matchedClasses));
-                        }
-                        if (teacherClasses.length > 0) return teacherClasses;
-                        return CLASS_LEVELS;
-                      })()
-                    ).map((cls, idx) => (
-                      <option key={idx} value={cls}>{t(cls)}</option>
-                    ))}
-                  </select>
-                  <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  </span>
-                </div>
+                {(() => {
+                  const validUploadClasses = getAssignedClassesForSubject(selectedSubject);
+                  const isSingleClass = validUploadClasses.length === 1;
+                  return (
+                    <div className="relative">
+                      <select
+                        value={uploadClassLevel}
+                        onChange={(e) => setUploadClassLevel(e.target.value)}
+                        className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
+                        required
+                        disabled={loading || isSingleClass}
+                      >
+                        {validUploadClasses.length === 0 && <option value="">{t("-- Select Class --")}</option>}
+                        {validUploadClasses.map((cls, idx) => (
+                          <option key={idx} value={cls}>{t(cls)}</option>
+                        ))}
+                      </select>
+                      <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* 2. Chapter */}
@@ -1331,38 +1390,51 @@ export default function DashboardTeacher({
                 </div>
 
                 {/* Subject Dropdown Filter */}
-                <div className="relative w-full md:w-48">
-                  <select
-                    value={filterSubject}
-                    onChange={(e) => setFilterSubject(e.target.value)}
-                    className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 text-gray-700 dark:text-gray-200 rounded-lg focus:outline-none focus:border-[#15803d] dark:focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer"
-                  >
-                    <option value="">{t("All Subjects")}</option>
-                    {(teacherSubjects.length > 0 ? teacherSubjects : subjects).map((sub, idx) => (
-                      <option key={idx} value={sub}>{t(sub)}</option>
-                    ))}
-                  </select>
-                  <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  </span>
-                </div>
+                {(() => {
+                  const isSingleSubject = teacherSubjects.length === 1;
+                  return (
+                    <div className="relative w-full md:w-48">
+                      <select
+                        value={filterSubject}
+                        onChange={(e) => setFilterSubject(e.target.value)}
+                        disabled={isSingleSubject}
+                        className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 text-gray-700 dark:text-gray-200 rounded-lg focus:outline-none focus:border-[#15803d] dark:focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
+                      >
+                        {!isSingleSubject && <option value="">{t("All Assigned Subjects")}</option>}
+                        {(teacherSubjects.length > 0 ? teacherSubjects : subjects).map((sub, idx) => (
+                          <option key={idx} value={sub}>{t(sub)}</option>
+                        ))}
+                      </select>
+                      <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+                  );
+                })()}
 
                 {/* Class Dropdown Filter */}
-                <div className="relative w-full md:w-48">
-                  <select
-                    value={filterClassLevel}
-                    onChange={(e) => setFilterClassLevel(e.target.value)}
-                    className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 text-gray-700 dark:text-gray-200 rounded-lg focus:outline-none focus:border-[#15803d] dark:focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer"
-                  >
-                    <option value="">{t("All Classes")}</option>
-                    {CLASS_LEVELS.map((cls, idx) => (
-                      <option key={idx} value={cls}>{t(cls)}</option>
-                    ))}
-                  </select>
-                  <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  </span>
-                </div>
+                {(() => {
+                  const validFilterClasses = getAssignedClassesForSubject(filterSubject);
+                  const isSingleClass = validFilterClasses.length === 1;
+                  return (
+                    <div className="relative w-full md:w-48">
+                      <select
+                        value={filterClassLevel}
+                        onChange={(e) => setFilterClassLevel(e.target.value)}
+                        disabled={isSingleClass}
+                        className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 text-gray-700 dark:text-gray-200 rounded-lg focus:outline-none focus:border-[#15803d] dark:focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
+                      >
+                        {!isSingleClass && <option value="">{t("All Assigned Classes")}</option>}
+                        {validFilterClasses.map((cls, idx) => (
+                          <option key={idx} value={cls}>{t(cls)}</option>
+                        ))}
+                      </select>
+                      <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="flex flex-col sm:flex-row items-center gap-4 justify-between">
@@ -1370,8 +1442,9 @@ export default function DashboardTeacher({
                   {(filterSubject || filterClassLevel || searchTerm) && (
                     <button
                       onClick={() => {
-                        setFilterSubject('');
-                        setFilterClassLevel('');
+                        setFilterSubject(teacherSubjects.length === 1 ? teacherSubjects[0] : '');
+                        const defaultCls = getAssignedClassesForSubject(teacherSubjects.length === 1 ? teacherSubjects[0] : '');
+                        setFilterClassLevel(defaultCls.length === 1 ? defaultCls[0] : '');
                         setSearchTerm('');
                       }}
                       className="text-xs font-bold text-red-500 hover:underline cursor-pointer"
@@ -1849,7 +1922,7 @@ export default function DashboardTeacher({
                   onChange={e => setEditClassLevel(e.target.value)}
                   className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-brand-500"
                 >
-                  {CLASS_LEVELS.map(c => (
+                  {getAssignedClassesForSubject(editSubject).map(c => (
                     <option key={c} value={c}>{t(c)}</option>
                   ))}
                 </select>

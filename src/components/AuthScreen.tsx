@@ -295,6 +295,12 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           branch: 'Sristy Academic School, Tangail',
           subject: 'Bangla 1st Paper',
           subjects: ['Bangla 1st Paper', 'Bangla 2nd Paper', 'History'],
+          classes: ['Class 9', 'Class 10'],
+          classAssignments: [
+            { subject: 'Bangla 1st Paper', classLevel: 'Class 9' },
+            { subject: 'Bangla 2nd Paper', classLevel: 'Class 10' },
+            { subject: 'History', classLevel: 'Class 9' }
+          ],
           status: 'active',
           bio: 'Verified Professional Educator at Sristy Education Family.',
           createdAt: new Date(),
@@ -308,6 +314,8 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           branch: matchedUser.branch,
           subject: matchedUser.subject,
           subjects: matchedUser.subjects,
+          classes: matchedUser.classes,
+          classAssignments: matchedUser.classAssignments,
           status: matchedUser.status,
           bio: matchedUser.bio,
           createdAt: serverTimestamp(),
