@@ -27,6 +27,7 @@ interface FileCardProps {
   onApprove?: (fileId: string) => void;
   onReject?: (fileId: string, reason?: string) => void;
   onDelete?: (fileId: string) => void;
+  onFileEdit?: (fileId: string, updates: { fileName?: string; description?: string; subject?: string; classLevel?: string }) => void;
   isSelected?: boolean;
   onSelectToggle?: (fileId: string) => void;
   onViewTeacherDetails?: (teacherId: string) => void;

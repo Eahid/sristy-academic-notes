@@ -488,11 +488,7 @@ export const ThemeLanguageProvider: React.FC<{ children: React.ReactNode }> = ({
   // Handle dynamic body background color customization
   useEffect(() => {
     const body = window.document.body;
-    if (bgTheme === 'offwhite') {
-      body.style.backgroundColor = '#faf9f6';
-    } else {
-      body.style.backgroundColor = '#f6fcf8';
-    }
+    body.style.backgroundColor = '#faf9f7';
     safeLocalStorage.setItem('app-bg-theme', bgTheme);
   }, [bgTheme]);
 

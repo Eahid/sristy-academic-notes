@@ -930,7 +930,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-[#0b0f19] flex flex-col justify-center items-center p-6 relative overflow-hidden select-none" id="sristy-portal-initial-loader">
+      <div className="min-h-screen bg-[#faf9f7] dark:bg-[#0b0f19] flex flex-col justify-center items-center p-6 relative overflow-hidden select-none" id="sristy-portal-initial-loader">
         <div className="absolute top-[20%] left-[10%] w-[350px] h-[350px] bg-brand-500/10 dark:bg-brand-500/5 rounded-full blur-[120px] animate-pulse pointer-events-none" />
         <div className="absolute bottom-[20%] right-[10%] w-[350px] h-[350px] bg-indigo-500/10 dark:bg-indigo-500/5 rounded-full blur-[120px] animate-pulse pointer-events-none" />
         
@@ -979,7 +979,7 @@ export default function App() {
 
   if (isSystemShutDown && currentUser?.role !== 'super_admin' && currentUser?.role !== 'master_admin') {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-slate-950 flex flex-col justify-center items-center p-4 sm:p-6 text-center select-none" id="site-shut-down-mode">
+      <div className="min-h-screen bg-[#faf9f7] dark:bg-slate-950 flex flex-col justify-center items-center p-4 sm:p-6 text-center select-none" id="site-shut-down-mode">
         <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-red-100 dark:border-red-950/30 rounded-2xl p-6 sm:p-8 shadow-xl space-y-6">
           <div className="w-16 h-16 bg-red-100 dark:bg-red-955/20 rounded-full flex items-center justify-center mx-auto text-red-600 dark:text-red-400">
             <AlertCircle className="w-8 h-8" />
@@ -1034,7 +1034,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 flex flex-col transition-colors duration-300" id="sristy-edu-app-root">
+    <div className="min-h-screen bg-[#faf9f7] dark:bg-slate-950 flex flex-col transition-colors duration-300" id="sristy-edu-app-root">
       
       <Navbar 
         user={currentUser} 

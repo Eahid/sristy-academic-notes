@@ -64,6 +64,9 @@ interface DashboardMasterAdminProps {
   onRefreshData?: () => void;
   onPreview?: (file: FileArchive) => void;
   onViewTeacherDetails?: (teacherUid: string) => void;
+  onFileEdit?: (fileId: string, updates: { fileName?: string; description?: string; subject?: string; classLevel?: string }) => void;
+  onDeleteUser?: (userId: string) => void;
+  onUploadSuccess?: () => void;
 }
 
 export default function DashboardMasterAdmin({ 

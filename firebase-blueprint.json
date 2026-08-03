@@ -107,6 +107,21 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "nameEnglish", "username", "defaultPassword", "category"]
+    },
+    "SavedTopic": {
+      "title": "SavedTopic",
+      "description": "Represents custom saved subjects, chapters, and topics created or used by teachers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier" },
+        "teacherUid": { "type": "string", "description": "Teacher Firebase Auth UID" },
+        "teacherName": { "type": "string", "description": "Teacher full display name" },
+        "subject": { "type": "string", "description": "Educational Subject" },
+        "chapter": { "type": "string", "description": "Educational Chapter" },
+        "topic": { "type": "string", "description": "Educational Topic" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "teacherUid", "subject", "chapter", "topic"]
     }
   },
   "firestore": {
@@ -133,6 +148,10 @@
     "custom_board_members/{memberId}": {
       "schema": "BoardMember",
       "description": "Custom board members collection imported via CSV"
+    },
+    "saved_topics/{topicId}": {
+      "schema": "SavedTopic",
+      "description": "Custom saved subjects, chapters, and topics for teachers"
     }
   }
 }

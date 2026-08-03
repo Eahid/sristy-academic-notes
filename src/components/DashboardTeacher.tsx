@@ -1,14 +1,24 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { collection, addDoc, serverTimestamp, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, getDocs, orderBy, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { UserProfile, FileArchive } from '../types';
-import { Upload, CheckCircle2, AlertCircle, Sparkles, FolderLock, Globe, BookOpen, Layers, ChevronDown, Loader2, Bell, AlertTriangle, Calendar, X, List, Grid, Search, FileText, FileImage, Download, Eye, Trash2, Pencil, Save } from 'lucide-react';
+import { Upload, CheckCircle2, AlertCircle, Sparkles, FolderLock, Globe, BookOpen, Layers, ChevronDown, Loader2, Bell, AlertTriangle, Calendar, X, List, Grid, Search, FileText, FileImage, Download, Eye, Trash2, Pencil, Save, BookmarkCheck } from 'lucide-react';
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import { useBranchSubject } from './BranchSubjectContext';
 import { CLASS_LEVELS } from '../constants';
+
+interface SavedTopicItem {
+  id: string;
+  teacherUid: string;
+  teacherName?: string;
+  subject: string;
+  chapter: string;
+  topic: string;
+  createdAt?: any;
+}
 
 interface DashboardTeacherProps {
   user: UserProfile;
@@ -169,20 +179,105 @@ export default function DashboardTeacher({
     );
   });
 
-  const existingChapters = Array.from(new Set(
-    myUploadedFiles
-      .filter(f => f.subject && finalSubject && f.subject.toLowerCase() === finalSubject.toLowerCase() && f.chapter)
-      .map(f => f.chapter as string)
-  ));
+  // ── Teacher Saved Curriculum Topics State & Sync ──
+  const [savedTopics, setSavedTopics] = useState<SavedTopicItem[]>([]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const q = query(collection(db, 'saved_topics'), where('teacherUid', '==', user.uid));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const items: SavedTopicItem[] = [];
+      snapshot.forEach(docSnap => {
+        const d = docSnap.data();
+        items.push({
+          id: docSnap.id,
+          teacherUid: d.teacherUid || user.uid,
+          teacherName: d.teacherName || '',
+          subject: d.subject || '',
+          chapter: d.chapter || '',
+          topic: d.topic || '',
+          createdAt: d.createdAt
+        });
+      });
+      setSavedTopics(items);
+    }, (err) => {
+      console.warn("Could not fetch saved_topics from Firestore:", err);
+    });
+    return () => unsub();
+  }, [user?.uid]);
+
+  const saveCurriculumTopic = async (subName: string, chapName: string, topName: string) => {
+    const s = subName.trim();
+    const c = chapName.trim();
+    const t = topName.trim();
+    if (!s || !c || !t || !user?.uid) return;
+
+    const exists = savedTopics.some(
+      st => st.subject.toLowerCase() === s.toLowerCase() &&
+            st.chapter.toLowerCase() === c.toLowerCase() &&
+            st.topic.toLowerCase() === t.toLowerCase()
+    );
+
+    if (!exists) {
+      try {
+        await addDoc(collection(db, 'saved_topics'), {
+          teacherUid: user.uid,
+          teacherName: user.fullName || '',
+          subject: s,
+          chapter: c,
+          topic: t,
+          createdAt: serverTimestamp()
+        });
+      } catch (err) {
+        console.warn("Error auto-saving topic to Firestore:", err);
+      }
+    }
+  };
+
+  const handleDeleteSavedTopic = async (topicId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await deleteDoc(doc(db, 'saved_topics', topicId));
+    } catch (err) {
+      console.warn("Error deleting saved topic:", err);
+    }
+  };
+
+  // Compile list of Chapters from:
+  // 1. All department materials / files in this subject
+  // 2. All saved topics created by this teacher for this subject
+  const filesChapters = files
+    .filter(f => f && f.subject && finalSubject && f.subject.toLowerCase() === finalSubject.toLowerCase() && f.chapter)
+    .map(f => f.chapter as string);
+
+  const teacherSavedChapters = savedTopics
+    .filter(st => st.subject && finalSubject && st.subject.toLowerCase() === finalSubject.toLowerCase() && st.chapter)
+    .map(st => st.chapter as string);
+
+  const existingChapters = Array.from(new Set([
+    ...filesChapters,
+    ...teacherSavedChapters
+  ])).filter(Boolean);
 
   const finalChapter = isNewChapterForm ? newChapterText.trim() : chapter;
 
-  const existingTopics = Array.from(new Set(
-    myUploadedFiles
-      .filter(f => f.subject && finalSubject && f.subject.toLowerCase() === finalSubject.toLowerCase() &&
-                   f.chapter && finalChapter && f.chapter.toLowerCase() === finalChapter.toLowerCase() && f.topic)
-      .map(f => f.topic as string)
-  ));
+  // Compile list of Topics from:
+  // 1. All department materials / files in this subject & chapter
+  // 2. All saved topics created by this teacher for this subject & chapter
+  const filesTopics = files
+    .filter(f => f && f.subject && finalSubject && f.subject.toLowerCase() === finalSubject.toLowerCase() &&
+                 f.chapter && finalChapter && f.chapter.toLowerCase() === finalChapter.toLowerCase() && f.topic)
+    .map(f => f.topic as string);
+
+  const teacherSavedTopicsList = savedTopics
+    .filter(st => st.subject && finalSubject && st.subject.toLowerCase() === finalSubject.toLowerCase() &&
+                  st.chapter && finalChapter && st.chapter.toLowerCase() === finalChapter.toLowerCase() && st.topic)
+    .map(st => st.topic as string);
+
+  const existingTopics = Array.from(new Set([
+    ...filesTopics,
+    ...teacherSavedTopicsList
+  ])).filter(Boolean);
 
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -469,15 +564,34 @@ export default function DashboardTeacher({
     setFileValidationErrors(newErrors);
 
     if (successCount > 0) {
-      setUploadSuccess(t("Upload successful! {count} file(s) are awaiting admin approval.").replace("{count}", String(successCount)));
+      // Auto save subject, chapter, and topic under this teacher in Firestore
+      await saveCurriculumTopic(finalSub, finalCh, finalTopic);
+
+      setUploadSuccess(
+        t("Upload successful! {count} file(s) saved under '{subject}' → '{chapter}' → '{topic}'. This topic is saved to your account and retained below for additional file uploads.")
+          .replace("{count}", String(successCount))
+          .replace("{subject}", finalSub)
+          .replace("{chapter}", finalCh)
+          .replace("{topic}", finalTopic)
+      );
+
       setSelectedFiles(failedFiles);
       setDescription('');
-      setUploadClassLevel('');
-      setChapter(''); setNewChapterText('');
-      setTopic(''); setNewTopicText('');
-      setItemType(''); setNewItemTypeText('');
+      
+      // Retain Subject, Chapter, and Topic so teacher can easily upload multiple files for the same chapter!
+      setSelectedSubject(finalSub);
+      setIsNewSubjectForm(false);
+      setNewSubjectText('');
+
+      setChapter(finalCh);
       setIsNewChapterForm(false);
+      setNewChapterText('');
+
+      setTopic(finalTopic);
       setIsNewTopicForm(false);
+      setNewTopicText('');
+
+      setItemType(''); setNewItemTypeText('');
       setIsNewItemTypeForm(false);
       onUploadSuccess();
     } else {
@@ -755,7 +869,7 @@ export default function DashboardTeacher({
                   </button>
                 </div>
                 {isNewChapterForm ? (
-                  <input type="text" value={newChapterText} onChange={(e) => setNewChapterText(e.target.value)} placeholder={t("e.g. Chapter 1: Introduction")} className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold disabled:opacity-60 disabled:cursor-not-allowed" required disabled={loading} />
+                  <input type="text" value={newChapterText} onChange={(e) => setNewChapterText(e.target.value)} placeholder={t("e.g. Chapter 1: Motion / Kinetic Theory")} className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold disabled:opacity-60 disabled:cursor-not-allowed" required disabled={loading} />
                 ) : (
                   <div className="relative">
                     <select value={chapter} onChange={(e) => setChapter(e.target.value)} className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" required disabled={loading}>
@@ -764,6 +878,46 @@ export default function DashboardTeacher({
                       {existingChapters.length === 0 && (<option disabled value="">{t("No chapters found in this Subject. Create one!")}</option>)}
                     </select>
                     <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none"><ChevronDown className="w-3.5 h-3.5" /></span>
+                  </div>
+                )}
+                {/* Saved Chapters Chips */}
+                {existingChapters.length > 0 && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[9px] font-extrabold uppercase tracking-wider text-gray-400 dark:text-gray-500 flex items-center gap-1">
+                      <BookmarkCheck className="w-3 h-3 text-brand-500" />
+                      {t("Saved Chapters:")}
+                    </span>
+                    {existingChapters.map((chName, idx) => {
+                      const isSelected = !isNewChapterForm && chapter.toLowerCase() === chName.toLowerCase();
+                      const savedDoc = savedTopics.find(st => st.subject.toLowerCase() === finalSubject.toLowerCase() && st.chapter.toLowerCase() === chName.toLowerCase());
+                      return (
+                        <span
+                          key={idx}
+                          onClick={() => {
+                            setIsNewChapterForm(false);
+                            setChapter(chName);
+                            setNewChapterText('');
+                          }}
+                          className={`group text-[10px] font-bold px-2.5 py-1 rounded-lg border cursor-pointer transition-all flex items-center gap-1 select-none ${
+                            isSelected
+                              ? 'bg-[#15803d] text-white border-green-700 shadow-xs ring-2 ring-brand-500/20'
+                              : 'bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-slate-700'
+                          }`}
+                        >
+                          <span>{chName}</span>
+                          {savedDoc && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteSavedTopic(savedDoc.id, e)}
+                              className="opacity-60 hover:opacity-100 hover:text-red-400 transition-opacity p-0.5 ml-0.5 cursor-pointer"
+                              title={t("Remove from saved topics")}
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          )}
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -776,7 +930,7 @@ export default function DashboardTeacher({
                   </button>
                 </div>
                 {isNewTopicForm ? (
-                  <input type="text" value={newTopicText} onChange={(e) => setNewTopicText(e.target.value)} placeholder={t("e.g. Kazi Nazrul Islam")} className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold disabled:opacity-60 disabled:cursor-not-allowed" required disabled={loading} />
+                  <input type="text" value={newTopicText} onChange={(e) => setNewTopicText(e.target.value)} placeholder={t("e.g. Newton's Laws / Projectile Motion")} className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold disabled:opacity-60 disabled:cursor-not-allowed" required disabled={loading} />
                 ) : (
                   <div className="relative">
                     <select value={topic} onChange={(e) => setTopic(e.target.value)} className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" required disabled={loading}>
@@ -785,6 +939,50 @@ export default function DashboardTeacher({
                       {existingTopics.length === 0 && (<option disabled value="">{t("No topics found in this Chapter. Create one!")}</option>)}
                     </select>
                     <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none"><ChevronDown className="w-3.5 h-3.5" /></span>
+                  </div>
+                )}
+                {/* Saved Topics Chips */}
+                {existingTopics.length > 0 && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[9px] font-extrabold uppercase tracking-wider text-gray-400 dark:text-gray-500 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-amber-500" />
+                      {t("Saved Topics:")}
+                    </span>
+                    {existingTopics.map((topName, idx) => {
+                      const isSelected = !isNewTopicForm && topic.toLowerCase() === topName.toLowerCase();
+                      const savedDoc = savedTopics.find(
+                        st => st.subject.toLowerCase() === finalSubject.toLowerCase() &&
+                              st.chapter.toLowerCase() === finalChapter.toLowerCase() &&
+                              st.topic.toLowerCase() === topName.toLowerCase()
+                      );
+                      return (
+                        <span
+                          key={idx}
+                          onClick={() => {
+                            setIsNewTopicForm(false);
+                            setTopic(topName);
+                            setNewTopicText('');
+                          }}
+                          className={`group text-[10px] font-bold px-2.5 py-1 rounded-lg border cursor-pointer transition-all flex items-center gap-1 select-none ${
+                            isSelected
+                              ? 'bg-[#15803d] text-white border-green-700 shadow-xs ring-2 ring-brand-500/20'
+                              : 'bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-slate-700'
+                          }`}
+                        >
+                          <span>{topName}</span>
+                          {savedDoc && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteSavedTopic(savedDoc.id, e)}
+                              className="opacity-60 hover:opacity-100 hover:text-red-400 transition-opacity p-0.5 ml-0.5 cursor-pointer"
+                              title={t("Remove from saved topics")}
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          )}
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
               </div>

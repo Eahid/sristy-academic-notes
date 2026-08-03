@@ -200,5 +200,18 @@ service cloud.firestore {
       allow read: if true; // Config status accessible to unauthenticated guests to check shutdown state
       allow write: if isEmailVerified() && isMasterAdmin();
     }
+
+    // --- Saved Topics Collection ---
+    match /saved_topics/{topicId} {
+      allow read: if isSignedIn();
+      allow create, update: if isEmailVerified() && (
+        isMasterAdmin() ||
+        incoming().teacherUid == request.auth.uid
+      );
+      allow delete: if isEmailVerified() && (
+        isMasterAdmin() ||
+        existing().teacherUid == request.auth.uid
+      );
+    }
   }
 }
