@@ -41,7 +41,9 @@ import {
   HardDrive,
   X,
   Calendar,
-  ArrowUpDown
+  ArrowUpDown,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
@@ -92,6 +94,7 @@ export default function DashboardMasterAdmin({
   // Form states to create accounts
   const [newAdminUser, setNewAdminUser] = useState('');
   const [newAdminPass, setNewAdminPass] = useState('');
+  const [showNewAdminPass, setShowNewAdminPass] = useState(false);
   const [newAdminName, setNewAdminName] = useState('');
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('');
@@ -356,6 +359,7 @@ export default function DashboardMasterAdmin({
   const [targetEndpoint, setTargetEndpoint] = useState('');
   const [targetAccessKeyId, setTargetAccessKeyId] = useState('');
   const [targetSecretAccessKey, setTargetSecretAccessKey] = useState('');
+  const [showTargetSecret, setShowTargetSecret] = useState(false);
   const [targetBucketName, setTargetBucketName] = useState('');
   
   const [isMigrating, setIsMigrating] = useState(false);
@@ -1959,14 +1963,25 @@ export default function DashboardMasterAdmin({
 
               <div>
                 <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("Portal Key / Password")}</label>
-                <input
-                  type="password"
-                  value={newAdminPass}
-                  onChange={(e) => setNewAdminPass(e.target.value)}
-                  placeholder={t("Enter password...")}
-                  className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-705 text-gray-808 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs"
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type={showNewAdminPass ? "text" : "password"}
+                    value={newAdminPass}
+                    onChange={(e) => setNewAdminPass(e.target.value)}
+                    placeholder={t("Enter password...")}
+                    className="w-full pl-4 pr-10 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-705 text-gray-808 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewAdminPass(!showNewAdminPass)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer focus:outline-none"
+                    title={showNewAdminPass ? t("Hide password") : t("Show password")}
+                    tabIndex={-1}
+                  >
+                    {showNewAdminPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -3072,6 +3087,7 @@ export default function DashboardMasterAdmin({
                 selectedIds={selectedFileIds}
                 allFiles={files}
                 currentFilteredFiles={displayFiles}
+                currentUser={user}
                 onSelectToggle={(id) => {
                   setSelectedFileIds(prev =>
                     prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
@@ -3810,15 +3826,26 @@ R2_BUCKET_NAME="${r2ConfigStatus.bucketName || 'sristy-academic-notes'}"`}
                         <label className="block text-[10px] font-extrabold uppercase text-gray-455 dark:text-gray-400 tracking-wider">
                           {t("Target Secret Access Key")}
                         </label>
-                        <input
-                          type="password"
-                          required
-                          placeholder="••••••••••••••••••••••••••••••••"
-                          value={targetSecretAccessKey}
-                          onChange={(e) => setTargetSecretAccessKey(e.target.value)}
-                          disabled={isMigrating}
-                          className="w-full text-xs bg-gray-50 dark:bg-slate-850 hover:bg-gray-100/30 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-lg p-2.5 outline-hidden transition-all text-gray-800 dark:text-gray-100 font-mono"
-                        />
+                        <div className="relative">
+                          <input
+                            type={showTargetSecret ? "text" : "password"}
+                            required
+                            placeholder="••••••••••••••••••••••••••••••••"
+                            value={targetSecretAccessKey}
+                            onChange={(e) => setTargetSecretAccessKey(e.target.value)}
+                            disabled={isMigrating}
+                            className="w-full text-xs bg-gray-50 dark:bg-slate-850 hover:bg-gray-100/30 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-lg p-2.5 pr-10 outline-hidden transition-all text-gray-800 dark:text-gray-100 font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowTargetSecret(!showTargetSecret)}
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer focus:outline-none"
+                            title={showTargetSecret ? t("Hide key") : t("Show key")}
+                            tabIndex={-1}
+                          >
+                            {showTargetSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
                       </div>
                     </div>
 

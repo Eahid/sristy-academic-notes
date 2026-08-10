@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { FileArchive } from '../types';
-import { Download, Loader2, CheckSquare, Square, XCircle } from 'lucide-react';
+import { FileArchive, UserProfile } from '../types';
+import { Download, Loader2, CheckSquare, Square, XCircle, Lock } from 'lucide-react';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import JSZip from 'jszip';
 
@@ -8,6 +8,8 @@ interface BatchDownloadBarProps {
   selectedIds: string[];
   allFiles: FileArchive[];
   currentFilteredFiles: FileArchive[];
+  currentUser?: UserProfile | null;
+  onRequireAuth?: () => void;
   onSelectToggle: (id: string) => void;
   onClearSelection: () => void;
   onSelectAll: (ids: string[]) => void;
@@ -17,6 +19,8 @@ export default function BatchDownloadBar({
   selectedIds,
   allFiles,
   currentFilteredFiles,
+  currentUser,
+  onRequireAuth,
   onClearSelection,
   onSelectAll
 }: BatchDownloadBarProps) {
@@ -43,21 +47,29 @@ export default function BatchDownloadBar({
 
   const handleSelectAllToggle = () => {
     if (isAllSelected) {
-      // Deselect all in current view
-      currentFilteredFiles.forEach(f => {
-        // We will pass the deselected list to the parent
-      });
-      // Better: filter out currentFilteredIds from selectedIds
       const newSelected = selectedIds.filter(id => !currentFilteredIds.includes(id));
       onSelectAll(newSelected);
     } else {
-      // Select all in current view (merge with other selections if any)
       const union = Array.from(new Set([...selectedIds, ...currentFilteredIds]));
       onSelectAll(union);
     }
   };
 
   const handleBatchDownload = async () => {
+    if (!currentUser) {
+      if (onRequireAuth) {
+        onRequireAuth();
+      } else {
+        alert(t("Please sign in to download zip archives of educational notes."));
+      }
+      return;
+    }
+
+    if (currentUser.role === 'viewer') {
+      alert(t("You do not have permission to download files. Please contact your branch admin."));
+      return;
+    }
+
     const selectedFilesToDownload = allFiles.filter(f => selectedIds.includes(f.id));
     if (selectedFilesToDownload.length === 0) return;
 
@@ -178,8 +190,8 @@ export default function BatchDownloadBar({
               </>
             ) : (
               <>
-                <Download className="w-4 h-4 text-white" />
-                <span>{t("Batch Download (ZIP)")}</span>
+                {!currentUser ? <Lock className="w-4 h-4 text-amber-300" /> : <Download className="w-4 h-4 text-white" />}
+                <span>{!currentUser ? t("Batch Download (Sign In Required)") : t("Batch Download (ZIP)")}</span>
               </>
             )}
           </button>

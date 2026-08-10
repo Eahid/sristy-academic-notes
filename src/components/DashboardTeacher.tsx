@@ -1156,6 +1156,7 @@ export default function DashboardTeacher({
                   selectedIds={selectedFileIds}
                   allFiles={files}
                   currentFilteredFiles={currentFilteredFiles}
+                  currentUser={user}
                   onSelectToggle={(id) => { setSelectedFileIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]); }}
                   onClearSelection={() => setSelectedFileIds([])}
                   onSelectAll={(ids) => setSelectedFileIds(ids)}

@@ -246,6 +246,7 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
             selectedIds={selectedFileIds}
             allFiles={files}
             currentFilteredFiles={sortedArchives}
+            currentUser={user}
             onSelectToggle={(id) => {
               setSelectedFileIds(prev =>
                 prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]

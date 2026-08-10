@@ -1445,6 +1445,8 @@ export default function App() {
                       selectedIds={selectedFileIds}
                       allFiles={files}
                       currentFilteredFiles={filteredPublicArchives}
+                      currentUser={currentUser}
+                      onRequireAuth={() => setAuthModalOpen(true)}
                       onSelectToggle={(id) => {
                         setSelectedFileIds(prev =>
                           prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]

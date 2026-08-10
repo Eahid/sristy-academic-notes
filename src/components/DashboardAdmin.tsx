@@ -33,7 +33,9 @@ import {
   Sparkles,
   Layers,
   Loader2,
-  FileImage
+  FileImage,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
@@ -88,6 +90,7 @@ export default function DashboardAdmin({
   // Form states to create branch members (teachers/viewers)
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [newFullName, setNewFullName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [memberRole, setNewMemberRole] = useState<'teacher' | 'viewer'>('teacher');
@@ -1374,14 +1377,25 @@ export default function DashboardAdmin({
 
               <div>
                 <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-505 uppercase tracking-widest mb-1.5 font-sans">{t("Portal Key / Password")}</label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder={t("Enter password...")}
-                  className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-medium"
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder={t("Enter password...")}
+                    className="w-full pl-4 pr-10 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-medium"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer focus:outline-none"
+                    title={showNewPassword ? t("Hide password") : t("Show password")}
+                    tabIndex={-1}
+                  >
+                    {showNewPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -2862,6 +2876,7 @@ export default function DashboardAdmin({
                 selectedIds={selectedFileIds}
                 allFiles={files}
                 currentFilteredFiles={displayFiles}
+                currentUser={user}
                 onSelectToggle={(id) => {
                   setSelectedFileIds(prev =>
                     prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
