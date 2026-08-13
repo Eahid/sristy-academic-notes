@@ -175,18 +175,31 @@ export default function DashboardAdmin({
   const finalSubject = isNewSubjectForm ? newSubjectText.trim() : selectedSubject;
   const finalChapter = isNewChapterForm ? newChapterText.trim() : chapter;
 
-  const existingChapters = Array.from(new Set(
+  const convertBengaliToEnglishNumerals = (str: string) => {
+    const bnDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+    return str.replace(/[০-৯]/g, (w) => bnDigits.indexOf(w).toString());
+  };
+
+  const autoSortItems = (list: string[]) => {
+    return Array.from(new Set(list)).filter(Boolean).sort((a, b) => {
+      const normA = convertBengaliToEnglishNumerals(a);
+      const normB = convertBengaliToEnglishNumerals(b);
+      return normA.localeCompare(normB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+  };
+
+  const existingChapters = autoSortItems(
     files
       .filter(f => f.subject && finalSubject && f.subject.toLowerCase() === finalSubject.toLowerCase() && f.chapter)
       .map(f => f.chapter as string)
-  ));
+  );
 
-  const existingTopics = Array.from(new Set(
+  const existingTopics = autoSortItems(
     files
       .filter(f => f.subject && finalSubject && f.subject.toLowerCase() === finalSubject.toLowerCase() &&
                    f.chapter && finalChapter && f.chapter.toLowerCase() === finalChapter.toLowerCase() && f.topic)
       .map(f => f.topic as string)
-  ));
+  );
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();

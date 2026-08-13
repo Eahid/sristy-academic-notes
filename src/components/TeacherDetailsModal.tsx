@@ -18,7 +18,8 @@ import {
   XCircle,
   Trash2,
   Eye, 
-  Download 
+  Download,
+  Layers
 } from 'lucide-react';
 
 interface TeacherDetailsModalProps {
@@ -84,6 +85,8 @@ export default function TeacherDetailsModal({
             branch: data.branch || '',
             subject: data.subject || '',
             subjects: data.subjects || [],
+            classes: data.classes || [],
+            classAssignments: data.classAssignments || [],
             status: data.status || 'active',
             profilePic: data.profilePic || '',
             bio: data.bio || '',
@@ -281,18 +284,39 @@ export default function TeacherDetailsModal({
                       </p>
                     </div>
 
+                    <div className="bg-gray-50/50 dark:bg-slate-950/10 border border-gray-100 dark:border-slate-850 p-3.5 rounded-xl space-y-1.5 md:col-span-2">
+                      <p className="text-[10px] text-gray-400 dark:text-gray-550 font-bold uppercase tracking-wider">{t("Assigned Classes")}</p>
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {(() => {
+                          const assignedClasses = Array.from(new Set([
+                            ...(teacher.classes || []),
+                            ...(teacher.classAssignments ? teacher.classAssignments.map(a => a.classLevel) : [])
+                          ])).filter(Boolean);
+                          if (assignedClasses.length === 0) {
+                            return <span className="text-gray-400 italic text-[11px]">{t("No classes assigned officially.")}</span>;
+                          }
+                          return assignedClasses.map((cls, idx) => (
+                            <span key={idx} className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-750 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30 text-[10px] px-2.5 py-0.5 rounded-md flex items-center gap-1 font-bold">
+                              <Layers className="w-3 h-3 text-emerald-500 shrink-0" />
+                              <span>{t(cls)}</span>
+                            </span>
+                          ));
+                        })()}
+                      </div>
+                    </div>
+
                     <div className="bg-gray-50/50 dark:bg-slate-950/10 border border-gray-100 dark:border-slate-850 p-3.5 rounded-xl space-y-1 md:col-span-2">
                       <p className="text-[10px] text-gray-400 dark:text-gray-550 font-bold uppercase tracking-wider">{t("Subjects Assigned Specialty")}</p>
                       <div className="flex flex-wrap gap-1.5 pt-1">
                         {teacher.subjects && teacher.subjects.length > 0 ? (
                           teacher.subjects.map((s, idx) => (
-                            <span key={idx} className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-750 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-md flex items-center gap-1">
+                            <span key={idx} className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-750 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-md flex items-center gap-1 font-bold">
                               <BookOpen className="w-3 h-3 text-indigo-500 shrink-0" />
                               <span>{t(s)}</span>
                             </span>
                           ))
                         ) : teacher.subject ? (
-                          <span className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-750 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-md flex items-center gap-1">
+                          <span className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-750 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-[10px] px-2.5 py-0.5 rounded-md flex items-center gap-1 font-bold">
                             <BookOpen className="w-3 h-3 text-indigo-500 shrink-0" />
                             <span>{t(teacher.subject)}</span>
                           </span>
@@ -301,6 +325,26 @@ export default function TeacherDetailsModal({
                         )}
                       </div>
                     </div>
+
+                    {teacher.classAssignments && teacher.classAssignments.length > 0 && (
+                      <div className="bg-gray-50/50 dark:bg-slate-950/10 border border-gray-100 dark:border-slate-850 p-3.5 rounded-xl space-y-2 md:col-span-2">
+                        <p className="text-[10px] text-gray-400 dark:text-gray-550 font-bold uppercase tracking-wider">{t("Class & Subject Mappings")}</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {teacher.classAssignments.map((asg, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-2 bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-800 rounded-lg text-xs font-semibold">
+                              <span className="text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                                <BookOpen className="w-3.5 h-3.5 text-brand-500" />
+                                <span>{t(asg.subject)}</span>
+                              </span>
+                              <span className="px-2 py-0.5 bg-brand-50 dark:bg-brand-950/20 text-brand-600 dark:text-brand-400 rounded text-[10px] font-extrabold flex items-center gap-1">
+                                <Layers className="w-3 h-3 text-brand-500" />
+                                <span>{t(asg.classLevel)}</span>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Biography */}

@@ -3,7 +3,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { UserProfile } from '../types';
 import { useBranchSubject } from './BranchSubjectContext';
-import { X, Camera, Save, AlertCircle, CheckCircle } from 'lucide-react';
+import { X, Camera, Save, AlertCircle, CheckCircle, BookOpen, Layers } from 'lucide-react';
 import { useThemeLanguage } from './ThemeLanguageContext';
 
 interface ProfileModalProps {
@@ -193,30 +193,78 @@ export default function ProfileModal({ user, onClose, onSaveSuccess }: ProfileMo
           )}
 
           {user.role === 'teacher' && (
-            <div className="space-y-2">
-              <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">{t("Assigned Specialty Subjects")}</label>
-              <div className="p-3 bg-gray-50 dark:bg-slate-850 rounded-lg border border-gray-150 dark:border-slate-800 space-y-2 max-h-48 overflow-y-auto">
-                {subjects.map((sub, idx) => {
-                  const isChecked = selectedSubjects.includes(sub);
-                  return (
-                    <div key={idx} className="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-gray-400 select-none">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        disabled
-                        className="rounded text-brand-500 focus:ring-brand-500 w-4 h-4 opacity-60 cursor-not-allowed"
-                      />
-                      <span className={isChecked ? "text-gray-800 dark:text-gray-200" : "text-gray-400 dark:text-gray-500 line-through decoration-gray-300 dark:decoration-gray-700"}>
-                        {t(sub)}
+            <div className="space-y-3 pt-1">
+              {/* 1. Assigned Classes */}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("Assigned Classes")}</label>
+                <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700">
+                  {(() => {
+                    const assignedClasses = Array.from(new Set([
+                      ...(user.classes || []),
+                      ...(user.classAssignments ? user.classAssignments.map(a => a.classLevel) : [])
+                    ])).filter(Boolean);
+
+                    if (assignedClasses.length === 0) {
+                      return <span className="text-xs text-gray-400 italic">{t("No classes assigned yet.")}</span>;
+                    }
+
+                    return assignedClasses.map((cls, idx) => (
+                      <span key={idx} className="bg-brand-50 dark:bg-brand-950/30 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800 text-xs px-2.5 py-1 rounded-md font-bold flex items-center gap-1">
+                        <Layers className="w-3.5 h-3.5 text-brand-500 shrink-0" />
+                        <span>{t(cls)}</span>
                       </span>
-                    </div>
-                  );
-                })}
+                    ));
+                  })()}
+                </div>
               </div>
-              <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium bg-amber-50 dark:bg-amber-950/20 p-2.5 rounded-lg border border-amber-100 dark:border-amber-900/30 flex items-start gap-1.5 leading-normal">
-                <span>🔐</span>
-                <span>{t("Subject assignment is locked for teachers. Please coordinate with a Sristy Administrator to modify your specialty subjects.")}</span>
-              </p>
+
+              {/* 2. Specific Class & Subject Mappings */}
+              {Array.isArray(user.classAssignments) && user.classAssignments.length > 0 && (
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">{t("Assigned Subject & Class Mappings")}</label>
+                  <div className="p-3 bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 space-y-1.5 max-h-40 overflow-y-auto">
+                    {user.classAssignments.map((asg, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-2 bg-white dark:bg-slate-900 rounded-md border border-gray-150 dark:border-slate-700 text-xs font-semibold">
+                        <span className="text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                          <BookOpen className="w-3.5 h-3.5 text-brand-500 shrink-0" />
+                          <span>{t(asg.subject)}</span>
+                        </span>
+                        <span className="px-2 py-0.5 bg-brand-50 dark:bg-brand-950/30 text-brand-700 dark:text-brand-300 rounded text-[10px] font-extrabold flex items-center gap-1">
+                          <Layers className="w-3 h-3 text-brand-500 shrink-0" />
+                          <span>{t(asg.classLevel)}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 3. Assigned Specialty Subjects */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">{t("Assigned Specialty Subjects")}</label>
+                <div className="p-3 bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 space-y-2 max-h-40 overflow-y-auto">
+                  {subjects.map((sub, idx) => {
+                    const isChecked = selectedSubjects.includes(sub);
+                    return (
+                      <div key={idx} className="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-gray-400 select-none">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          disabled
+                          className="rounded text-brand-500 focus:ring-brand-500 w-4 h-4 opacity-60 cursor-not-allowed"
+                        />
+                        <span className={isChecked ? "text-gray-800 dark:text-gray-200" : "text-gray-400 dark:text-gray-500 line-through decoration-gray-300 dark:decoration-gray-700"}>
+                          {t(sub)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium bg-amber-50 dark:bg-amber-950/20 p-2.5 rounded-lg border border-amber-100 dark:border-amber-900/30 flex items-start gap-1.5 leading-normal">
+                  <span>🔐</span>
+                  <span>{t("Class and subject assignments are managed by Sristy Administrators.")}</span>
+                </p>
+              </div>
             </div>
           )}
 

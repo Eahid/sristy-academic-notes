@@ -243,6 +243,19 @@ export default function DashboardTeacher({
     }
   };
 
+  const convertBengaliToEnglishNumerals = (str: string) => {
+    const bnDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+    return str.replace(/[০-৯]/g, (w) => bnDigits.indexOf(w).toString());
+  };
+
+  const autoSortItems = (list: string[]) => {
+    return Array.from(new Set(list)).filter(Boolean).sort((a, b) => {
+      const normA = convertBengaliToEnglishNumerals(a);
+      const normB = convertBengaliToEnglishNumerals(b);
+      return normA.localeCompare(normB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+  };
+
   // Compile list of Chapters from:
   // 1. All department materials / files in this subject
   // 2. All saved topics created by this teacher for this subject
@@ -254,10 +267,10 @@ export default function DashboardTeacher({
     .filter(st => st.subject && finalSubject && st.subject.toLowerCase() === finalSubject.toLowerCase() && st.chapter)
     .map(st => st.chapter as string);
 
-  const existingChapters = Array.from(new Set([
+  const existingChapters = autoSortItems([
     ...filesChapters,
     ...teacherSavedChapters
-  ])).filter(Boolean);
+  ]);
 
   const finalChapter = isNewChapterForm ? newChapterText.trim() : chapter;
 
@@ -274,10 +287,10 @@ export default function DashboardTeacher({
                   st.chapter && finalChapter && st.chapter.toLowerCase() === finalChapter.toLowerCase() && st.topic)
     .map(st => st.topic as string);
 
-  const existingTopics = Array.from(new Set([
+  const existingTopics = autoSortItems([
     ...filesTopics,
     ...teacherSavedTopicsList
-  ])).filter(Boolean);
+  ]);
 
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -880,46 +893,6 @@ export default function DashboardTeacher({
                     <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none"><ChevronDown className="w-3.5 h-3.5" /></span>
                   </div>
                 )}
-                {/* Saved Chapters Chips */}
-                {existingChapters.length > 0 && (
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <span className="text-[9px] font-extrabold uppercase tracking-wider text-gray-400 dark:text-gray-500 flex items-center gap-1">
-                      <BookmarkCheck className="w-3 h-3 text-brand-500" />
-                      {t("Saved Chapters:")}
-                    </span>
-                    {existingChapters.map((chName, idx) => {
-                      const isSelected = !isNewChapterForm && chapter.toLowerCase() === chName.toLowerCase();
-                      const savedDoc = savedTopics.find(st => st.subject.toLowerCase() === finalSubject.toLowerCase() && st.chapter.toLowerCase() === chName.toLowerCase());
-                      return (
-                        <span
-                          key={idx}
-                          onClick={() => {
-                            setIsNewChapterForm(false);
-                            setChapter(chName);
-                            setNewChapterText('');
-                          }}
-                          className={`group text-[10px] font-bold px-2.5 py-1 rounded-lg border cursor-pointer transition-all flex items-center gap-1 select-none ${
-                            isSelected
-                              ? 'bg-[#15803d] text-white border-green-700 shadow-xs ring-2 ring-brand-500/20'
-                              : 'bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-slate-700'
-                          }`}
-                        >
-                          <span>{chName}</span>
-                          {savedDoc && (
-                            <button
-                              type="button"
-                              onClick={(e) => handleDeleteSavedTopic(savedDoc.id, e)}
-                              className="opacity-60 hover:opacity-100 hover:text-red-400 transition-opacity p-0.5 ml-0.5 cursor-pointer"
-                              title={t("Remove from saved topics")}
-                            >
-                              <X className="w-2.5 h-2.5" />
-                            </button>
-                          )}
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
 
               <div>
@@ -939,50 +912,6 @@ export default function DashboardTeacher({
                       {existingTopics.length === 0 && (<option disabled value="">{t("No topics found in this Chapter. Create one!")}</option>)}
                     </select>
                     <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none"><ChevronDown className="w-3.5 h-3.5" /></span>
-                  </div>
-                )}
-                {/* Saved Topics Chips */}
-                {existingTopics.length > 0 && (
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <span className="text-[9px] font-extrabold uppercase tracking-wider text-gray-400 dark:text-gray-500 flex items-center gap-1">
-                      <Sparkles className="w-3 h-3 text-amber-500" />
-                      {t("Saved Topics:")}
-                    </span>
-                    {existingTopics.map((topName, idx) => {
-                      const isSelected = !isNewTopicForm && topic.toLowerCase() === topName.toLowerCase();
-                      const savedDoc = savedTopics.find(
-                        st => st.subject.toLowerCase() === finalSubject.toLowerCase() &&
-                              st.chapter.toLowerCase() === finalChapter.toLowerCase() &&
-                              st.topic.toLowerCase() === topName.toLowerCase()
-                      );
-                      return (
-                        <span
-                          key={idx}
-                          onClick={() => {
-                            setIsNewTopicForm(false);
-                            setTopic(topName);
-                            setNewTopicText('');
-                          }}
-                          className={`group text-[10px] font-bold px-2.5 py-1 rounded-lg border cursor-pointer transition-all flex items-center gap-1 select-none ${
-                            isSelected
-                              ? 'bg-[#15803d] text-white border-green-700 shadow-xs ring-2 ring-brand-500/20'
-                              : 'bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-slate-700'
-                          }`}
-                        >
-                          <span>{topName}</span>
-                          {savedDoc && (
-                            <button
-                              type="button"
-                              onClick={(e) => handleDeleteSavedTopic(savedDoc.id, e)}
-                              className="opacity-60 hover:opacity-100 hover:text-red-400 transition-opacity p-0.5 ml-0.5 cursor-pointer"
-                              title={t("Remove from saved topics")}
-                            >
-                              <X className="w-2.5 h-2.5" />
-                            </button>
-                          )}
-                        </span>
-                      );
-                    })}
                   </div>
                 )}
               </div>
