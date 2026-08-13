@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
+import Pagination from './Pagination';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import { CLASS_LEVELS } from '../constants';
 import { getFilteredSubjectsForClass, getFilteredClassesForSubject } from '../utils';
@@ -728,6 +729,12 @@ export default function DashboardAdmin({
   const [adminSubject, setAdminSubject] = useState('');
   const [adminClassLevel, setAdminClassLevel] = useState('');
   const [adminSortBy, setAdminSortBy] = useState<'date_desc' | 'date_asc' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc'>('date_desc');
+  const [adminCurrentPage, setAdminCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 12;
+
+  useEffect(() => {
+    setAdminCurrentPage(1);
+  }, [adminSearch, adminTeacher, adminFileType, adminStartDate, adminEndDate, adminSubject, adminClassLevel, adminSortBy, fileFilter]);
 
   useEffect(() => {
     if (pendingFiles.length > 0) {
@@ -752,7 +759,8 @@ export default function DashboardAdmin({
         (f.fileName || '').toLowerCase().includes(queryStr) ||
         (f.topic || '').toLowerCase().includes(queryStr) ||
         (f.chapter || '').toLowerCase().includes(queryStr) ||
-        (f.description || '').toLowerCase().includes(queryStr)
+        (f.description || '').toLowerCase().includes(queryStr) ||
+        (f.uploaderName || '').toLowerCase().includes(queryStr)
       );
     }
 
@@ -2900,7 +2908,7 @@ export default function DashboardAdmin({
               />
 
               <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 sm:gap-6">
-                {displayFiles.map((file) => (
+                {displayFiles.slice((adminCurrentPage - 1) * ITEMS_PER_PAGE, adminCurrentPage * ITEMS_PER_PAGE).map((file) => (
                   <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
                     <FileCard
                       file={file}
@@ -2922,6 +2930,14 @@ export default function DashboardAdmin({
                   </div>
                 ))}
               </div>
+
+              <Pagination
+                currentPage={adminCurrentPage}
+                totalPages={Math.ceil(displayFiles.length / ITEMS_PER_PAGE)}
+                onPageChange={(p) => setAdminCurrentPage(p)}
+                totalItems={displayFiles.length}
+                itemsPerPage={ITEMS_PER_PAGE}
+              />
             </div>
           )}
         </div>

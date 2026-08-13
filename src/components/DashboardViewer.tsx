@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FileArchive, UserProfile } from '../types';
 import { useBranchSubject } from './BranchSubjectContext';
 import { Search, SlidersHorizontal, BookOpen, School, FileCheck, CheckCircle2, ChevronDown, List, Grid, FileText, FileImage, Download, Eye, ArrowUpDown } from 'lucide-react';
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
+import Pagination from './Pagination';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import { CLASS_LEVELS } from '../constants';
 
@@ -23,16 +24,28 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedClassLevel, setSelectedClassLevel] = useState('');
   const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc' | 'class_asc' | 'class_desc'>('date_desc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 12;
+
   const { t } = useThemeLanguage();
   const { branches, subjects } = useBranchSubject();
+
+  // Reset pagination on filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedBranch, selectedSubject, selectedClassLevel, sortBy]);
 
   // Only approved files should be shown to viewers
   const approvedFiles = files.filter(f => f.isApproved);
 
   const filteredArchives = approvedFiles.filter((file) => {
-    const matchesSearch = searchQuery.trim() === '' || 
-      file.fileName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      (file.description && file.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    const query = searchQuery.trim().toLowerCase();
+    const matchesSearch = query === '' || 
+      (file.fileName || '').toLowerCase().includes(query) || 
+      (file.description || '').toLowerCase().includes(query) ||
+      (file.uploaderName || '').toLowerCase().includes(query) ||
+      (file.chapter || '').toLowerCase().includes(query) ||
+      (file.topic || '').toLowerCase().includes(query);
 
     const matchesBranch = selectedBranch === '' || file.branch === selectedBranch;
     const matchesSubject = selectedSubject === '' || file.subject === selectedSubject;
@@ -262,58 +275,60 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
             <FileCheck className="w-12 h-12 mx-auto opacity-50 stroke-1" />
             <p className="text-xs">{t("No matching verified files found in Sristy Education Family's digital database.")}</p>
           </div>
-        ) : viewMode === 'grid' ? (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {sortedArchives.map((file) => (
-              <FileCard
-                key={file.id}
-                file={file}
-                user={user}
-                onDownload={onDownload}
-                onPreview={onPreview}
-                isSelected={selectedFileIds.includes(file.id)}
-                onSelectToggle={(id) => {
-                  setSelectedFileIds(prev =>
-                    prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-                  );
-                }}
-                onViewTeacherDetails={onViewTeacherDetails}
-                allFiles={files}
-              />
-            ))}
-          </div>
         ) : (
-          /* LIST VIEW */
-          <div className="overflow-x-auto bg-white dark:bg-slate-900 rounded-xl border border-gray-150 dark:border-slate-800 shadow-xs transition-colors">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-slate-850/30 text-gray-400 uppercase font-extrabold text-[9px] tracking-wider border-b border-gray-100 dark:border-slate-800">
-                  <th className="py-3 px-4 w-12 text-center">
-                    <input
-                      type="checkbox"
-                      checked={selectedFileIds.length > 0 && selectedFileIds.length === sortedArchives.length}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedFileIds(sortedArchives.map(f => f.id));
-                        } else {
-                          setSelectedFileIds([]);
-                        }
-                      }}
-                      className="w-4 h-4 rounded border-gray-300 dark:border-slate-700 text-[#15803d] dark:text-[#22c55e] focus:ring-[#15803d] cursor-pointer accent-[#15803d]"
-                    />
-                  </th>
-                  <th className="py-3 px-4">{t("Document")}</th>
-                  <th className="py-3 px-4">{t("Campus/Branch")}</th>
-                  <th className="py-3 px-4">{t("Department/Subject")}</th>
-                  <th className="py-3 px-4">{t("Chapter & Topic")}</th>
-                  <th className="py-3 px-4 text-center">{t("Size")}</th>
-                  <th className="py-3 px-4 text-center">{t("Author")}</th>
-                  <th className="py-3 px-4 text-center">{t("Downloads")}</th>
-                  <th className="py-3 px-4 text-right pr-6">{t("Actions")}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-slate-800 font-medium text-gray-700 dark:text-gray-300">
-                {sortedArchives.map((file) => {
+          <>
+            {viewMode === 'grid' ? (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {sortedArchives.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((file) => (
+                  <FileCard
+                    key={file.id}
+                    file={file}
+                    user={user}
+                    onDownload={onDownload}
+                    onPreview={onPreview}
+                    isSelected={selectedFileIds.includes(file.id)}
+                    onSelectToggle={(id) => {
+                      setSelectedFileIds(prev =>
+                        prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+                      );
+                    }}
+                    onViewTeacherDetails={onViewTeacherDetails}
+                    allFiles={files}
+                  />
+                ))}
+              </div>
+            ) : (
+              /* LIST VIEW */
+              <div className="overflow-x-auto bg-white dark:bg-slate-900 rounded-xl border border-gray-150 dark:border-slate-800 shadow-xs transition-colors">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-slate-850/30 text-gray-400 uppercase font-extrabold text-[9px] tracking-wider border-b border-gray-100 dark:border-slate-800">
+                      <th className="py-3 px-4 w-12 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedFileIds.length > 0 && selectedFileIds.length === sortedArchives.length}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedFileIds(sortedArchives.map(f => f.id));
+                            } else {
+                              setSelectedFileIds([]);
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-gray-300 dark:border-slate-700 text-[#15803d] dark:text-[#22c55e] focus:ring-[#15803d] cursor-pointer accent-[#15803d]"
+                        />
+                      </th>
+                      <th className="py-3 px-4">{t("Document")}</th>
+                      <th className="py-3 px-4">{t("Campus/Branch")}</th>
+                      <th className="py-3 px-4">{t("Department/Subject")}</th>
+                      <th className="py-3 px-4">{t("Chapter & Topic")}</th>
+                      <th className="py-3 px-4 text-center">{t("Size")}</th>
+                      <th className="py-3 px-4 text-center">{t("Author")}</th>
+                      <th className="py-3 px-4 text-center">{t("Downloads")}</th>
+                      <th className="py-3 px-4 text-right pr-6">{t("Actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-slate-800 font-medium text-gray-700 dark:text-gray-300">
+                    {sortedArchives.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((file) => {
                   // Format helper for bytes inside map
                   const formatSizeMap = (bytes: number) => {
                     if (bytes === 0) return '0 B';
@@ -443,7 +458,17 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
             </table>
           </div>
         )}
-      </div>
-    </div>
+
+        <Pagination
+          currentPage={currentPage}
+          totalPages={Math.ceil(sortedArchives.length / ITEMS_PER_PAGE)}
+          onPageChange={(p) => setCurrentPage(p)}
+          totalItems={sortedArchives.length}
+          itemsPerPage={ITEMS_PER_PAGE}
+        />
+      </>
+    )}
+  </div>
+</div>
   );
 }

@@ -157,7 +157,6 @@ export default function App() {
       alert(t("You do not have permission to view files. Please contact your branch admin."));
       return;
     }
-    handleDownloadAttempt(file);
 
     if (file.fileUrl) {
       let previewUrl = file.fileUrl;
@@ -166,7 +165,10 @@ export default function App() {
         previewUrl = `/api/r2/file?url=${encodeURIComponent(previewUrl)}`;
       }
       
-      window.open(previewUrl, '_blank');
+      const newWin = window.open(previewUrl, '_blank');
+      if (newWin) {
+        newWin.focus();
+      }
     } else {
       setPreviewFile(file);
     }

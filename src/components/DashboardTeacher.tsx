@@ -6,6 +6,7 @@ import { UserProfile, FileArchive } from '../types';
 import { Upload, CheckCircle2, AlertCircle, Sparkles, FolderLock, Globe, BookOpen, Layers, ChevronDown, Loader2, Bell, AlertTriangle, Calendar, X, List, Grid, Search, FileText, FileImage, Download, Eye, Trash2, Pencil, Save, BookmarkCheck } from 'lucide-react';
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
+import Pagination from './Pagination';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import { useBranchSubject } from './BranchSubjectContext';
 import { CLASS_LEVELS } from '../constants';
@@ -74,6 +75,13 @@ export default function DashboardTeacher({
   const [uploadClassLevel, setUploadClassLevel] = useState('');
   const [filterSubject, setFilterSubject] = useState('');
   const [filterClassLevel, setFilterClassLevel] = useState('');
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 12;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [archiveTab, searchTerm, filterSubject, filterClassLevel]);
 
   // ── Edit File Modal states ──
   const [editingFile, setEditingFile] = useState<FileArchive | null>(null);
@@ -1093,7 +1101,7 @@ export default function DashboardTeacher({
 
                 {viewMode === 'grid' ? (
                   <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 sm:gap-6">
-                    {currentFilteredFiles.map((file) => (
+                    {currentFilteredFiles.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((file) => (
                       <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
                         <FileCard
                           file={file}
@@ -1128,7 +1136,7 @@ export default function DashboardTeacher({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 dark:divide-slate-800 font-medium text-gray-700 dark:text-gray-300">
-                        {currentFilteredFiles.map((file) => {
+                        {currentFilteredFiles.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((file) => {
                           const isDocApproved = file.isApproved;
                           const formatSizeMap = (bytes: number) => {
                             if (bytes === 0) return '0 B';
@@ -1190,6 +1198,14 @@ export default function DashboardTeacher({
                     </table>
                   </div>
                 )}
+
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={Math.ceil(currentFilteredFiles.length / ITEMS_PER_PAGE)}
+                  onPageChange={(p) => setCurrentPage(p)}
+                  totalItems={currentFilteredFiles.length}
+                  itemsPerPage={ITEMS_PER_PAGE}
+                />
               </div>
             )}
           </div>

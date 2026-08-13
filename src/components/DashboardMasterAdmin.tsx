@@ -47,6 +47,7 @@ import {
 } from 'lucide-react';
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
+import Pagination from './Pagination';
 import SristyBoardDirectory from './SristyBoardDirectory';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import { CLASS_LEVELS } from '../constants';
@@ -129,6 +130,12 @@ export default function DashboardMasterAdmin({
   const [masterBranch, setMasterBranch] = useState('');
   const [masterStatusFilter, setMasterStatusFilter] = useState<'all' | 'pending' | 'approved'>('all');
   const [masterSortBy, setMasterSortBy] = useState<'date_desc' | 'date_asc' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc'>('date_desc');
+  const [masterCurrentPage, setMasterCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 12;
+
+  useEffect(() => {
+    setMasterCurrentPage(1);
+  }, [masterSearch, masterTeacher, masterFileType, masterStartDate, masterEndDate, masterSubject, masterClassLevel, masterBranch, masterStatusFilter, masterSortBy]);
 
   const displayFiles = (() => {
     let list = [...files];
@@ -164,7 +171,8 @@ export default function DashboardMasterAdmin({
         (f.fileName || '').toLowerCase().includes(queryStr) ||
         (f.topic || '').toLowerCase().includes(queryStr) ||
         (f.chapter || '').toLowerCase().includes(queryStr) ||
-        (f.description || '').toLowerCase().includes(queryStr)
+        (f.description || '').toLowerCase().includes(queryStr) ||
+        (f.uploaderName || '').toLowerCase().includes(queryStr)
       );
     }
 
@@ -3098,7 +3106,7 @@ export default function DashboardMasterAdmin({
               />
 
               <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 sm:gap-6">
-                {displayFiles.map((file) => (
+                {displayFiles.slice((masterCurrentPage - 1) * ITEMS_PER_PAGE, masterCurrentPage * ITEMS_PER_PAGE).map((file) => (
                   <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
                     <FileCard
                       file={file}
@@ -3120,6 +3128,14 @@ export default function DashboardMasterAdmin({
                   </div>
                 ))}
               </div>
+
+              <Pagination
+                currentPage={masterCurrentPage}
+                totalPages={Math.ceil(displayFiles.length / ITEMS_PER_PAGE)}
+                onPageChange={(p) => setMasterCurrentPage(p)}
+                totalItems={displayFiles.length}
+                itemsPerPage={ITEMS_PER_PAGE}
+              />
             </div>
           )}
         </div>
