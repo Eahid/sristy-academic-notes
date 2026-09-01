@@ -47,7 +47,6 @@ import {
 } from 'lucide-react';
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
-import Pagination from './Pagination';
 import SristyBoardDirectory from './SristyBoardDirectory';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import { CLASS_LEVELS } from '../constants';
@@ -68,6 +67,7 @@ interface DashboardMasterAdminProps {
   onPreview?: (file: FileArchive) => void;
   onViewTeacherDetails?: (teacherUid: string) => void;
   onFileEdit?: (fileId: string, updates: { fileName?: string; description?: string; subject?: string; classLevel?: string }) => void;
+  onReplaceFile?: (fileId: string, newFile: File, changeNote?: string) => Promise<void>;
   onDeleteUser?: (userId: string) => void;
   onUploadSuccess?: () => void;
 }
@@ -86,6 +86,8 @@ export default function DashboardMasterAdmin({
   onDownload,
   onPreview,
   onViewTeacherDetails,
+  onFileEdit,
+  onReplaceFile,
 }: DashboardMasterAdminProps) {
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [adminsList, setAdminsList] = useState<UserProfile[]>([]);
@@ -130,12 +132,6 @@ export default function DashboardMasterAdmin({
   const [masterBranch, setMasterBranch] = useState('');
   const [masterStatusFilter, setMasterStatusFilter] = useState<'all' | 'pending' | 'approved'>('all');
   const [masterSortBy, setMasterSortBy] = useState<'date_desc' | 'date_asc' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc'>('date_desc');
-  const [masterCurrentPage, setMasterCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 12;
-
-  useEffect(() => {
-    setMasterCurrentPage(1);
-  }, [masterSearch, masterTeacher, masterFileType, masterStartDate, masterEndDate, masterSubject, masterClassLevel, masterBranch, masterStatusFilter, masterSortBy]);
 
   const displayFiles = (() => {
     let list = [...files];
@@ -2283,34 +2279,43 @@ export default function DashboardMasterAdmin({
                                   </td>
                                   <td className="py-4.5 px-6" onClick={(e) => e.stopPropagation()}>
                                     {resettingUid === adm.uid ? (
-                                      <div className="flex items-center gap-1 max-w-[200px]">
+                                      <div className="flex items-center gap-1.5 min-w-[260px]">
                                         <input
                                           type="text"
                                           value={newPasswordVal}
                                           onChange={(e) => setNewPasswordVal(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') handleResetPassword(adm.uid);
+                                            if (e.key === 'Escape') setResettingUid(null);
+                                          }}
                                           placeholder={t("New password")}
-                                          className="px-2 py-1 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-703 text-gray-808 dark:text-gray-100 rounded-md focus:outline-none focus:border-brand-500 text-xxs w-full"
+                                          autoFocus
+                                          className="w-full px-3 py-1.5 bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 text-gray-900 dark:text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs font-medium shadow-xs"
                                         />
                                         <button
                                           onClick={() => handleResetPassword(adm.uid)}
-                                          className="bg-emerald-500 text-white rounded-md p-1.5 hover:bg-emerald-600 transition-colors cursor-pointer shrink-0"
+                                          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center gap-1 shadow-xs"
                                           title="Confirm password reset"
                                         >
-                                          <CheckCircle2 className="w-3.5 h-3.5" />
+                                          <CheckCircle2 className="w-4 h-4" />
+                                          <span className="hidden xl:inline">{t("Save")}</span>
                                         </button>
                                         <button
                                           onClick={() => setResettingUid(null)}
-                                          className="text-gray-400 dark:text-gray-505 hover:text-gray-650 dark:hover:text-gray-300 text-xxs px-1"
+                                          className="bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors cursor-pointer shrink-0"
                                         >
                                           {t("Cancel")}
                                         </button>
                                       </div>
                                     ) : (
                                       <button
-                                        onClick={() => setResettingUid(adm.uid)}
-                                        className="text-[10px] font-bold text-indigo-505 hover:underline flex items-center gap-1 cursor-pointer"
+                                        onClick={() => {
+                                          setResettingUid(adm.uid);
+                                          setNewPasswordVal('');
+                                        }}
+                                        className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1.5 cursor-pointer py-1 px-2 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
                                       >
-                                        <Key className="w-3 h-3" />
+                                        <Key className="w-3.5 h-3.5" />
                                         <span>{t("Change password")}</span>
                                       </button>
                                     )}
@@ -2751,37 +2756,46 @@ export default function DashboardMasterAdmin({
                                     </div>
 
                                     {/* Password Reset Section */}
-                                    <div className="space-y-1">
-                                      <label className="text-[8.5px] font-bold text-gray-400 uppercase tracking-wider">{t("Portal Keys & Passwords")}</label>
+                                    <div className="space-y-1.5">
+                                      <label className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t("Portal Keys & Passwords")}</label>
                                       {resettingUid === adm.uid ? (
                                         <div className="flex items-center gap-1.5">
                                           <input
                                             type="text"
                                             value={newPasswordVal}
                                             onChange={(e) => setNewPasswordVal(e.target.value)}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') handleResetPassword(adm.uid);
+                                              if (e.key === 'Escape') setResettingUid(null);
+                                            }}
                                             placeholder={t("New password")}
-                                            className="px-2 py-1 bg-gray-55 dark:bg-slate-800 border border-gray-205 dark:border-slate-703 text-gray-808 dark:text-gray-100 rounded-md focus:outline-none focus:border-brand-500 text-xxs w-full"
+                                            autoFocus
+                                            className="w-full px-3 py-1.5 bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 text-gray-900 dark:text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs font-medium shadow-xs"
                                           />
                                           <button
                                             onClick={() => handleResetPassword(adm.uid)}
-                                            className="bg-emerald-500 text-white rounded-md p-1.5 hover:bg-emerald-600 transition-colors cursor-pointer shrink-0"
+                                            className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center gap-1 shadow-xs"
                                             title="Confirm password reset"
                                           >
-                                            <CheckCircle2 className="w-3.5 h-3.5" />
+                                            <CheckCircle2 className="w-4 h-4" />
+                                            <span>{t("Save")}</span>
                                           </button>
                                           <button
                                             onClick={() => setResettingUid(null)}
-                                            className="text-gray-400 dark:text-gray-505 hover:text-gray-650 dark:hover:text-gray-300 text-xxs px-1"
+                                            className="bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors cursor-pointer shrink-0"
                                           >
                                             {t("Cancel")}
                                           </button>
                                         </div>
                                       ) : (
                                         <button
-                                          onClick={() => setResettingUid(adm.uid)}
-                                          className="text-xxs font-extrabold text-indigo-505 hover:underline flex items-center gap-1 cursor-pointer bg-indigo-50/40 dark:bg-indigo-950/15 border border-indigo-100/30 px-2 py-1.5 rounded-lg w-full justify-center"
+                                          onClick={() => {
+                                            setResettingUid(adm.uid);
+                                            setNewPasswordVal('');
+                                          }}
+                                          className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1.5 cursor-pointer bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100/50 dark:border-indigo-900/30 px-3 py-2 rounded-lg w-full justify-center transition-colors"
                                         >
-                                          <Key className="w-3 h-3" />
+                                          <Key className="w-3.5 h-3.5" />
                                           <span>{t("Change password")}</span>
                                         </button>
                                       )}
@@ -3106,7 +3120,7 @@ export default function DashboardMasterAdmin({
               />
 
               <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-none sm:grid sm:overflow-visible sm:pb-0 sm:snap-none sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 sm:gap-6">
-                {displayFiles.slice((masterCurrentPage - 1) * ITEMS_PER_PAGE, masterCurrentPage * ITEMS_PER_PAGE).map((file) => (
+                {displayFiles.map((file) => (
                   <div key={file.id} className="min-w-[290px] w-[88vw] sm:w-auto sm:min-w-0 snap-center shrink-0">
                     <FileCard
                       file={file}
@@ -3116,6 +3130,8 @@ export default function DashboardMasterAdmin({
                       onApprove={onFileApprove}
                       onReject={onFileReject}
                       onDelete={onFileDelete}
+                      onFileEdit={onFileEdit}
+                      onReplace={onReplaceFile}
                       isSelected={selectedFileIds.includes(file.id)}
                       onSelectToggle={(id) => {
                         setSelectedFileIds(prev =>
@@ -3128,14 +3144,6 @@ export default function DashboardMasterAdmin({
                   </div>
                 ))}
               </div>
-
-              <Pagination
-                currentPage={masterCurrentPage}
-                totalPages={Math.ceil(displayFiles.length / ITEMS_PER_PAGE)}
-                onPageChange={(p) => setMasterCurrentPage(p)}
-                totalItems={displayFiles.length}
-                itemsPerPage={ITEMS_PER_PAGE}
-              />
             </div>
           )}
         </div>

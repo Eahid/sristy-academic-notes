@@ -15,9 +15,13 @@ import {
   XCircle,
   X,
   ChevronUp,
-  ArrowLeft
+  ArrowLeft,
+  RefreshCw,
+  History,
+  Pencil
 } from 'lucide-react';
 import { useThemeLanguage } from './ThemeLanguageContext';
+import ReplaceFileModal from './ReplaceFileModal';
 
 interface FileCardProps {
   file: FileArchive;
@@ -28,6 +32,7 @@ interface FileCardProps {
   onReject?: (fileId: string, reason?: string) => void;
   onDelete?: (fileId: string) => void;
   onFileEdit?: (fileId: string, updates: { fileName?: string; description?: string; subject?: string; classLevel?: string }) => void;
+  onReplace?: (fileId: string, newFile: File, changeNote?: string) => Promise<void>;
   isSelected?: boolean;
   onSelectToggle?: (fileId: string) => void;
   onViewTeacherDetails?: (teacherId: string) => void;
@@ -35,10 +40,11 @@ interface FileCardProps {
   key?: string | number;
 }
 
-export default function FileCard({ file, user, onDownload, onPreview, onApprove, onReject, onDelete, isSelected, onSelectToggle, onViewTeacherDetails, allFiles }: FileCardProps) {
+export default function FileCard({ file, user, onDownload, onPreview, onApprove, onReject, onDelete, onFileEdit, onReplace, isSelected, onSelectToggle, onViewTeacherDetails, allFiles }: FileCardProps) {
   const { t } = useThemeLanguage();
 
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showReplaceModal, setShowReplaceModal] = useState(false);
 
   // Generate deterministic checksum (SHA-256 style)
   const getFileChecksum = (fileId: string) => {
@@ -104,6 +110,9 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
   const isBranchAdminOfFile = user?.role === 'admin' && user?.branch === file.branch;
   const canApproveOrReject = isSuperOrMaster || isFileApprover || isBranchAdminOfFile;
   const canDelete = isSuperOrMaster || isBranchAdminOfFile; // Master/Super can delete any, branch admin only own branch
+  const canReplace = !!onReplace && (user?.uid === file.uploadedBy || isSuperOrMaster || isBranchAdminOfFile);
+
+  const currentVersion = (file.updateHistory?.length || 0) + 1;
 
   return (
     <motion.div 
@@ -133,9 +142,17 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
             </div>
           </div>
           <div className="flex flex-col items-end gap-1.5">
-            <span className="text-[10px] font-mono tracking-wider font-semibold uppercase bg-gray-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-gray-600 dark:text-gray-300">
-              .{file.fileType}
-            </span>
+            <div className="flex items-center gap-1">
+              {currentVersion > 1 && (
+                <span className="text-[10px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full border border-blue-100 dark:border-blue-900/30 flex items-center gap-1">
+                  <History className="w-2.5 h-2.5" />
+                  <span>v{currentVersion}</span>
+                </span>
+              )}
+              <span className="text-[10px] font-mono tracking-wider font-semibold uppercase bg-gray-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-gray-600 dark:text-gray-300">
+                .{file.fileType}
+              </span>
+            </div>
             {isApproved ? (
               <span className="flex items-center gap-1.5 text-[10px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/20 px-2 py-0.5 rounded-full border border-green-100 dark:border-green-900/40">
                 <CheckCircle2 className="w-3 h-3 text-green-500" />
@@ -238,13 +255,13 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
             className="text-xs font-bold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 flex items-center gap-1 cursor-pointer transition-colors select-none py-1 px-3 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800"
             id={`view-details-btn-${file.id}`}
           >
-            <span>{isExpanded ? t("Hide Details") : t("View Details")}</span>
+            <span>{isExpanded ? t("Hide Details") : t("View Details & History")}</span>
             <ChevronUp className={`w-3.5 h-3.5 transform transition-transform duration-200 ${isExpanded ? 'rotate-0' : 'rotate-180'}`} />
           </button>
         </div>
       </div>
 
-      {/* Expanded Metadata & Related Files Panel */}
+      {/* Expanded Metadata & Update History Panel */}
       {isExpanded && (
         <motion.div
           initial={{ height: 0, opacity: 0 }}
@@ -256,16 +273,86 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
         >
           {/* Extra Metadata Section */}
           <div className="space-y-3">
-            <div>
-              <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider">{t("Upload Timestamp")}</p>
-              <p className="text-gray-700 dark:text-gray-300 font-medium">{getUploadTimestamp(file.createdAt)}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider">{t("Original Upload Date")}</p>
+                <p className="text-gray-700 dark:text-gray-300 font-medium">{getUploadTimestamp(file.createdAt)}</p>
+              </div>
+              {file.updatedAt && (
+                <div>
+                  <p className="text-[10px] text-blue-500 dark:text-blue-400 uppercase font-bold tracking-wider">{t("Last Updated Date")}</p>
+                  <p className="text-blue-600 dark:text-blue-400 font-bold">{getUploadTimestamp(file.updatedAt)}</p>
+                </div>
+              )}
             </div>
+
             <div>
               <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider">{t("File Checksum (SHA-256)")}</p>
               <p className="text-gray-600 dark:text-gray-400 font-mono text-[10px] break-all select-all bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-800/80 p-1.5 rounded-lg">
                 {getFileChecksum(file.id)}
               </p>
             </div>
+          </div>
+
+          {/* Update History Section */}
+          <div className="pt-3 border-t border-gray-150/80 dark:border-slate-800/80 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider flex items-center gap-1">
+                <History className="w-3 h-3 text-blue-500" />
+                <span>{t("Update & Version History")}</span>
+              </p>
+              <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-full border border-blue-100 dark:border-blue-900/30">
+                v{currentVersion}
+              </span>
+            </div>
+
+            {file.updateHistory && file.updateHistory.length > 0 ? (
+              <div className="space-y-2.5 pl-2 border-l-2 border-blue-200 dark:border-blue-900/50 mt-2">
+                {/* Active current file version */}
+                <div className="text-xs space-y-0.5">
+                  <div className="flex items-center justify-between font-bold text-gray-800 dark:text-gray-200">
+                    <span className="text-blue-600 dark:text-blue-400">v{currentVersion} ({t("Current Active File")})</span>
+                    <span className="text-[10px] font-mono font-normal text-gray-400">{getUploadTimestamp(file.updatedAt || file.createdAt)}</span>
+                  </div>
+                  <p className="text-gray-600 dark:text-gray-300 font-medium truncate">{file.fileName} ({formatSize(file.fileSize)})</p>
+                </div>
+
+                {/* Previous versions list */}
+                {file.updateHistory.slice().reverse().map((hist, idx) => (
+                  <div key={idx} className="pt-2 border-t border-gray-100 dark:border-slate-800/80 text-xs space-y-1">
+                    <div className="flex items-center justify-between text-gray-500 dark:text-gray-400">
+                      <span className="font-bold text-[11px] text-gray-700 dark:text-gray-300">v{hist.version} ({t("Replaced")})</span>
+                      <span className="text-[10px] font-mono">{getUploadTimestamp(hist.replacedAt)}</span>
+                    </div>
+                    <p className="text-gray-600 dark:text-gray-400 font-medium truncate">
+                      {t("Previous file")}: <span className="line-through opacity-75">{hist.previousFileName}</span> ({formatSize(hist.previousFileSize)})
+                    </p>
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 italic">
+                      {t("Replaced by")}: {hist.replacedByName || t("Teacher")}
+                    </p>
+                    {hist.changeNote && (
+                      <p className="text-[11px] bg-white dark:bg-slate-900 p-2 rounded-lg border border-gray-150 dark:border-slate-800 text-gray-700 dark:text-gray-300 font-medium">
+                        "{hist.changeNote}"
+                      </p>
+                    )}
+                    {hist.previousFileUrl && (
+                      <button
+                        type="button"
+                        onClick={() => onDownload({ ...file, fileName: hist.previousFileName, fileUrl: hist.previousFileUrl, fileSize: hist.previousFileSize, fileType: hist.previousFileType || file.fileType })}
+                        className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer pt-0.5"
+                      >
+                        <Download className="w-3 h-3" />
+                        <span>{t("Download archived v")}{hist.version}</span>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-gray-400 dark:text-gray-500 italic text-[11px] bg-white dark:bg-slate-900/60 p-2.5 rounded-lg border border-gray-100 dark:border-slate-800">
+                {t("Original v1 upload. No file replacements recorded yet.")}
+              </div>
+            )}
           </div>
 
           {/* Related Files Section */}
@@ -317,48 +404,83 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
       )}
 
       {/* Controller Buttons panel */}
-      <div className="bg-gray-50/70 dark:bg-slate-900/50 border-t border-gray-100 dark:border-slate-800 px-4 py-3 flex gap-2 items-center justify-between">
-        {/* If user is an Admin/Approver, show the prominent sliding panel drawer toggle instead of cramped buttons */}
-        {(canApproveOrReject || (isSuperOrMaster && onDelete)) ? (
-          <button
-            onClick={() => setShowReviewPanel(true)}
-            className={`px-3 py-2.5 rounded-lg font-bold flex items-center justify-center gap-1.5 text-xs shadow-xs transition-all cursor-pointer relative ${
-              isApproved 
-                ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40' 
-                : 'bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/40 animate-pulse-slow'
-            }`}
-            title={t("Review actions")}
-          >
-            <span className="relative flex h-2 w-2 shrink-0">
-              {!isApproved && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-450 opacity-75"></span>}
-              <span className={`relative inline-flex rounded-full h-2 w-2 ${isApproved ? 'bg-green-500' : 'bg-amber-500'}`}></span>
-            </span>
-            <span className="truncate">{t("Review & Approve")}</span>
-            <ChevronUp className="w-3.5 h-3.5 opacity-60" />
-          </button>
-        ) : null}
+      <div className="bg-gray-50/80 dark:bg-slate-900/80 border-t border-gray-100 dark:border-slate-800 p-3 flex flex-col gap-2">
+        {/* Row 1: Primary Actions (Preview & Download) */}
+        <div className="flex gap-2 items-center w-full">
+          {['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes((file.fileType || '').toLowerCase()) && (
+            <button
+              onClick={() => onPreview ? onPreview(file) : onDownload(file)}
+              className="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-gray-750 dark:text-gray-200 py-2 px-3 rounded-lg font-semibold flex items-center justify-center gap-1.5 text-xs shadow-xs transition-colors cursor-pointer"
+              title={t("Preview")}
+            >
+              <Eye className="w-3.5 h-3.5 text-brand-500 shrink-0" />
+              <span className="truncate">{t("Preview")}</span>
+            </button>
+          )}
 
-        {/* Preview Button if previewable */}
-        {['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes((file.fileType || '').toLowerCase()) && (
           <button
-            onClick={() => onPreview ? onPreview(file) : onDownload(file)}
-            className="bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-750 text-gray-700 dark:text-gray-300 p-2.5 rounded-lg font-semibold flex items-center justify-center gap-1.5 text-xs shadow-xs transition-colors cursor-pointer"
-            title={t("Preview")}
+            onClick={() => onDownload(file)}
+            className="flex-1 bg-[#15803d] hover:bg-[#166534] text-white py-2 px-3 rounded-lg font-semibold flex items-center justify-center gap-1.5 text-xs shadow-xs hover:shadow-md transition-all cursor-pointer"
+            title={t("Download")}
           >
-            <Eye className="w-4 h-4 text-brand-500 shrink-0" />
-            <span className="hidden sm:inline">{t("Preview")}</span>
+            <Download className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">{t("Download")}</span>
           </button>
+        </div>
+
+        {/* Row 2: Management Actions (Replace, Review, Edit, Delete) */}
+        {(canReplace || canApproveOrReject || (canDelete && onDelete)) && (
+          <div className="flex flex-wrap gap-1.5 pt-1.5 border-t border-gray-150 dark:border-slate-800/80 w-full">
+            {canReplace && (
+              <button
+                onClick={() => setShowReplaceModal(true)}
+                className="flex-1 min-w-[80px] bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/30 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400 border border-blue-150 dark:border-blue-900/40 py-1.5 px-2 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                title={t("Replace file with an updated version")}
+              >
+                <RefreshCw className="w-3 h-3 shrink-0" />
+                <span className="truncate">{t("Replace")}</span>
+              </button>
+            )}
+
+            {canApproveOrReject && (
+              <button
+                onClick={() => setShowReviewPanel(true)}
+                className={`flex-1 min-w-[80px] py-1.5 px-2 rounded-lg font-bold flex items-center justify-center gap-1 text-[11px] transition-all cursor-pointer ${
+                  isApproved 
+                    ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40 hover:bg-emerald-100' 
+                    : 'bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/30 hover:bg-amber-100'
+                }`}
+                title={t("Review actions")}
+              >
+                <ShieldCheck className="w-3 h-3 shrink-0" />
+                <span className="truncate">{isApproved ? t("Approved") : t("Review")}</span>
+              </button>
+            )}
+
+            {canDelete && onDelete && !canApproveOrReject && (
+              <button
+                onClick={() => {
+                  if (window.confirm(t("Move this file to trash?"))) onDelete(file.id);
+                }}
+                className="bg-gray-100 hover:bg-red-50 dark:bg-slate-800 dark:hover:bg-red-950/30 text-gray-500 hover:text-red-500 dark:hover:text-red-400 p-1.5 rounded-lg transition-colors cursor-pointer"
+                title={t("Delete")}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         )}
-
-        {/* Main Download Button */}
-        <button
-          onClick={() => onDownload(file)}
-          className="bg-[#15803d] hover:bg-[#166534] text-white py-2.5 px-3.5 rounded-lg font-semibold flex items-center justify-center gap-1.5 text-xs shadow-xs hover:shadow-md transition-all cursor-pointer flex-1"
-        >
-          <Download className="w-3.5 h-3.5 shrink-0" />
-          <span className="truncate">{t("Download")}</span>
-        </button>
       </div>
+
+      {/* Replace File Modal */}
+      {showReplaceModal && onReplace && (
+        <ReplaceFileModal
+          isOpen={showReplaceModal}
+          onClose={() => setShowReplaceModal(false)}
+          file={file}
+          onReplace={onReplace}
+        />
+      )}
 
       {/* High-Fidelity Centered Review & Action Modal (For Admins/Approvers) */}
       {showReviewPanel && (

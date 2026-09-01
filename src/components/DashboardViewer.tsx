@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { FileArchive, UserProfile } from '../types';
 import { useBranchSubject } from './BranchSubjectContext';
-import { Search, SlidersHorizontal, BookOpen, School, FileCheck, CheckCircle2, ChevronDown, List, Grid, FileText, FileImage, Download, Eye, ArrowUpDown } from 'lucide-react';
+import { Search, SlidersHorizontal, BookOpen, School, FileCheck, CheckCircle2, ChevronDown, List, Grid, FileText, FileImage, Download, Eye, ArrowUpDown, User } from 'lucide-react';
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
-import Pagination from './Pagination';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import { CLASS_LEVELS } from '../constants';
 
@@ -23,17 +22,12 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
   const [selectedBranch, setSelectedBranch] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedClassLevel, setSelectedClassLevel] = useState('');
+  const [selectedTeacher, setSelectedTeacher] = useState('');
+  const [selectedFileType, setSelectedFileType] = useState('');
   const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc' | 'class_asc' | 'class_desc'>('date_desc');
-  const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 12;
 
   const { t } = useThemeLanguage();
   const { branches, subjects } = useBranchSubject();
-
-  // Reset pagination on filter change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, selectedBranch, selectedSubject, selectedClassLevel, sortBy]);
 
   // Only approved files should be shown to viewers
   const approvedFiles = files.filter(f => f.isApproved);
@@ -51,7 +45,24 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
     const matchesSubject = selectedSubject === '' || file.subject === selectedSubject;
     const matchesClassLevel = selectedClassLevel === '' || file.classLevel === selectedClassLevel;
 
-    return matchesSearch && matchesBranch && matchesSubject && matchesClassLevel;
+    const teacherQuery = selectedTeacher.trim().toLowerCase();
+    const matchesTeacher = teacherQuery === '' || (file.uploaderName || '').toLowerCase().includes(teacherQuery);
+
+    let matchesFileType = true;
+    if (selectedFileType) {
+      const ext = (file.fileType || file.fileName || '').toLowerCase();
+      if (selectedFileType === 'pdf') {
+        matchesFileType = ext.includes('pdf');
+      } else if (selectedFileType === 'doc') {
+        matchesFileType = ext.includes('doc') || ext.includes('docx');
+      } else if (selectedFileType === 'ppt') {
+        matchesFileType = ext.includes('ppt') || ext.includes('pptx');
+      } else if (selectedFileType === 'image') {
+        matchesFileType = ext.includes('png') || ext.includes('jpg') || ext.includes('jpeg') || ext.includes('webp');
+      }
+    }
+
+    return matchesSearch && matchesBranch && matchesSubject && matchesClassLevel && matchesTeacher && matchesFileType;
   });
 
   // Sort files dynamically
@@ -92,7 +103,7 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
           <span>{t("Interactive Resource Directory Search")}</span>
         </h3>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
           {/* Text Search */}
           <div className="relative">
             <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400">
@@ -103,6 +114,20 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t("Search file name, topic, notes...")}
+              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold text-gray-750 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500"
+            />
+          </div>
+
+          {/* Teacher Name Filter */}
+          <div className="relative">
+            <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400">
+              <User className="w-4 h-4" />
+            </span>
+            <input
+              type="text"
+              value={selectedTeacher}
+              onChange={(e) => setSelectedTeacher(e.target.value)}
+              placeholder={t("Filter by teacher name...")}
               className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-semibold text-gray-750 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500"
             />
           </div>
@@ -167,6 +192,24 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
             </span>
           </div>
 
+          {/* File Type Filter */}
+          <div className="relative">
+            <select
+              value={selectedFileType}
+              onChange={(e) => setSelectedFileType(e.target.value)}
+              className="w-full pl-4 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold text-gray-750 dark:text-gray-200 appearance-none cursor-pointer transition-all"
+            >
+              <option value="">{t("All File Types")}</option>
+              <option value="pdf">PDF</option>
+              <option value="doc">DOC / DOCX</option>
+              <option value="ppt">PPT / PPTX</option>
+              <option value="image">{t("Images (PNG/JPG)")}</option>
+            </select>
+            <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none">
+              <ChevronDown className="w-3.5 h-3.5" />
+            </span>
+          </div>
+
           {/* Sort selection */}
           <div className="relative">
             <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-[#15803d] dark:text-emerald-450 pointer-events-none">
@@ -193,14 +236,16 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
         </div>
 
         {/* Clear Filters Shortcuts */}
-        {(searchQuery || selectedBranch || selectedSubject || selectedClassLevel || sortBy !== 'date_desc') && (
+        {(searchQuery || selectedTeacher || selectedBranch || selectedSubject || selectedClassLevel || selectedFileType || sortBy !== 'date_desc') && (
           <div className="flex justify-end pt-1">
             <button
               onClick={() => {
                 setSearchQuery('');
+                setSelectedTeacher('');
                 setSelectedBranch('');
                 setSelectedSubject('');
                 setSelectedClassLevel('');
+                setSelectedFileType('');
                 setSortBy('date_desc');
               }}
               className="text-[10px] font-bold text-brand-600 hover:text-brand-700 hover:underline cursor-pointer"
@@ -279,7 +324,7 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
           <>
             {viewMode === 'grid' ? (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {sortedArchives.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((file) => (
+                {sortedArchives.map((file) => (
                   <FileCard
                     key={file.id}
                     file={file}
@@ -328,7 +373,7 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-slate-800 font-medium text-gray-700 dark:text-gray-300">
-                    {sortedArchives.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((file) => {
+                    {sortedArchives.map((file) => {
                   // Format helper for bytes inside map
                   const formatSizeMap = (bytes: number) => {
                     if (bytes === 0) return '0 B';
@@ -458,14 +503,6 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
             </table>
           </div>
         )}
-
-        <Pagination
-          currentPage={currentPage}
-          totalPages={Math.ceil(sortedArchives.length / ITEMS_PER_PAGE)}
-          onPageChange={(p) => setCurrentPage(p)}
-          totalItems={sortedArchives.length}
-          itemsPerPage={ITEMS_PER_PAGE}
-        />
       </>
     )}
   </div>

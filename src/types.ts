@@ -17,6 +17,20 @@ export interface UserProfile {
   createdAt: any;
 }
 
+export interface FileUpdateHistory {
+  id?: string;
+  version: number;
+  replacedAt: any;
+  replacedBy: string;
+  replacedByName: string;
+  previousFileName: string;
+  previousFileSize: number;
+  previousFileType?: string;
+  previousFileUrl?: string;
+  previousStoragePath?: string;
+  changeNote?: string;
+}
+
 export interface FileArchive {
   id: string;
   fileName: string;
@@ -39,6 +53,8 @@ export interface FileArchive {
   approvedBy?: string; // UID of admin who approved it
   downloadCount: number;
   createdAt: any; // Firestore Timestamp
+  updatedAt?: any; // Timestamp of last file update/replacement
+  updateHistory?: FileUpdateHistory[]; // Audit trail of file replacements
   isDeleted?: boolean;
   deletedAt?: any;
   deletedBy?: string;

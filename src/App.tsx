@@ -15,11 +15,11 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { ref, deleteObject } from 'firebase/storage';
+import { ref, deleteObject, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { motion, AnimatePresence } from 'motion/react';
 import { db, auth, storage } from './firebase';
 import { safeLocalStorage, forceClearSystemCache } from './utils';
-import { UserProfile, FileArchive } from './types';
+import { UserProfile, FileArchive, FileUpdateHistory } from './types';
 import { BRANCHES, SUBJECTS, CLASS_LEVELS } from './constants';
 import Navbar from './components/Navbar';
 import AuthScreen from './components/AuthScreen';
@@ -713,6 +713,102 @@ export default function App() {
     }
   };
 
+  const handleReplaceFile = async (fileId: string, newFile: File, changeNote?: string) => {
+    const targetFile = files.find(f => f.id === fileId);
+    if (!targetFile) throw new Error(t("File not found in active repository."));
+
+    const parts = newFile.name.split('.');
+    const fileType = parts[parts.length - 1].toLowerCase();
+    let downloadUrl = '';
+    let fileRefPath = '';
+
+    try {
+      const r2Response = await fetch('/api/r2/presigned-upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: newFile.name, fileType: newFile.type }),
+      });
+      if (r2Response.ok) {
+        const r2Data = await r2Response.json();
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('PUT', r2Data.uploadUrl);
+          xhr.setRequestHeader('Content-Type', newFile.type || 'application/octet-stream');
+          xhr.onload = () => { if (xhr.status >= 200 && xhr.status < 300) resolve(); else reject(new Error(`R2 upload failed: ${xhr.status}`)); };
+          xhr.onerror = () => reject(new Error('R2 upload network error'));
+          xhr.send(newFile);
+        });
+        downloadUrl = r2Data.fileUrl;
+        fileRefPath = r2Data.storagePath;
+      } else {
+        const fileRefPathFallback = `files/${currentUser?.uid || 'user'}_${Date.now()}_${newFile.name}`;
+        const storageRef = ref(storage, fileRefPathFallback);
+        const uploadTask = uploadBytesResumable(storageRef, newFile);
+        await new Promise<void>((resolve, reject) => {
+          uploadTask.on('state_changed', null, (error) => reject(error), () => resolve());
+        });
+        downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+        fileRefPath = fileRefPathFallback;
+      }
+    } catch (err) {
+      const fileRefPathFallback = `files/${currentUser?.uid || 'user'}_${Date.now()}_${newFile.name}`;
+      const storageRef = ref(storage, fileRefPathFallback);
+      const uploadTask = uploadBytesResumable(storageRef, newFile);
+      await new Promise<void>((resolve, reject) => {
+        uploadTask.on('state_changed', null, (error) => reject(error), () => resolve());
+      });
+      downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+      fileRefPath = fileRefPathFallback;
+    }
+
+    const currentVersion = (targetFile.updateHistory?.length || 0) + 1;
+    const historyRecord: FileUpdateHistory = {
+      version: currentVersion,
+      replacedAt: new Date().toISOString(),
+      replacedBy: currentUser?.uid || '',
+      replacedByName: currentUser?.fullName || '',
+      previousFileName: targetFile.fileName,
+      previousFileSize: targetFile.fileSize,
+      previousFileType: targetFile.fileType,
+      previousFileUrl: targetFile.fileUrl,
+      previousStoragePath: targetFile.storagePath,
+      changeNote: changeNote || '',
+    };
+
+    const updatedHistory = [...(targetFile.updateHistory || []), historyRecord];
+
+    const fileDocRef = doc(db, 'files', fileId);
+    await updateDoc(fileDocRef, {
+      fileName: newFile.name,
+      fileType: fileType,
+      fileSize: newFile.size,
+      fileUrl: downloadUrl,
+      storagePath: fileRefPath,
+      updatedAt: serverTimestamp(),
+      updateHistory: updatedHistory,
+    });
+
+    if (currentUser) {
+      try {
+        await addDoc(collection(db, 'activity_logs'), {
+          action: 'file_replaced',
+          actorId: currentUser.uid,
+          actorName: currentUser.fullName,
+          actorRole: currentUser.role,
+          actorBranch: currentUser.branch || '',
+          fileId: fileId,
+          fileName: newFile.name,
+          previousFileName: targetFile.fileName,
+          version: currentVersion + 1,
+          changeNote: changeNote || '',
+          createdAt: serverTimestamp()
+        });
+      } catch (logErr) {
+        console.warn("Failed to write replacement log:", logErr);
+      }
+    }
+  };
+
   const handleDeleteUser = async (uid: string) => {
     if (!window.confirm(t("Are you sure you want to delete this user? This cannot be undone."))) return;
     try {
@@ -1076,6 +1172,7 @@ export default function App() {
                 onPreview={handlePreviewAttempt}
                 onViewTeacherDetails={setViewingTeacherUid}
                 onFileEdit={handleFileEdit}
+                onReplaceFile={handleReplaceFile}
                 onDeleteUser={handleDeleteUser}
                 onUploadSuccess={() => setTriggerRefresh(t => t + 1)}
               />
@@ -1097,6 +1194,7 @@ export default function App() {
                 onPreview={handlePreviewAttempt}
                 onViewTeacherDetails={setViewingTeacherUid}
                 onFileEdit={handleFileEdit}
+                onReplaceFile={handleReplaceFile}
                 onDeleteUser={handleDeleteUser}
                 onUploadSuccess={() => setTriggerRefresh(t => t + 1)}
               />
@@ -1112,6 +1210,7 @@ export default function App() {
                 onPreview={handlePreviewAttempt}
                 onViewTeacherDetails={setViewingTeacherUid}
                 onFileEdit={handleFileEdit}
+                onReplaceFile={handleReplaceFile}
               />
             )}
 
