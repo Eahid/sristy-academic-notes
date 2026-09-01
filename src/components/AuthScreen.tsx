@@ -87,6 +87,8 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
     try {
       let targetEmail = username.trim().toLowerCase();
       let lookedUpUsername = '';
+      let targetUserDoc: any = null;
+      let targetUserDocId = '';
 
       // Direct mapping for superadmin to bypass Firestore lookup on seed/first-run
       if (targetEmail === 'superadmin' || targetEmail === 'superadmin@sristynotes.com') {
@@ -106,94 +108,143 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           return;
         }
 
-        let foundEmail = '';
-        snap.forEach((doc) => {
-          const data = doc.data();
-          foundEmail = data.email;
-          lookedUpUsername = data.username;
+        snap.forEach((docSnap) => {
+          targetUserDoc = docSnap.data();
+          targetUserDocId = docSnap.id;
+          targetEmail = targetUserDoc.email;
+          lookedUpUsername = targetUserDoc.username;
         });
 
-        if (foundEmail) {
-          targetEmail = foundEmail;
-        } else {
+        if (!targetEmail) {
           setErrorMsg(t("Account configuration error: No corporate email mapped to this username."));
           setLoading(false);
           return;
         }
-      }
-
-      // Try actual official Firebase Auth validation with dynamic registration fallback
-      let userCredential;
-      try {
-        userCredential = await signInWithEmailAndPassword(auth, targetEmail, password);
-      } catch (signInErr: any) {
-        // If it is the designated superadmin credentials, register on-the-fly if not found
-        if (targetEmail === 'superadmin@sristynotes.com' && password === 'Hello@2026') {
-          try {
-            userCredential = await createUserWithEmailAndPassword(auth, targetEmail, password);
-          } catch (createErr) {
-            throw signInErr;
+      } else {
+        // Direct email lookup to fetch stored password and profile metadata
+        try {
+          const emailQ = query(collection(primaryDb, 'users'), where('email', '==', targetEmail), limit(1));
+          const snap = await getDocs(emailQ);
+          if (!snap.empty) {
+            targetUserDoc = snap.docs[0].data();
+            targetUserDocId = snap.docs[0].id;
+            lookedUpUsername = targetUserDoc.username;
           }
-        } else {
-          throw signInErr;
+        } catch (e) {
+          console.warn("Could not pre-fetch user by email:", e);
         }
       }
-      const userObj = userCredential.user;
 
-      // Fetch official fields from user document profile
-      const userDocRef = doc(primaryDb, 'users', userObj.uid); // Always use primaryDb for auth lookups
-      const userDocSnap = await getDoc(userDocRef);
-      
-      let matchedUser: UserProfile | null = null;
+      // Deactivated account check
+      if (targetUserDoc && targetUserDoc.status === 'inactive') {
+        setErrorMsg(t("This account has been deactivated by the branch admin."));
+        setLoading(false);
+        return;
+      }
 
-      const buildProfile = (data: any, uid: string): UserProfile => ({
+      const buildProfile = (data: any, uid: string, fallbackEmail: string = ''): UserProfile => ({
         uid,
-        username: data.username || lookedUpUsername || userObj.email?.split('@')[0] || 'user',
-        fullName: data.fullName || userObj.displayName || 'Unnamed User',
-        email: userObj.email || data.email,
+        username: data.username || lookedUpUsername || (data.email || fallbackEmail)?.split('@')[0] || 'user',
+        fullName: data.fullName || 'Unnamed User',
+        email: data.email || fallbackEmail,
         role: data.role as UserRole,
         branch: data.branch,
         subject: data.subject,
         subjects: data.subjects,
         classes: data.classes,
         classAssignments: data.classAssignments,
-        status: data.status,
+        status: data.status || 'active',
         profilePic: data.profilePic,
         bio: data.bio,
-        createdAt: data.createdAt?.toDate() || new Date(),
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date()),
       });
 
-      if (userDocSnap.exists()) {
-        const data = userDocSnap.data();
-        if (data.status === 'inactive') {
-          setErrorMsg(t("This account has been deactivated by the branch admin."));
-          setLoading(false);
-          return;
+      // Try actual official Firebase Auth validation with dynamic registration fallback
+      let userObj: any = null;
+      let matchedUser: UserProfile | null = null;
+
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, targetEmail, password);
+        userObj = userCredential.user;
+      } catch (signInErr: any) {
+        // If it is the designated superadmin credentials, register on-the-fly if not found
+        if (targetEmail === 'superadmin@sristynotes.com' && password === 'Hello@2026') {
+          try {
+            const createCred = await createUserWithEmailAndPassword(auth, targetEmail, password);
+            userObj = createCred.user;
+          } catch (createErr) {
+            throw signInErr;
+          }
+        } else if (targetUserDoc && targetUserDoc.password && (targetUserDoc.password === password.trim() || targetUserDoc.password === password)) {
+          // The password matches the admin-assigned password in Firestore!
+          let syncSuccess = false;
+          if (signInErr.code === 'auth/user-not-found') {
+            try {
+              const createCred = await createUserWithEmailAndPassword(auth, targetEmail, password);
+              userObj = createCred.user;
+              syncSuccess = true;
+            } catch (createErr) {
+              console.warn("Could not create user on the fly in Firebase Auth:", createErr);
+            }
+          }
+
+          if (!syncSuccess) {
+            matchedUser = buildProfile(targetUserDoc, targetUserDocId || targetUserDoc.uid || 'user_' + Date.now(), targetEmail);
+            safeLocalStorage.setItem('sristy_local_user', JSON.stringify(matchedUser));
+            setSuccessMsg(t("Welcome back") + `, ${matchedUser.fullName}!`);
+            setTimeout(() => {
+              onAuthSuccess(matchedUser!);
+            }, 800);
+            return;
+          }
+        } else {
+          throw signInErr;
         }
-        matchedUser = buildProfile(data, userObj.uid);
       }
 
-      // Fallback: search by email (handles migrated users whose UID changed)
-      if (!matchedUser && userObj.email) {
-        const emailQuery = query(collection(primaryDb, 'users'), where('email', '==', userObj.email), limit(1));
-        const emailSnap = await getDocs(emailQuery);
-        if (!emailSnap.empty) {
-          const oldDoc = emailSnap.docs[0];
-          const data = oldDoc.data();
+      const userDocRef = userObj ? doc(primaryDb, 'users', userObj.uid) : null;
+
+      if (userObj && !matchedUser && userDocRef) {
+        // Fetch official fields from user document profile
+        const userDocSnap = await getDoc(userDocRef);
+
+        if (userDocSnap.exists()) {
+          const data = userDocSnap.data();
           if (data.status === 'inactive') {
             setErrorMsg(t("This account has been deactivated by the branch admin."));
             setLoading(false);
             return;
           }
-          matchedUser = buildProfile(data, userObj.uid);
-          // Update document with new UID so future logins work instantly
+          matchedUser = buildProfile(data, userObj.uid, userObj.email || targetEmail);
+        } else if (targetUserDoc) {
+          matchedUser = buildProfile(targetUserDoc, userObj.uid, userObj.email || targetEmail);
           try {
-            await setDoc(doc(primaryDb, 'users', userObj.uid), { ...data, uid: userObj.uid });
+            await setDoc(doc(primaryDb, 'users', userObj.uid), { ...targetUserDoc, uid: userObj.uid });
           } catch(e) { console.warn('Could not update UID in profile:', e); }
+        }
+
+        // Fallback: search by email (handles migrated users whose UID changed)
+        if (!matchedUser && userObj.email) {
+          const emailQuery = query(collection(primaryDb, 'users'), where('email', '==', userObj.email), limit(1));
+          const emailSnap = await getDocs(emailQuery);
+          if (!emailSnap.empty) {
+            const oldDoc = emailSnap.docs[0];
+            const data = oldDoc.data();
+            if (data.status === 'inactive') {
+              setErrorMsg(t("This account has been deactivated by the branch admin."));
+              setLoading(false);
+              return;
+            }
+            matchedUser = buildProfile(data, userObj.uid, userObj.email);
+            // Update document with new UID so future logins work instantly
+            try {
+              await setDoc(doc(primaryDb, 'users', userObj.uid), { ...data, uid: userObj.uid });
+            } catch(e) { console.warn('Could not update UID in profile:', e); }
+          }
         }
       }
 
-      if (!matchedUser && userObj.email === 'superadmin@sristynotes.com') {
+      if (!matchedUser && userObj && userObj.email === 'superadmin@sristynotes.com') {
         // Fallback or automatic creation of Super Admin profile
         matchedUser = {
           uid: userObj.uid,
@@ -205,7 +256,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           bio: 'Global Root Supervisor of Sristy Education Family Storage.',
           createdAt: new Date(),
         };
-        await setDoc(userDocRef, {
+        await setDoc(doc(primaryDb, 'users', matchedUser.uid), {
           uid: matchedUser.uid,
           username: matchedUser.username,
           fullName: matchedUser.fullName,
@@ -216,7 +267,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           bio: matchedUser.bio,
           createdAt: serverTimestamp(),
         });
-      } else if (!matchedUser && (userObj.email === 'eahidhasan@gmail.com' || userObj.email === 'admin@sristyfamily.com')) {
+      } else if (!matchedUser && userObj && (userObj.email === 'eahidhasan@gmail.com' || userObj.email === 'admin@sristyfamily.com')) {
         // Fallback or automatic creation of Master Admin profile
         const isOwner = userObj.email === 'eahidhasan@gmail.com';
         matchedUser = {
@@ -229,7 +280,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           bio: 'Root supervisor of Sristy Education Family Storage.',
           createdAt: new Date(),
         };
-        await setDoc(userDocRef, {
+        await setDoc(doc(primaryDb, 'users', matchedUser.uid), {
           uid: matchedUser.uid,
           username: matchedUser.username,
           fullName: matchedUser.fullName,
@@ -239,7 +290,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           bio: matchedUser.bio,
           createdAt: serverTimestamp(),
         });
-      } else if (!matchedUser && userObj.email === 'branchadmin@sristyfamily.com') {
+      } else if (!matchedUser && userObj && userObj.email === 'branchadmin@sristyfamily.com') {
         // Fallback or automatic creation of Branch Admin profile
         matchedUser = {
           uid: userObj.uid,
@@ -252,7 +303,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           bio: 'Branch Administrator for Sristy Academic School.',
           createdAt: new Date(),
         };
-        await setDoc(userDocRef, {
+        await setDoc(doc(primaryDb, 'users', matchedUser.uid), {
           uid: matchedUser.uid,
           username: matchedUser.username,
           fullName: matchedUser.fullName,
@@ -263,7 +314,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           bio: matchedUser.bio,
           createdAt: serverTimestamp(),
         });
-      } else if (!matchedUser && userObj.email === 'approver@sristyfamily.com') {
+      } else if (!matchedUser && userObj && userObj.email === 'approver@sristyfamily.com') {
         // Fallback or automatic creation of File Approver profile
         matchedUser = {
           uid: userObj.uid,
@@ -276,7 +327,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           bio: 'Official Resource Verifier for Sristy Education Family.',
           createdAt: new Date(),
         };
-        await setDoc(userDocRef, {
+        await setDoc(doc(primaryDb, 'users', matchedUser.uid), {
           uid: matchedUser.uid,
           username: matchedUser.username,
           fullName: matchedUser.fullName,
@@ -287,7 +338,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           bio: matchedUser.bio,
           createdAt: serverTimestamp(),
         });
-      } else if (!matchedUser && userObj.email === 'teacher@sristyfamily.com') {
+      } else if (!matchedUser && userObj && userObj.email === 'teacher@sristyfamily.com') {
         // Fallback or automatic creation of Teacher profile
         matchedUser = {
           uid: userObj.uid,
@@ -302,7 +353,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           bio: 'Verified Professional Educator at Sristy Education Family.',
           createdAt: new Date(),
         };
-        await setDoc(userDocRef, {
+        await setDoc(doc(primaryDb, 'users', matchedUser.uid), {
           uid: matchedUser.uid,
           username: matchedUser.username,
           fullName: matchedUser.fullName,
@@ -315,7 +366,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           bio: matchedUser.bio,
           createdAt: serverTimestamp(),
         });
-      } else if (!matchedUser && userObj.email === 'student@sristyfamily.com') {
+      } else if (!matchedUser && userObj && userObj.email === 'student@sristyfamily.com') {
         // Fallback or automatic creation of Student profile
         matchedUser = {
           uid: userObj.uid,
@@ -328,7 +379,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           bio: 'Enthusiastic Student representative of Sristy Education Family.',
           createdAt: new Date(),
         };
-        await setDoc(userDocRef, {
+        await setDoc(doc(primaryDb, 'users', matchedUser.uid), {
           uid: matchedUser.uid,
           username: matchedUser.username,
           fullName: matchedUser.fullName,

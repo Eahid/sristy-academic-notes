@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import JSZip from 'jszip';
-import { collection, getDocs, doc, setDoc, query, where, updateDoc, deleteDoc, serverTimestamp, onSnapshot, orderBy } from 'firebase/firestore';
-import { db, createSecondaryUser } from '../firebase';
+import { collection, getDocs, doc, setDoc, query, where, updateDoc, deleteDoc, serverTimestamp, onSnapshot, orderBy, getDoc } from 'firebase/firestore';
+import { db, createSecondaryUser, updateSecondaryUserPassword } from '../firebase';
 import { UserProfile, FileArchive } from '../types';
 import { useBranchSubject } from './BranchSubjectContext';
 import { 
@@ -1197,13 +1197,33 @@ export default function DashboardMasterAdmin({
 
   const handleResetPassword = async (adminUid: string) => {
     if (!newPasswordVal.trim()) return;
+    const newPass = newPasswordVal.trim();
     try {
+      // 1. Fetch current user data from Firestore
+      const userRef = doc(db, 'users', adminUid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        const userEmail = userData.email;
+        const oldPass = userData.password;
+
+        if (userEmail && oldPass) {
+          // Attempt updating in Firebase Auth as well
+          await updateSecondaryUserPassword(userEmail, oldPass, newPass).catch(e => {
+            console.warn("Firebase Auth password sync warning:", e);
+          });
+        }
+      }
+
+      // 2. Update Firestore profile with new password
       await updateDoc(doc(db, 'users', adminUid), {
-        password: newPasswordVal.trim(),
+        password: newPass,
+        updatedAt: serverTimestamp(),
       });
       alert(t("Password has been successfully updated."));
       setResettingUid(null);
       setNewPasswordVal('');
+      fetchAdmins();
     } catch (err) {
       console.error(err);
       alert(t("Failed to reset account credentials."));

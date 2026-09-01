@@ -1,5 +1,5 @@
 import { initializeApp, deleteApp, FirebaseApp } from 'firebase/app';
-import { getAuth, signOut, createUserWithEmailAndPassword, Auth } from 'firebase/auth';
+import { getAuth, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
@@ -114,6 +114,33 @@ export async function createSecondaryUser(email: string, pass: string): Promise<
   } finally {
     await deleteApp(secondaryApp).catch(() => {});
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Updates an existing user's Firebase Auth password cleanly
+// ─────────────────────────────────────────────────────────────
+export async function updateSecondaryUserPassword(email: string, oldPass: string, newPass: string): Promise<boolean> {
+  if (!email || !newPass) return false;
+  const nonce = Math.random().toString(36).substring(2, 9);
+  const secondaryAppName = `SecondaryApp_Update_${Date.now()}_${nonce}`;
+  const secondaryApp = initializeApp(PRIMARY_CONFIG, secondaryAppName);
+  const secondaryAuth = getAuth(secondaryApp);
+
+  try {
+    if (oldPass) {
+      const credential = await signInWithEmailAndPassword(secondaryAuth, email, oldPass);
+      if (credential.user) {
+        await updatePassword(credential.user, newPass);
+        await signOut(secondaryAuth);
+        return true;
+      }
+    }
+  } catch (error) {
+    console.warn("Could not sync password via secondary auth with old password:", error);
+  } finally {
+    await deleteApp(secondaryApp).catch(() => {});
+  }
+  return false;
 }
 
 export enum OperationType {

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { collection, getDocs, doc, setDoc, query, where, updateDoc, serverTimestamp, onSnapshot, orderBy, addDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, query, where, updateDoc, serverTimestamp, onSnapshot, orderBy, addDoc, getDoc } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { motion, AnimatePresence } from 'motion/react';
-import { db, createSecondaryUser, storage } from '../firebase';
+import { db, createSecondaryUser, updateSecondaryUserPassword, storage } from '../firebase';
 import { UserProfile, FileArchive } from '../types';
 import { useBranchSubject } from './BranchSubjectContext';
 import { 
@@ -653,13 +653,33 @@ export default function DashboardAdmin({
 
   const handleResetPassword = async (targetUid: string) => {
     if (!newPasswordVal.trim()) return;
+    const newPass = newPasswordVal.trim();
     try {
+      // 1. Fetch current user data from Firestore
+      const userRef = doc(db, 'users', targetUid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        const userEmail = userData.email;
+        const oldPass = userData.password;
+
+        if (userEmail && oldPass) {
+          // Attempt updating in Firebase Auth as well
+          await updateSecondaryUserPassword(userEmail, oldPass, newPass).catch(e => {
+            console.warn("Firebase Auth password sync warning:", e);
+          });
+        }
+      }
+
+      // 2. Update Firestore profile with new password
       await updateDoc(doc(db, 'users', targetUid), {
-        password: newPasswordVal.trim()
+        password: newPass,
+        updatedAt: serverTimestamp(),
       });
       alert(t("Password has been successfully updated."));
       setResettingUid(null);
       setNewPasswordVal('');
+      fetchBranchTeachers();
     } catch (err) {
       console.error(err);
       alert(t("Failed to reset account credentials."));
