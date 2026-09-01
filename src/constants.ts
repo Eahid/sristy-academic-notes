@@ -22,15 +22,20 @@ export const BRANCHES = [
 ];
 
 export const SUBJECTS = [
+  "Bangla",
   "Bangla 1st Paper",
   "Bangla 2nd Paper",
+  "English",
   "English 1st Paper",
   "English 2nd Paper",
   "Math",
   "General Math",
   "Math 1st Paper",
   "Math 2nd Paper",
+  "Islam Religion",
+  "Hindu Religion",
   "Religion",
+  "Environmental Science",
   "ICT",
   "Physics",
   "Physics 1st Paper",
@@ -55,6 +60,10 @@ export const SUBJECTS = [
 ];
 
 export const CLASS_LEVELS = [
+  "Play",
+  "Nursery",
+  "Class 1",
+  "Class 2",
   "Class 3",
   "Class 4",
   "Class 5",

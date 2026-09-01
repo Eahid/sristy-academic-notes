@@ -18,7 +18,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { ref, deleteObject, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { motion, AnimatePresence } from 'motion/react';
 import { db, auth, storage } from './firebase';
-import { safeLocalStorage, forceClearSystemCache } from './utils';
+import { safeLocalStorage, forceClearSystemCache, isSubjectMatching, isClassMatching } from './utils';
 import { UserProfile, FileArchive, FileUpdateHistory } from './types';
 import { BRANCHES, SUBJECTS, CLASS_LEVELS } from './constants';
 import Navbar from './components/Navbar';
@@ -986,8 +986,11 @@ export default function App() {
     const counts: { [key: string]: number } = {};
     SUBJECTS.forEach(sub => counts[sub] = 0);
     files.forEach(file => {
-      if (file.isApproved && counts[file.subject] !== undefined) {
-        counts[file.subject]++;
+      if (file.isApproved && file.subject) {
+        const matched = SUBJECTS.find(s => s === file.subject || isSubjectMatching(s, file.subject));
+        if (matched) {
+          counts[matched] = (counts[matched] || 0) + 1;
+        }
       }
     });
     return counts;
@@ -1003,8 +1006,8 @@ export default function App() {
         (file.description && file.description.toLowerCase().includes(guestSearch.toLowerCase()));
 
       const matchesBranch = guestBranch === '' || file.branch === guestBranch;
-      const matchesSubject = guestSubject === '' || file.subject === guestSubject;
-      const matchesClass = guestClass === '' || file.classLevel === guestClass;
+      const matchesSubject = guestSubject === '' || file.subject === guestSubject || isSubjectMatching(file.subject, guestSubject);
+      const matchesClass = guestClass === '' || file.classLevel === guestClass || isClassMatching(file.classLevel, guestClass);
 
       return matchesSearch && matchesBranch && matchesSubject && matchesClass;
     });

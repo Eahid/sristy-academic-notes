@@ -9,6 +9,7 @@ import BatchDownloadBar from './BatchDownloadBar';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import { useBranchSubject } from './BranchSubjectContext';
 import { CLASS_LEVELS } from '../constants';
+import { isSubjectMatching, isClassMatching, getFilteredSubjectsForClass, getFilteredClassesForSubject } from '../utils';
 
 interface SavedTopicItem {
   id: string;
@@ -106,19 +107,31 @@ export default function DashboardTeacher({
     : (user?.subject ? [user.subject] : [])
   ).filter((sub): sub is string => typeof sub === 'string');
 
-  const teacherClasses = Array.isArray(user?.classAssignments) && user.classAssignments.length > 0
+  const teacherClasses = (Array.isArray(user?.classAssignments) && user.classAssignments.length > 0
     ? Array.from(new Set(user.classAssignments.map(a => a.classLevel)))
-    : (Array.isArray(user?.classes) ? user.classes : []);
+    : (Array.isArray(user?.classes) ? user.classes : [])
+  ).sort((a, b) => {
+    const idxA = CLASS_LEVELS.findIndex(c => isClassMatching(c, a));
+    const idxB = CLASS_LEVELS.findIndex(c => isClassMatching(c, b));
+    return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+  });
 
   const getAssignedClassesForSubject = (subject: string): string[] => {
     if (!subject) return teacherClasses;
     if (Array.isArray(user?.classAssignments) && user.classAssignments.length > 0) {
       const matches = user.classAssignments
-        .filter(a => a.subject === subject)
+        .filter(a => isSubjectMatching(a.subject, subject))
         .map(a => a.classLevel);
-      if (matches.length > 0) return Array.from(new Set(matches));
+      if (matches.length > 0) {
+        return Array.from(new Set(matches)).sort((a, b) => {
+          const idxA = CLASS_LEVELS.findIndex(c => isClassMatching(c, a));
+          const idxB = CLASS_LEVELS.findIndex(c => isClassMatching(c, b));
+          return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+        });
+      }
     }
-    return teacherClasses.length > 0 ? teacherClasses : CLASS_LEVELS;
+    const fallback = teacherClasses.length > 0 ? teacherClasses : CLASS_LEVELS;
+    return getFilteredClassesForSubject(subject, fallback);
   };
 
   useEffect(() => {
@@ -129,7 +142,7 @@ export default function DashboardTeacher({
 
   useEffect(() => {
     const validClasses = getAssignedClassesForSubject(selectedSubject);
-    if (validClasses.length > 0 && (!uploadClassLevel || !validClasses.includes(uploadClassLevel))) {
+    if (validClasses.length > 0 && (!uploadClassLevel || !validClasses.some(c => isClassMatching(c, uploadClassLevel)))) {
       setUploadClassLevel(validClasses[0]);
     }
   }, [selectedSubject, user?.classAssignments]);
@@ -142,11 +155,11 @@ export default function DashboardTeacher({
     if (!f || !f.isApproved || typeof f.subject !== 'string') return false;
     if (Array.isArray(user?.classAssignments) && user.classAssignments.length > 0) {
       return user.classAssignments.some(a =>
-        a.subject.toLowerCase() === f.subject.toLowerCase() &&
-        (!f.classLevel || a.classLevel === f.classLevel)
+        isSubjectMatching(a.subject, f.subject) &&
+        (!f.classLevel || isClassMatching(a.classLevel, f.classLevel))
       );
     }
-    return teacherSubjects.some(sub => typeof sub === 'string' && sub.toLowerCase() === f.subject.toLowerCase());
+    return teacherSubjects.some(sub => typeof sub === 'string' && isSubjectMatching(sub, f.subject));
   });
 
   const activeTabFiles = archiveTab === 'my_submissions' 
@@ -165,8 +178,8 @@ export default function DashboardTeacher({
 
   const currentFilteredFiles = activeTabFiles.filter(file => {
     if (!file) return false;
-    if (filterSubject && file.subject !== filterSubject) return false;
-    if (filterClassLevel && file.classLevel !== filterClassLevel) return false;
+    if (filterSubject && !isSubjectMatching(file.subject, filterSubject)) return false;
+    if (filterClassLevel && !isClassMatching(file.classLevel, filterClassLevel)) return false;
     if (!searchTerm.trim()) return true;
     const queryStr = searchTerm.toLowerCase();
     const nameStr = file.fileName || '';

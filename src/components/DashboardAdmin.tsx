@@ -41,7 +41,7 @@ import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import { CLASS_LEVELS } from '../constants';
-import { getFilteredSubjectsForClass, getFilteredClassesForSubject } from '../utils';
+import { getFilteredSubjectsForClass, getFilteredClassesForSubject, isSubjectMatching, isClassMatching, normalizeClass } from '../utils';
 
 interface DashboardAdminProps {
   user: UserProfile;
@@ -624,7 +624,11 @@ export default function DashboardAdmin({
       if (memberRole === 'teacher') {
         payload.classAssignments = assignments;
         payload.subjects = Array.from(new Set(assignments.map(a => a.subject)));
-        payload.classes = Array.from(new Set(assignments.map(a => a.classLevel))).sort((a, b) => CLASS_LEVELS.indexOf(a as string) - CLASS_LEVELS.indexOf(b as string));
+        payload.classes = Array.from(new Set(assignments.map(a => a.classLevel))).sort((a, b) => {
+          const idxA = CLASS_LEVELS.findIndex(c => isClassMatching(c, a as string));
+          const idxB = CLASS_LEVELS.findIndex(c => isClassMatching(c, b as string));
+          return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+        });
         payload.subject = assignments[0]?.subject || '';
       }
 
@@ -708,7 +712,11 @@ export default function DashboardAdmin({
     try {
       const updatedClassAssignments = editAssignments;
       const updatedSubjects = Array.from(new Set(editAssignments.map(a => a.subject)));
-      const updatedClasses = Array.from(new Set(editAssignments.map(a => a.classLevel))).sort((a, b) => CLASS_LEVELS.indexOf(a as string) - CLASS_LEVELS.indexOf(b as string));
+      const updatedClasses = Array.from(new Set(editAssignments.map(a => a.classLevel))).sort((a, b) => {
+        const idxA = CLASS_LEVELS.findIndex(c => isClassMatching(c, a as string));
+        const idxB = CLASS_LEVELS.findIndex(c => isClassMatching(c, b as string));
+        return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+      });
       const updatedSubject = editAssignments[0]?.subject || '';
 
       await updateDoc(doc(db, 'users', editingTeacher.uid), {
@@ -802,12 +810,12 @@ export default function DashboardAdmin({
 
     // Subject filter
     if (adminSubject !== '') {
-      list = list.filter(f => f.subject === adminSubject);
+      list = list.filter(f => f.subject === adminSubject || isSubjectMatching(f.subject, adminSubject));
     }
 
     // Class filter
     if (adminClassLevel !== '') {
-      list = list.filter(f => f.classLevel === adminClassLevel);
+      list = list.filter(f => f.classLevel === adminClassLevel || isClassMatching(f.classLevel, adminClassLevel));
     }
 
     // 5. Date Range filter
@@ -1003,15 +1011,16 @@ export default function DashboardAdmin({
 
     // Subject specialty filter
     if (teacherFilterSubject) {
-      const hasSubject = tea.subjects?.includes(teacherFilterSubject) || tea.subject === teacherFilterSubject || 
-        (tea.classAssignments && tea.classAssignments.some(asg => asg.subject === teacherFilterSubject));
+      const hasSubject = tea.subjects?.some(s => s === teacherFilterSubject || isSubjectMatching(s, teacherFilterSubject)) || 
+        isSubjectMatching(tea.subject, teacherFilterSubject) || 
+        (tea.classAssignments && tea.classAssignments.some(asg => isSubjectMatching(asg.subject, teacherFilterSubject)));
       if (!hasSubject) return false;
     }
 
     // Class levels filter
     if (teacherFilterClass) {
-      const hasClass = tea.classes?.includes(teacherFilterClass) || 
-        (tea.classAssignments && tea.classAssignments.some(asg => asg.classLevel === teacherFilterClass));
+      const hasClass = tea.classes?.some(c => c === teacherFilterClass || isClassMatching(c, teacherFilterClass)) || 
+        (tea.classAssignments && tea.classAssignments.some(asg => isClassMatching(asg.classLevel, teacherFilterClass)));
       if (!hasClass) return false;
     }
 
@@ -1679,7 +1688,11 @@ export default function DashboardAdmin({
                                           ))}
                                           {tea.classes && tea.classes.length > 0 && (
                                             <div className="flex flex-wrap gap-1 mt-0.5">
-                                              {[...tea.classes].sort((a, b) => CLASS_LEVELS.indexOf(a) - CLASS_LEVELS.indexOf(b)).map((c, cIdx) => (
+                                              {[...tea.classes].sort((a, b) => {
+                                                const idxA = CLASS_LEVELS.findIndex(cls => isClassMatching(cls, a));
+                                                const idxB = CLASS_LEVELS.findIndex(cls => isClassMatching(cls, b));
+                                                return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+                                              }).map((c, cIdx) => (
                                                 <span key={cIdx} className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-[9px] px-1.5 py-0.5 rounded font-bold border border-emerald-100 dark:border-emerald-900/30">
                                                   {t(c)}
                                                 </span>
@@ -1976,7 +1989,11 @@ export default function DashboardAdmin({
                                     ))}
                                     {tea.classes && tea.classes.length > 0 && (
                                       <div className="flex flex-wrap gap-1 mt-0.5">
-                                        {[...tea.classes].sort((a, b) => CLASS_LEVELS.indexOf(a) - CLASS_LEVELS.indexOf(b)).map((c, cIdx) => (
+                                        {[...tea.classes].sort((a, b) => {
+                                          const idxA = CLASS_LEVELS.findIndex(cls => isClassMatching(cls, a));
+                                          const idxB = CLASS_LEVELS.findIndex(cls => isClassMatching(cls, b));
+                                          return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+                                        }).map((c, cIdx) => (
                                           <span key={cIdx} className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-[9px] px-1.5 py-0.5 rounded font-bold border border-emerald-100 dark:border-emerald-900/30">
                                             {t(c)}
                                           </span>

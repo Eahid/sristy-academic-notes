@@ -165,28 +165,6 @@ export const translations: Record<string, string> = {
   "Sristy Cadet Academy, Tangail": "সৃষ্টি ক্যাডেট একাডেমি, টাঙ্গাইল",
   "Sristy Juniors, Tangail": "সৃষ্টি জুনিয়র্স, টাঙ্গাইল",
 
-  // Subjects
-  "Bangla 1st Paper": "বাংলা ১ম পত্র",
-  "Bangla 2nd Paper": "বাংলা ২য় পত্র",
-  "English 1st Paper": "ইংরেজি ১ম পত্র",
-  "English 2nd Paper": "ইংরেজি ২য় পত্র",
-  "Math": "সাধারণ গণিত",
-  "Religion": "ধর্ম",
-  "ICT": "আইসিটি",
-  "Physics 1st Paper": "পদার্থবিজ্ঞান ১ম পত্র",
-  "Physics 2nd Paper": "পদার্থবিজ্ঞান ২য় পত্র",
-  "Chemistry 1st Paper": "রসায়ন ১ম পত্র",
-  "Chemistry 2nd Paper": "রসায়ন ২য় পত্র",
-  "Biology 1st Paper": "জীববিজ্ঞান ১ম পত্র",
-  "Biology 2nd Paper": "জীববিজ্ঞান ২য় পত্র",
-  "Higher Math": "উচ্চতর গণিত",
-  "Accounting": "হিসাববিজ্ঞান",
-  "Finance": "ফিন্যান্স",
-  "Business Entrepreneurship": "ব্যবসায় উদ্যোগ",
-  "Geography": "ভূগোল",
-  "General Science": "সাধারণ বিজ্ঞান",
-  "Bangladesh and Global Studies": "বাংলাদেশ ও বিশ্বপরিচয়",
-
   // Master Dashboard / Admins
   "Sristy Governance Dashboard": "সৃষ্টি গভর্ন্যান্স ড্যাশবোর্ড",
   "Root control terminal for supervising and configuring administrators and browse the global cloud vaults.": "প্রশাসনিক এডমিন নিয়ন্ত্রণ এবং সামগ্রিক ডেটাবেজ تদারকির প্রধান ড্যাশবোর্ড।",
@@ -461,7 +439,147 @@ export const translations: Record<string, string> = {
   "Successfully cleared all system caches and cookies! Reloading page...": "সফলভাবে সমস্ত সিস্টেম ক্যাশ এবং কুকিজ পরিষ্কার করা হয়েছে! পেজটি পুনরায় লোড হচ্ছে...",
   "If you cannot see the latest updates, please click below to force clear system cache and fetch the newest version.": "আপনি যদি সর্বশেষ আপডেটগুলো দেখতে না পান, তবে অনুগ্রহ করে নিচে ক্লিক করে সিস্টেমের ক্যাশ পরিষ্কার করুন এবং নতুন সংস্করণটি লোড করুন।",
   "Click to force clear cache and reload if updates are not showing up.": "আপডেট দেখতে না পেলে এখানে ক্লিক করে ক্যাশ পরিষ্কার ও রিফ্রেশ করুন।",
-  "Updates not showing up or having trouble signing in?": "আপডেট দেখতে সমস্যা হচ্ছে অথবা সাইন-ইন করতে পারছেন না?"
+  "Updates not showing up or having trouble signing in?": "আপডেট দেখতে সমস্যা হচ্ছে অথবা সাইন-ইন করতে পারছেন না?",
+
+  // Class Levels
+  "Play": "প্লে",
+  "Nursery": "নার্সারি",
+  "Class 1": "১ম",
+  "Class 2": "২য়",
+  "Class 3": "৩য়",
+  "Class 4": "৪র্থ",
+  "Class 5": "৫ম",
+  "Class 6": "৬ষ্ঠ",
+  "Class 7": "৭ম",
+  "Class 8": "৮ম",
+  "Class 9": "৯ম",
+  "Class 10": "১০ম",
+  "HSC 1st Year": "এইচএসসি ১ম বর্ষ",
+  "HSC 2nd Year": "এইচএসসি ২য় বর্ষ",
+  "প্লে": "প্লে",
+  "নার্সারি": "নার্সারি",
+  "১ম": "১ম",
+  "২য়": "২য়",
+  "৩য়": "৩য়",
+  "৩য়": "৩য়",
+  "৪র্থ": "৪র্থ",
+  "৫ম": "৫ম",
+  "৬ষ্ঠ": "৬ষ্ঠ",
+  "৭ম": "৭ম",
+  "৮ম": "৮ম",
+  "৯ম": "৯ম",
+  "১০ম": "১০ম",
+
+  // Academic Subjects
+  "Bangla": "বাংলা",
+  "বাংলা": "বাংলা",
+  "Bangla 1st Paper": "বাংলা ১ম পত্র",
+  "বাংলা ১ম পত্র": "বাংলা ১ম পত্র",
+  "Bangla 2nd Paper": "বাংলা ২য় পত্র",
+  "বাংলা ২য় পত্র": "বাংলা ২য় পত্র",
+  "বাংলা ২য় পত্র": "বাংলা ২য় পত্র",
+  "English": "ইংরেজি",
+  "ইংরেজি": "ইংরেজি",
+  "English 1st Paper": "ইংরেজি ১ম পত্র",
+  "ইংরেজি ১ম পত্র": "ইংরেজি ১ম পত্র",
+  "English 2nd Paper": "ইংরেজি ২য় পত্র",
+  "ইংরেজি ২য় পত্র": "ইংরেজি ২য় পত্র",
+  "ইংরেজি ২য় পত্র": "ইংরেজি ২য় পত্র",
+  "Math": "গণিত",
+  "গণিত": "গণিত",
+  "General Math": "সাধারণ গণিত",
+  "সাধারণ গণিত": "সাধারণ গণিত",
+  "Math 1st Paper": "উচ্চতর গণিত ১ম পত্র",
+  "Math 2nd Paper": "উচ্চতর গণিত ২য় পত্র",
+  "Islam Religion": "ইসলাম ধর্ম",
+  "ইসলাম ধর্ম": "ইসলাম ধর্ম",
+  "Hindu Religion": "হিন্দু ধর্ম",
+  "হিন্দু ধর্ম": "হিন্দু ধর্ম",
+  "Religion": "ধর্ম ও নৈতিক শিক্ষা",
+  "ধর্ম": "ধর্ম ও নৈতিক শিক্ষা",
+  "ধর্ম ও নৈতিক শিক্ষা": "ধর্ম ও নৈতিক শিক্ষা",
+  "Environmental Science": "পরিবেশ বিজ্ঞান",
+  "পরিবেশ বিজ্ঞান": "পরিবেশ বিজ্ঞান",
+  "ICT": "তথ্য ও যোগাযোগ প্রযুক্তি",
+  "তথ্য ও যোগাযোগ প্রযুক্তি": "তথ্য ও যোগাযোগ প্রযুক্তি",
+  "Physics": "পদার্থবিজ্ঞান",
+  "পদার্থবিজ্ঞান": "পদার্থবিজ্ঞান",
+  "Physics 1st Paper": "পদার্থবিজ্ঞান ১ম পত্র",
+  "Physics 2nd Paper": "পদার্থবিজ্ঞান ২য় পত্র",
+  "Chemistry": "রসায়ন",
+  "রসায়ন": "রসায়ন",
+  "Chemistry 1st Paper": "রসায়ন ১ম পত্র",
+  "Chemistry 2nd Paper": "রসায়ন ২য় পত্র",
+  "Biology": "জীববিজ্ঞান",
+  "জীববিজ্ঞান": "জীববিজ্ঞান",
+  "Biology 1st Paper": "জীববিজ্ঞান ১ম পত্র",
+  "Biology 2nd Paper": "জীববিজ্ঞান ২য় পত্র",
+  "Higher Math": "উচ্চতর গণিত",
+  "উচ্চতর গণিত": "উচ্চতর গণিত",
+  "Higher Math 1st Paper": "উচ্চতর গণিত ১ম পত্র",
+  "Higher Math 2nd Paper": "উচ্চতর গণিত ২য় পত্র",
+  "Science": "বিজ্ঞান",
+  "বিজ্ঞান": "বিজ্ঞান",
+  "General Science": "সাধারণ বিজ্ঞান",
+  "সাধারণ বিজ্ঞান": "সাধারণ বিজ্ঞান",
+  "Accounting": "হিসাববিজ্ঞান",
+  "হিসাববিজ্ঞান": "হিসাববিজ্ঞান",
+  "Finance": "ফিন্যান্স ও ব্যাংকিং",
+  "ফিন্যান্স ও ব্যাংকিং": "ফিন্যান্স ও ব্যাংকিং",
+  "Business Entrepreneurship": "ব্যবসায় উদ্যোগ",
+  "ব্যবসায় উদ্যোগ": "ব্যবসায় উদ্যোগ",
+  "Geography": "ভূগোল",
+  "ভূগোল": "ভূগোল",
+  "Bangladesh and Global Studies": "বাংলাদেশ ও বিশ্বপরিচয়",
+  "বাংলাদেশ ও বিশ্বপরিচয়": "বাংলাদেশ ও বিশ্বপরিচয়",
+  "History": "ইতিহাস",
+  "ইতিহাস": "ইতিহাস"
+};
+
+const bnToEnMap: Record<string, string> = {
+  "প্লে": "Play",
+  "নার্সারি": "Nursery",
+  "১ম": "Class 1",
+  "২য়": "Class 2",
+  "৩য়": "Class 3",
+  "৩য়": "Class 3",
+  "৪র্থ": "Class 4",
+  "৫ম": "Class 5",
+  "৬ষ্ঠ": "Class 6",
+  "৭ম": "Class 7",
+  "৮ম": "Class 8",
+  "৯ম": "Class 9",
+  "১০ম": "Class 10",
+  "এইচএসসি ১ম বর্ষ": "HSC 1st Year",
+  "এইচএসসি ২য় বর্ষ": "HSC 2nd Year",
+  "বাংলা": "Bangla",
+  "বাংলা ১ম পত্র": "Bangla 1st Paper",
+  "বাংলা ২য় পত্র": "Bangla 2nd Paper",
+  "ইংরেজি": "English",
+  "ইংরেজি ১ম পত্র": "English 1st Paper",
+  "ইংরেজি ২য় পত্র": "English 2nd Paper",
+  "গণিত": "Math",
+  "সাধারণ গণিত": "General Math",
+  "উচ্চতর গণিত ১ম পত্র": "Math 1st Paper",
+  "উচ্চতর গণিত ২য় পত্র": "Math 2nd Paper",
+  "ইসলাম ধর্ম": "Islam Religion",
+  "হিন্দু ধর্ম": "Hindu Religion",
+  "ধর্ম": "Religion",
+  "ধর্ম ও নৈতিক শিক্ষা": "Religion",
+  "পরিবেশ বিজ্ঞান": "Environmental Science",
+  "তথ্য ও যোগাযোগ প্রযুক্তি": "ICT",
+  "পদার্থবিজ্ঞান": "Physics",
+  "রসায়ন": "Chemistry",
+  "জীববিজ্ঞান": "Biology",
+  "উচ্চতর গণিত": "Higher Math",
+  "বিজ্ঞান": "Science",
+  "সাধারণ বিজ্ঞান": "General Science",
+  "হিসাববিজ্ঞান": "Accounting",
+  "ফিন্যান্স ও ব্যাংকিং": "Finance",
+  "ব্যবসায় উদ্যোগ": "Business Entrepreneurship",
+  "ভূগোল": "Geography",
+  "বাংলাদেশ ও বিশ্বপরিচয়": "Bangladesh and Global Studies",
+  "ইতিহাস": "History"
 };
 
 export const ThemeLanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -502,8 +620,16 @@ export const ThemeLanguageProvider: React.FC<{ children: React.ReactNode }> = ({
     if (!textStr) return '';
     
     const trimmed = textStr.trim();
-    let bangla = '';
 
+    if (language === 'en') {
+      if (bnToEnMap[trimmed]) {
+        return bnToEnMap[trimmed];
+      }
+      return text;
+    }
+
+    // language === 'bn'
+    let bangla = '';
     if (translations[trimmed]) {
       bangla = translations[trimmed];
     } else {
@@ -514,16 +640,11 @@ export const ThemeLanguageProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     }
 
-    // If no translation was found or translation is exactly identical to the original key, just return the text
-    if (!bangla || bangla === trimmed) {
-      return text;
+    if (bangla) {
+      return bangla;
     }
 
-    if (language === 'bn') {
-      return bangla;
-    } else {
-      return text;
-    }
+    return text;
   };
 
   return (

@@ -50,6 +50,7 @@ import BatchDownloadBar from './BatchDownloadBar';
 import SristyBoardDirectory from './SristyBoardDirectory';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import { CLASS_LEVELS } from '../constants';
+import { isSubjectMatching, isClassMatching } from '../utils';
 
 interface DashboardMasterAdminProps {
   user: UserProfile;
@@ -152,12 +153,12 @@ export default function DashboardMasterAdmin({
 
     // Subject filter
     if (masterSubject !== '') {
-      list = list.filter(f => f.subject === masterSubject);
+      list = list.filter(f => f.subject === masterSubject || isSubjectMatching(f.subject, masterSubject));
     }
 
     // Class level filter
     if (masterClassLevel !== '') {
-      list = list.filter(f => f.classLevel === masterClassLevel);
+      list = list.filter(f => f.classLevel === masterClassLevel || isClassMatching(f.classLevel, masterClassLevel));
     }
 
     // Search query (file name, topic, description, chapter)

@@ -6,6 +6,7 @@ import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import { CLASS_LEVELS } from '../constants';
+import { isSubjectMatching, isClassMatching } from '../utils';
 
 interface DashboardViewerProps {
   user: UserProfile;
@@ -42,8 +43,8 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
       (file.topic || '').toLowerCase().includes(query);
 
     const matchesBranch = selectedBranch === '' || file.branch === selectedBranch;
-    const matchesSubject = selectedSubject === '' || file.subject === selectedSubject;
-    const matchesClassLevel = selectedClassLevel === '' || file.classLevel === selectedClassLevel;
+    const matchesSubject = selectedSubject === '' || file.subject === selectedSubject || isSubjectMatching(file.subject, selectedSubject);
+    const matchesClassLevel = selectedClassLevel === '' || file.classLevel === selectedClassLevel || isClassMatching(file.classLevel, selectedClassLevel);
 
     const teacherQuery = selectedTeacher.trim().toLowerCase();
     const matchesTeacher = teacherQuery === '' || (file.uploaderName || '').toLowerCase().includes(teacherQuery);
@@ -83,13 +84,13 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
     } else if (sortBy === 'size_asc') {
       return a.fileSize - b.fileSize;
     } else if (sortBy === 'class_asc') {
-      const idxA = a.classLevel ? CLASS_LEVELS.indexOf(a.classLevel) : -1;
-      const idxB = b.classLevel ? CLASS_LEVELS.indexOf(b.classLevel) : -1;
-      return idxA - idxB;
+      const idxA = a.classLevel ? CLASS_LEVELS.findIndex(c => isClassMatching(c, a.classLevel)) : -1;
+      const idxB = b.classLevel ? CLASS_LEVELS.findIndex(c => isClassMatching(c, b.classLevel)) : -1;
+      return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
     } else if (sortBy === 'class_desc') {
-      const idxA = a.classLevel ? CLASS_LEVELS.indexOf(a.classLevel) : -1;
-      const idxB = b.classLevel ? CLASS_LEVELS.indexOf(b.classLevel) : -1;
-      return idxB - idxA;
+      const idxA = a.classLevel ? CLASS_LEVELS.findIndex(c => isClassMatching(c, a.classLevel)) : -1;
+      const idxB = b.classLevel ? CLASS_LEVELS.findIndex(c => isClassMatching(c, b.classLevel)) : -1;
+      return (idxB !== -1 ? idxB : -1) - (idxA !== -1 ? idxA : -1);
     }
     return 0;
   });
