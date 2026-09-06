@@ -48,7 +48,8 @@ export default function DashboardTeacher({
   onViewTeacherDetails
 }: DashboardTeacherProps) {
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
-  const [archiveTab, setArchiveTab] = useState<'my_submissions' | 'pending' | 'approved' | 'department_materials' | 'recent_activity'>('my_submissions');
+  const [archiveTab, setArchiveTab] = useState<'my_submissions' | 'pending' | 'approved' | 'needs_replacement' | 'department_materials' | 'recent_activity'>('my_submissions');
+  const [sortBy, setSortBy] = useState<'newest' | 'rating' | 'downloads'>('newest');
   const [replacingFile, setReplacingFile] = useState<FileArchive | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchTerm, setSearchTerm] = useState('');
@@ -150,6 +151,7 @@ export default function DashboardTeacher({
   const myUploadedFiles = files.filter(f => f && f.uploadedBy === user.uid);
   const myPendingFiles = myUploadedFiles.filter(f => !f.isApproved && !f.isDeleted);
   const myApprovedFiles = myUploadedFiles.filter(f => f.isApproved && !f.isDeleted);
+  const myReplacementRequiredFiles = myUploadedFiles.filter(f => !f.isDeleted && (f.needsReplacement || ((f.dislikes || 0) >= 20 && (f.likes || 0) < 3)));
 
   const departmentFiles = files.filter(f => {
     if (!f || !f.isApproved || typeof f.subject !== 'string') return false;
@@ -168,6 +170,8 @@ export default function DashboardTeacher({
     ? myPendingFiles
     : archiveTab === 'approved'
     ? myApprovedFiles
+    : archiveTab === 'needs_replacement'
+    ? myReplacementRequiredFiles
     : archiveTab === 'recent_activity'
     ? [...myUploadedFiles, ...departmentFiles].filter((v, i, a) => a.findIndex(t => t.id === v.id) === i).sort((a, b) => {
         const dateA = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt || 0);
@@ -196,6 +200,19 @@ export default function DashboardTeacher({
       itemStr.toLowerCase().includes(queryStr) ||
       uploaderStr.toLowerCase().includes(queryStr)
     );
+  }).sort((a, b) => {
+    if (sortBy === 'rating') {
+      const netA = (a.likes || 0) - (a.dislikes || 0);
+      const netB = (b.likes || 0) - (b.dislikes || 0);
+      if (netB !== netA) return netB - netA;
+      return (b.likes || 0) - (a.likes || 0);
+    } else if (sortBy === 'downloads') {
+      return (b.downloadCount || 0) - (a.downloadCount || 0);
+    } else {
+      const dateA = a.createdAt instanceof Date ? a.createdAt : (a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0));
+      const dateB = b.createdAt instanceof Date ? b.createdAt : (b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0));
+      return dateB.getTime() - dateA.getTime();
+    }
   });
 
   // ── Teacher Saved Curriculum Topics State & Sync ──
@@ -701,6 +718,35 @@ export default function DashboardTeacher({
         </div>
       </div>
 
+      {myReplacementRequiredFiles.length > 0 && (
+        <div className="bg-rose-50 dark:bg-rose-950/30 border-l-4 border-rose-500 p-4 rounded-r-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm animate-in slide-in-from-top duration-250">
+          <div className="flex items-start gap-3">
+            <div className="bg-rose-100 dark:bg-rose-900/40 p-2 rounded-lg text-rose-600 dark:text-rose-400 mt-0.5 shrink-0">
+              <AlertTriangle className="w-5 h-5 text-rose-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-rose-900 dark:text-rose-200">
+                {t("Action Required: Note(s) Auto-Rejected by Community Feedback")}
+              </p>
+              <p className="text-xs text-rose-700/90 dark:text-rose-300/80 mt-1 leading-normal">
+                {myReplacementRequiredFiles.length} {t("of your uploaded note(s) received 20+ dislikes with fewer than 3 likes and are auto-rejected. Please replace them with revised materials to restore approval status.")}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setArchiveTab('needs_replacement');
+              setSelectedFileIds([]);
+            }}
+            className="bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-xs shrink-0 uppercase tracking-wider flex items-center gap-1.5 cursor-pointer mt-1 sm:mt-0"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>{t("View Notes to Replace")} ({myReplacementRequiredFiles.length})</span>
+          </button>
+        </div>
+      )}
+
       {rejectionLogs.length > 0 && (
         <div className="bg-amber-50 dark:bg-amber-950/20 border-l-4 border-amber-500 p-4 rounded-r-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm animate-in slide-in-from-top duration-250">
           <div className="flex items-start gap-3">
@@ -988,6 +1034,12 @@ export default function DashboardTeacher({
                 <button type="button" onClick={() => { setArchiveTab('approved'); setSelectedFileIds([]); }} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${archiveTab === 'approved' ? 'bg-green-500 text-white shadow-xs' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
                   ✅ {t("Approved")} ({myApprovedFiles.length})
                 </button>
+                {myReplacementRequiredFiles.length > 0 && (
+                  <button type="button" onClick={() => { setArchiveTab('needs_replacement'); setSelectedFileIds([]); }} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${archiveTab === 'needs_replacement' ? 'bg-rose-600 text-white shadow-xs' : 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100'}`}>
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span>⚠️ {t("Needs Replacement")} ({myReplacementRequiredFiles.length})</span>
+                  </button>
+                )}
                 {teacherSubjects.length > 0 && (
                   <button type="button" onClick={() => { setArchiveTab('department_materials'); setSelectedFileIds([]); }} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${archiveTab === 'department_materials' ? 'bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-100 shadow-xs' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
                     {t("Department Library")} ({departmentFiles.length})
@@ -1024,6 +1076,15 @@ export default function DashboardTeacher({
                   <select value={filterClassLevel} onChange={(e) => setFilterClassLevel(e.target.value)} className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 text-gray-700 dark:text-gray-200 rounded-lg focus:outline-none focus:border-[#15803d] dark:focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer">
                     <option value="">{t("All Classes")}</option>
                     {(teacherClasses.length > 0 ? teacherClasses : CLASS_LEVELS).map((cls, idx) => (<option key={idx} value={cls}>{t(cls)}</option>))}
+                  </select>
+                  <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none"><ChevronDown className="w-3.5 h-3.5" /></span>
+                </div>
+
+                <div className="relative w-full md:w-48">
+                  <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 text-gray-700 dark:text-gray-200 rounded-lg focus:outline-none focus:border-[#15803d] dark:focus:border-brand-500 text-xs font-bold appearance-none cursor-pointer">
+                    <option value="newest">{t("Sort: Newest First")}</option>
+                    <option value="rating">⭐ {t("Community Rank (Likes)")}</option>
+                    <option value="downloads">🔥 {t("Most Downloaded")}</option>
                   </select>
                   <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 pointer-events-none"><ChevronDown className="w-3.5 h-3.5" /></span>
                 </div>

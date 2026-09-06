@@ -155,7 +155,13 @@ service cloud.firestore {
         (getUserRole(request.auth.uid) == 'admin' && 
          existing().branch == getUserData(request.auth.uid).branch && 
          incoming().branch == existing().branch &&
-         incoming().diff(existing()).affectedKeys().hasAny(['isApproved', 'approvedBy', 'downloadCount'])) ||
+         incoming().diff(existing()).affectedKeys().hasAny(['isApproved', 'approvedBy', 'downloadCount', 'likes', 'dislikes', 'likedBy', 'dislikedBy', 'needsReplacement', 'rejectionReason'])) ||
+        // File uploader can replace file or update metadata
+        (existing().uploadedBy == request.auth.uid &&
+         incoming().uploadedBy == existing().uploadedBy &&
+         incoming().diff(existing()).affectedKeys().hasAny(['fileName', 'fileType', 'fileSize', 'fileUrl', 'storagePath', 'updatedAt', 'updateHistory', 'description', 'subject', 'classLevel', 'chapter', 'topic', 'itemType', 'dislikes', 'dislikedBy', 'needsReplacement', 'isApproved', 'rejectionReason'])) ||
+        // Reaction updates (like / dislike) by signed-in users
+        (isSignedIn() && incoming().diff(existing()).affectedKeys().hasAny(['likes', 'dislikes', 'likedBy', 'dislikedBy', 'needsReplacement', 'isApproved', 'rejectionReason'])) ||
         // Regular file download log incremental update
         (incoming().diff(existing()).affectedKeys().hasOnly(['downloadCount']))
       );
@@ -165,6 +171,22 @@ service cloud.firestore {
         getUserRole(request.auth.uid) == 'file_approver' ||
         (getUserRole(request.auth.uid) == 'admin' && existing().branch == getUserData(request.auth.uid).branch)
       );
+
+      // --- Comments Subcollection ---
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isEmailVerified() && incoming().authorId == request.auth.uid;
+        allow update: if isEmailVerified() && (
+          isMasterAdmin() ||
+          existing().authorId == request.auth.uid ||
+          // Note owner or admin can reply
+          incoming().diff(existing()).affectedKeys().hasAny(['replies', 'content', 'updatedAt', 'isEdited', 'editHistory'])
+        );
+        allow delete: if isEmailVerified() && (
+          isMasterAdmin() ||
+          existing().authorId == request.auth.uid
+        );
+      }
     }
 
     // --- Notices Collection ---

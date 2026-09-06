@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 import { FileArchive, UserProfile } from '../types';
 import { 
   FileText, 
@@ -18,10 +20,15 @@ import {
   ArrowLeft,
   RefreshCw,
   History,
-  Pencil
+  Pencil,
+  ThumbsUp,
+  ThumbsDown,
+  MessageSquare,
+  AlertTriangle
 } from 'lucide-react';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import ReplaceFileModal from './ReplaceFileModal';
+import FileCommentsModal from './FileCommentsModal';
 
 interface FileCardProps {
   file: FileArchive;
@@ -45,6 +52,76 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [showReplaceModal, setShowReplaceModal] = useState(false);
+  const [showCommentsModal, setShowCommentsModal] = useState(false);
+
+  const likesCount = file.likes || 0;
+  const dislikesCount = file.dislikes || 0;
+  // 20+ dislikes auto-rejects ONLY if fewer than 3 likes (if 20 likes and 30 dislikes, no issue)
+  const isAutoRejected = (file.needsReplacement === true) || (dislikesCount >= 20 && likesCount < 3);
+  const userHasLiked = user ? (file.likedBy || []).includes(user.uid) : false;
+  const userHasDisliked = user ? (file.dislikedBy || []).includes(user.uid) : false;
+
+  const handleReaction = async (type: 'like' | 'dislike') => {
+    if (!user) {
+      alert(t("Please sign in to rate study materials."));
+      return;
+    }
+    try {
+      const fileRef = doc(db, 'files', file.id);
+      const currentLikedBy = file.likedBy || [];
+      const currentDislikedBy = file.dislikedBy || [];
+      const hasLiked = currentLikedBy.includes(user.uid);
+      const hasDisliked = currentDislikedBy.includes(user.uid);
+
+      let newLikes = file.likes || 0;
+      let newDislikes = file.dislikes || 0;
+      let newLikedBy = [...currentLikedBy];
+      let newDislikedBy = [...currentDislikedBy];
+
+      if (type === 'like') {
+        if (hasLiked) {
+          newLikes = Math.max(0, newLikes - 1);
+          newLikedBy = newLikedBy.filter(uid => uid !== user.uid);
+        } else {
+          newLikes += 1;
+          newLikedBy.push(user.uid);
+          if (hasDisliked) {
+            newDislikes = Math.max(0, newDislikes - 1);
+            newDislikedBy = newDislikedBy.filter(uid => uid !== user.uid);
+          }
+        }
+      } else if (type === 'dislike') {
+        if (hasDisliked) {
+          newDislikes = Math.max(0, newDislikes - 1);
+          newDislikedBy = newDislikedBy.filter(uid => uid !== user.uid);
+        } else {
+          newDislikes += 1;
+          newDislikedBy.push(user.uid);
+          if (hasLiked) {
+            newLikes = Math.max(0, newLikes - 1);
+            newLikedBy = newLikedBy.filter(uid => uid !== user.uid);
+          }
+        }
+      }
+
+      const updates: any = {
+        likes: newLikes,
+        dislikes: newDislikes,
+        likedBy: newLikedBy,
+        dislikedBy: newDislikedBy
+      };
+
+      if (newDislikes >= 20 && newLikes < 3) {
+        updates.needsReplacement = true;
+        updates.isApproved = false;
+        updates.rejectionReason = "Auto-rejected: 20+ dislikes reached with fewer than 3 likes. File replacement required.";
+      }
+
+      await updateDoc(fileRef, updates);
+    } catch (err) {
+      console.error("Failed to update reaction:", err);
+    }
+  };
 
   // Generate deterministic checksum (SHA-256 style)
   const getFileChecksum = (fileId: string) => {
@@ -153,7 +230,12 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
                 .{file.fileType}
               </span>
             </div>
-            {isApproved ? (
+            {isAutoRejected ? (
+              <span className="flex items-center gap-1.5 text-[10px] font-extrabold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-900/50 animate-pulse">
+                <AlertTriangle className="w-3 h-3 text-rose-500" />
+                <span>{t("REPLACE REQUIRED")}</span>
+              </span>
+            ) : isApproved ? (
               <span className="flex items-center gap-1.5 text-[10px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/20 px-2 py-0.5 rounded-full border border-green-100 dark:border-green-900/40">
                 <CheckCircle2 className="w-3 h-3 text-green-500" />
                 <span>{t("Approved")}</span>
@@ -248,17 +330,89 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
           </div>
         </div>
 
-        {/* View Details Link */}
-        <div className="mt-3 pt-2.5 border-t border-gray-100 dark:border-slate-800 flex justify-center">
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="text-xs font-bold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 flex items-center gap-1 cursor-pointer transition-colors select-none py-1 px-3 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800"
-            id={`view-details-btn-${file.id}`}
-          >
-            <span>{isExpanded ? t("Hide Details") : t("View Details & History")}</span>
-            <ChevronUp className={`w-3.5 h-3.5 transform transition-transform duration-200 ${isExpanded ? 'rotate-0' : 'rotate-180'}`} />
-          </button>
+        {/* Interaction / Reaction & Comments Strip */}
+        <div className="mt-3 pt-2.5 border-t border-gray-150 dark:border-slate-800 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            {/* Like button */}
+            <button
+              type="button"
+              onClick={() => handleReaction('like')}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                userHasLiked
+                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                  : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:text-emerald-700'
+              }`}
+              title={t("Like this note")}
+              id={`like-btn-${file.id}`}
+            >
+              <ThumbsUp className="w-3.5 h-3.5" />
+              <span>{likesCount}</span>
+            </button>
+
+            {/* Dislike button */}
+            <button
+              type="button"
+              onClick={() => handleReaction('dislike')}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                userHasDisliked
+                  ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
+                  : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-700'
+              }`}
+              title={t("Dislike this note")}
+              id={`dislike-btn-${file.id}`}
+            >
+              <ThumbsDown className="w-3.5 h-3.5" />
+              <span>{dislikesCount}</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1">
+            {/* Comments button */}
+            <button
+              type="button"
+              onClick={() => setShowCommentsModal(true)}
+              className="flex items-center gap-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 hover:text-brand-600 dark:hover:text-brand-400 py-1 px-2 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              title={t("Open teacher comments & discussion")}
+              id={`comments-btn-${file.id}`}
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-brand-500" />
+              <span>{t("Comments")}</span>
+            </button>
+
+            {/* View Details Toggle */}
+            <button
+              type="button"
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="text-xs font-bold text-brand-600 dark:text-brand-400 hover:text-brand-700 flex items-center gap-0.5 py-1 px-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer"
+              title={isExpanded ? t("Hide Details") : t("View Details & History")}
+              id={`view-details-btn-${file.id}`}
+            >
+              <ChevronUp className={`w-3.5 h-3.5 transform transition-transform duration-200 ${isExpanded ? 'rotate-0' : 'rotate-180'}`} />
+            </button>
+          </div>
         </div>
+
+        {/* High Dislike / Auto-rejection Alert */}
+        {isAutoRejected && (
+          <div className="mt-2.5 p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-xl flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
+              <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300 truncate">
+                {t("Auto-rejected (20+ dislikes with < 3 likes). Please replace.")}
+              </p>
+            </div>
+            {canReplace && (
+              <button
+                type="button"
+                onClick={() => setShowReplaceModal(true)}
+                className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-extrabold cursor-pointer shrink-0 shadow-xs flex items-center gap-1"
+              >
+                <RefreshCw className="w-2.5 h-2.5" />
+                <span>{t("Replace")}</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Expanded Metadata & Update History Panel */}
@@ -479,6 +633,23 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
           onClose={() => setShowReplaceModal(false)}
           file={file}
           onReplace={onReplace}
+        />
+      )}
+
+      {/* File Comments Modal */}
+      {showCommentsModal && (
+        <FileCommentsModal
+          file={file}
+          isOpen={showCommentsModal}
+          onClose={() => setShowCommentsModal(false)}
+          currentUser={user}
+          onViewTeacherDetails={onViewTeacherDetails}
+          onReactionToggle={async (_, type) => {
+            await handleReaction(type);
+          }}
+          onReplaceFileRequested={() => {
+            setShowReplaceModal(true);
+          }}
         />
       )}
 

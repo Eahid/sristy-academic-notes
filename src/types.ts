@@ -13,6 +13,7 @@ export interface UserProfile {
   classAssignments?: { subject: string; classLevel: string }[]; // Specific subject-class pairings
   status: 'active' | 'inactive';
   profilePic?: string; // Base64 image
+  profilePictureUrl?: string;
   bio?: string;
   createdAt: any;
 }
@@ -29,6 +30,42 @@ export interface FileUpdateHistory {
   previousFileUrl?: string;
   previousStoragePath?: string;
   changeNote?: string;
+}
+
+export interface CommentEditHistory {
+  content: string;
+  editedAt: any;
+}
+
+export interface CommentReply {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorRole: UserRole;
+  authorBranch?: string;
+  authorSubject?: string;
+  authorProfilePic?: string;
+  isOwnerReply: boolean;
+  content: string;
+  createdAt: any;
+}
+
+export interface FileComment {
+  id: string;
+  fileId: string;
+  fileOwnerId?: string;
+  authorId: string;
+  authorName: string;
+  authorRole: UserRole;
+  authorBranch?: string;
+  authorSubject?: string;
+  authorProfilePic?: string;
+  content: string; // Latest content
+  createdAt: any;
+  updatedAt?: any;
+  isEdited?: boolean;
+  editHistory?: CommentEditHistory[];
+  replies?: CommentReply[];
 }
 
 export interface FileArchive {
@@ -52,6 +89,12 @@ export interface FileArchive {
   isApproved: boolean;
   approvedBy?: string; // UID of admin who approved it
   downloadCount: number;
+  likes?: number;
+  dislikes?: number;
+  likedBy?: string[];
+  dislikedBy?: string[];
+  needsReplacement?: boolean;
+  rejectionReason?: string;
   createdAt: any; // Firestore Timestamp
   updatedAt?: any; // Timestamp of last file update/replacement
   updateHistory?: FileUpdateHistory[]; // Audit trail of file replacements

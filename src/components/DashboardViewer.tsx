@@ -25,7 +25,7 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
   const [selectedClassLevel, setSelectedClassLevel] = useState('');
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [selectedFileType, setSelectedFileType] = useState('');
-  const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc' | 'class_asc' | 'class_desc'>('date_desc');
+  const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc' | 'class_asc' | 'class_desc' | 'rating_desc' | 'downloads_desc'>('rating_desc');
 
   const { t } = useThemeLanguage();
   const { branches, subjects } = useBranchSubject();
@@ -91,6 +91,13 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
       const idxA = a.classLevel ? CLASS_LEVELS.findIndex(c => isClassMatching(c, a.classLevel)) : -1;
       const idxB = b.classLevel ? CLASS_LEVELS.findIndex(c => isClassMatching(c, b.classLevel)) : -1;
       return (idxB !== -1 ? idxB : -1) - (idxA !== -1 ? idxA : -1);
+    } else if (sortBy === 'rating_desc') {
+      const netA = (a.likes || 0) - (a.dislikes || 0);
+      const netB = (b.likes || 0) - (b.dislikes || 0);
+      if (netB !== netA) return netB - netA;
+      return (b.likes || 0) - (a.likes || 0);
+    } else if (sortBy === 'downloads_desc') {
+      return (b.downloadCount || 0) - (a.downloadCount || 0);
     }
     return 0;
   });
@@ -221,6 +228,8 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
               onChange={(e) => setSortBy(e.target.value as any)}
               className="w-full pl-10 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-brand-500 text-xs font-bold text-[#15803d] dark:text-emerald-450 appearance-none cursor-pointer transition-all"
             >
+              <option value="rating_desc">⭐ {t("Community Rank (Highest Rated)")}</option>
+              <option value="downloads_desc">🔥 {t("Most Downloaded")}</option>
               <option value="date_desc">{t("Sort: Newest First")}</option>
               <option value="date_asc">{t("Sort: Oldest First")}</option>
               <option value="name_asc">{t("Sort: Name A to Z")}</option>

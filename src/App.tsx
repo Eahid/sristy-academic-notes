@@ -786,6 +786,15 @@ export default function App() {
       storagePath: fileRefPath,
       updatedAt: serverTimestamp(),
       updateHistory: updatedHistory,
+      // "and the replaced file will not have any dislike but will have likes"
+      dislikes: 0,
+      dislikedBy: [],
+      // Likes are preserved from targetFile:
+      likes: targetFile.likes || 0,
+      likedBy: targetFile.likedBy || [],
+      needsReplacement: false,
+      isApproved: true,
+      rejectionReason: null,
     });
 
     if (currentUser) {

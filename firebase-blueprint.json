@@ -38,6 +38,12 @@
         "isApproved": { "type": "boolean", "description": "Whether the file has been approved by a branch or master admin" },
         "approvedBy": { "type": "string", "description": "User ID of the approving admin" },
         "downloadCount": { "type": "number", "description": "Count of successful downloads" },
+        "likes": { "type": "number", "description": "Total count of positive likes" },
+        "dislikes": { "type": "number", "description": "Total count of negative dislikes" },
+        "likedBy": { "type": "array", "description": "List of user UIDs who liked the file" },
+        "dislikedBy": { "type": "array", "description": "List of user UIDs who disliked the file" },
+        "needsReplacement": { "type": "boolean", "description": "Whether file reached 20 dislikes threshold (< 3 likes) and requires replacement" },
+        "rejectionReason": { "type": "string", "description": "Reason for rejection or replacement" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "fileName", "fileType", "fileSize", "uploadedBy", "uploaderName", "branch", "subject", "isApproved", "downloadCount", "createdAt"]
@@ -122,6 +128,29 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "teacherUid", "subject", "chapter", "topic"]
+    },
+    "FileComment": {
+      "title": "FileComment",
+      "description": "Comments and replies on uploaded study materials and notes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique comment ID" },
+        "fileId": { "type": "string", "description": "ID of target file" },
+        "fileOwnerId": { "type": "string", "description": "UID of the note owner" },
+        "authorId": { "type": "string", "description": "User ID of the commenter" },
+        "authorName": { "type": "string", "description": "Full display name of the commenter" },
+        "authorRole": { "type": "string", "description": "Role of the commenter" },
+        "authorBranch": { "type": "string", "description": "Educational branch of the commenter" },
+        "authorSubject": { "type": "string", "description": "Subject of the teacher" },
+        "authorProfilePic": { "type": "string", "description": "Profile picture URL or Base64" },
+        "content": { "type": "string", "description": "Current/latest comment content" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "isEdited": { "type": "boolean", "description": "Whether comment was edited" },
+        "editHistory": { "type": "array", "description": "History of previous comment edits" },
+        "replies": { "type": "array", "description": "Replies from note owner or staff" }
+      },
+      "required": ["id", "fileId", "authorId", "authorName", "content", "createdAt"]
     }
   },
   "firestore": {
@@ -132,6 +161,10 @@
     "files/{fileId}": {
       "schema": "File",
       "description": "Uploaded or archived file resource collection map"
+    },
+    "files/{fileId}/comments/{commentId}": {
+      "schema": "FileComment",
+      "description": "Comments and replies subcollection for files"
     },
     "notices/{noticeId}": {
       "schema": "Notice",
