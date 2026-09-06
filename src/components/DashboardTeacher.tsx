@@ -1,15 +1,45 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { collection, addDoc, serverTimestamp, query, where, getDocs, orderBy, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { UserProfile, FileArchive } from '../types';
-import { Upload, CheckCircle2, AlertCircle, Sparkles, FolderLock, Globe, BookOpen, Layers, ChevronDown, Loader2, Bell, AlertTriangle, Calendar, X, List, Grid, Search, FileText, FileImage, Download, Eye, Trash2, Pencil, Save, BookmarkCheck } from 'lucide-react';
+import { 
+  Upload, 
+  CheckCircle2, 
+  AlertCircle, 
+  Sparkles, 
+  FolderLock, 
+  Globe, 
+  BookOpen, 
+  Layers, 
+  ChevronDown, 
+  Loader2, 
+  Bell, 
+  AlertTriangle, 
+  Calendar, 
+  X, 
+  List, 
+  Grid, 
+  Search, 
+  FileText, 
+  FileImage, 
+  Download, 
+  Eye, 
+  Trash2, 
+  Pencil, 
+  Save, 
+  BookmarkCheck,
+  RefreshCw,
+  MessageSquare
+} from 'lucide-react';
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import { useBranchSubject } from './BranchSubjectContext';
 import { CLASS_LEVELS } from '../constants';
 import { isSubjectMatching, isClassMatching, getFilteredSubjectsForClass, getFilteredClassesForSubject } from '../utils';
+import ReplaceFileModal from './ReplaceFileModal';
+import FileCommentsModal from './FileCommentsModal';
 
 interface SavedTopicItem {
   id: string;
@@ -20,9 +50,6 @@ interface SavedTopicItem {
   topic: string;
   createdAt?: any;
 }
-
-import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw';
-import ReplaceFileModal from './ReplaceFileModal';
 
 interface DashboardTeacherProps {
   user: UserProfile;
@@ -103,19 +130,23 @@ export default function DashboardTeacher({
 
   const finalSubject = isNewSubjectForm ? newSubjectText.trim() : selectedSubject;
 
-  const teacherSubjects = (Array.isArray(user?.subjects)
+  const [activeCommentFile, setActiveCommentFile] = useState<FileArchive | null>(null);
+
+  const teacherSubjects = useMemo(() => (Array.isArray(user?.subjects)
     ? user.subjects
     : (user?.subject ? [user.subject] : [])
-  ).filter((sub): sub is string => typeof sub === 'string');
+  ).filter((sub): sub is string => typeof sub === 'string'), [user?.subjects, user?.subject]);
 
-  const teacherClasses = (Array.isArray(user?.classAssignments) && user.classAssignments.length > 0
+  const teacherSubjectsKey = teacherSubjects.join(',');
+
+  const teacherClasses = useMemo(() => (Array.isArray(user?.classAssignments) && user.classAssignments.length > 0
     ? Array.from(new Set(user.classAssignments.map(a => a.classLevel)))
     : (Array.isArray(user?.classes) ? user.classes : [])
   ).sort((a, b) => {
     const idxA = CLASS_LEVELS.findIndex(c => isClassMatching(c, a));
     const idxB = CLASS_LEVELS.findIndex(c => isClassMatching(c, b));
     return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
-  });
+  }), [user?.classAssignments, user?.classes]);
 
   const getAssignedClassesForSubject = (subject: string): string[] => {
     if (!subject) return teacherClasses;
@@ -372,7 +403,7 @@ export default function DashboardTeacher({
     };
     fetchRecentLogs();
     return () => { active = false; };
-  }, [user.uid, teacherSubjects]);
+  }, [user.uid, teacherSubjectsKey]);
 
   useEffect(() => {
     let active = true;
@@ -1261,6 +1292,7 @@ export default function DashboardTeacher({
                                   {['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes((file.fileType || '').toLowerCase()) && (
                                     <button onClick={() => onPreview ? onPreview(file) : onDownload(file)} className="p-1.5 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-750 text-gray-600 dark:text-gray-300 rounded border border-gray-150 dark:border-slate-700 cursor-pointer" title={t("Preview")}><Eye className="w-3.5 h-3.5 text-brand-500" /></button>
                                   )}
+                                  <button onClick={() => setActiveCommentFile(file)} className="p-1.5 bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded border border-blue-100 dark:border-blue-900/30 cursor-pointer" title={t("Comments")}><MessageSquare className="w-3.5 h-3.5" /></button>
                                   <button onClick={() => onDownload(file)} className="p-1.5 bg-emerald-50 dark:bg-emerald-955/20 hover:bg-emerald-100/50 dark:hover:bg-emerald-955/40 text-emerald-600 dark:text-[#22c55e] rounded border border-emerald-100 dark:border-emerald-900/40 cursor-pointer" title={t("Download")}><Download className="w-3.5 h-3.5" /></button>
                                   {file.uploadedBy === user.uid && (
                                     <>
@@ -1377,6 +1409,20 @@ export default function DashboardTeacher({
           onClose={() => setReplacingFile(null)}
           file={replacingFile}
           onReplace={onReplaceFile}
+        />
+      )}
+
+      {activeCommentFile && (
+        <FileCommentsModal
+          isOpen={!!activeCommentFile}
+          onClose={() => setActiveCommentFile(null)}
+          file={activeCommentFile}
+          currentUser={user}
+          onViewTeacherDetails={onViewTeacherDetails}
+          onReplaceFileRequested={(f) => {
+            setActiveCommentFile(null);
+            setReplacingFile(f);
+          }}
         />
       )}
     </div>

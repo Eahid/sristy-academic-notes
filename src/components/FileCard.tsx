@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -371,11 +372,11 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
             <button
               type="button"
               onClick={() => setShowCommentsModal(true)}
-              className="flex items-center gap-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 hover:text-brand-600 dark:hover:text-brand-400 py-1 px-2 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 hover:text-brand-600 dark:hover:text-brand-400 py-1.5 px-2.5 rounded-lg bg-gray-50 hover:bg-gray-100 dark:bg-slate-800/60 dark:hover:bg-slate-800 border border-gray-200/80 dark:border-slate-700/60 transition-all cursor-pointer select-none active:scale-95"
               title={t("Open teacher comments & discussion")}
               id={`comments-btn-${file.id}`}
             >
-              <MessageSquare className="w-3.5 h-3.5 text-brand-500" />
+              <MessageSquare className="w-3.5 h-3.5 text-brand-500 shrink-0" />
               <span>{t("Comments")}</span>
             </button>
 
@@ -383,7 +384,7 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
             <button
               type="button"
               onClick={() => setIsExpanded(!isExpanded)}
-              className="text-xs font-bold text-brand-600 dark:text-brand-400 hover:text-brand-700 flex items-center gap-0.5 py-1 px-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer"
+              className="text-xs font-bold text-brand-600 dark:text-brand-400 hover:text-brand-700 flex items-center gap-0.5 py-1 px-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer select-none active:scale-95"
               title={isExpanded ? t("Hide Details") : t("View Details & History")}
               id={`view-details-btn-${file.id}`}
             >
@@ -654,7 +655,7 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
       )}
 
       {/* High-Fidelity Centered Review & Action Modal (For Admins/Approvers) */}
-      {showReviewPanel && (
+      {showReviewPanel && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md overflow-hidden select-none">
           <motion.div
             initial={{ scale: 0.95, y: 15, opacity: 0 }}
@@ -866,7 +867,8 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
               )}
             </div>
           </motion.div>
-        </div>
+        </div>,
+        document.body
       )}
     </motion.div>
   );
