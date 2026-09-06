@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { FileArchive, UserProfile } from '../types';
 import { 
@@ -55,56 +55,92 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
   const [showReplaceModal, setShowReplaceModal] = useState(false);
   const [showCommentsModal, setShowCommentsModal] = useState(false);
 
-  const likesCount = file.likes || 0;
-  const dislikesCount = file.dislikes || 0;
+  const [optimisticLikes, setOptimisticLikes] = useState<number>(file.likes || 0);
+  const [optimisticDislikes, setOptimisticDislikes] = useState<number>(file.dislikes || 0);
+  const [optimisticLikedBy, setOptimisticLikedBy] = useState<string[]>(Array.isArray(file.likedBy) ? file.likedBy : []);
+  const [optimisticDislikedBy, setOptimisticDislikedBy] = useState<string[]>(Array.isArray(file.dislikedBy) ? file.dislikedBy : []);
+  const [commentCount, setCommentCount] = useState<number>(file.commentCount || 0);
+
+  // Synchronize optimistic state when file props update from Firestore
+  useEffect(() => {
+    setOptimisticLikes(file.likes || 0);
+    setOptimisticDislikes(file.dislikes || 0);
+    setOptimisticLikedBy(Array.isArray(file.likedBy) ? file.likedBy : []);
+    setOptimisticDislikedBy(Array.isArray(file.dislikedBy) ? file.dislikedBy : []);
+    if (typeof file.commentCount === 'number') {
+      setCommentCount(file.commentCount);
+    }
+  }, [file.likes, file.dislikes, file.likedBy, file.dislikedBy, file.commentCount]);
+
+  // Real-time comments count listener for this file
+  useEffect(() => {
+    if (!file?.id) return;
+    const commentsRef = collection(db, 'files', file.id, 'comments');
+    const unsub = onSnapshot(commentsRef, (snap) => {
+      setCommentCount(snap.size);
+    }, (err) => {
+      console.warn("Failed to listen to comment count:", err);
+    });
+    return () => unsub();
+  }, [file.id]);
+
+  const likesCount = optimisticLikes;
+  const dislikesCount = optimisticDislikes;
   // 20+ dislikes auto-rejects ONLY if fewer than 3 likes (if 20 likes and 30 dislikes, no issue)
   const isAutoRejected = (file.needsReplacement === true) || (dislikesCount >= 20 && likesCount < 3);
-  const userHasLiked = user ? (file.likedBy || []).includes(user.uid) : false;
-  const userHasDisliked = user ? (file.dislikedBy || []).includes(user.uid) : false;
+  const userHasLiked = user ? optimisticLikedBy.includes(user.uid) : false;
+  const userHasDisliked = user ? optimisticDislikedBy.includes(user.uid) : false;
 
   const handleReaction = async (type: 'like' | 'dislike') => {
     if (!user) {
       alert(t("Please sign in to rate study materials."));
       return;
     }
-    try {
-      const fileRef = doc(db, 'files', file.id);
-      const currentLikedBy = file.likedBy || [];
-      const currentDislikedBy = file.dislikedBy || [];
-      const hasLiked = currentLikedBy.includes(user.uid);
-      const hasDisliked = currentDislikedBy.includes(user.uid);
 
-      let newLikes = file.likes || 0;
-      let newDislikes = file.dislikes || 0;
-      let newLikedBy = [...currentLikedBy];
-      let newDislikedBy = [...currentDislikedBy];
+    const hasLiked = optimisticLikedBy.includes(user.uid);
+    const hasDisliked = optimisticDislikedBy.includes(user.uid);
 
-      if (type === 'like') {
-        if (hasLiked) {
-          newLikes = Math.max(0, newLikes - 1);
-          newLikedBy = newLikedBy.filter(uid => uid !== user.uid);
-        } else {
-          newLikes += 1;
-          newLikedBy.push(user.uid);
-          if (hasDisliked) {
-            newDislikes = Math.max(0, newDislikes - 1);
-            newDislikedBy = newDislikedBy.filter(uid => uid !== user.uid);
-          }
-        }
-      } else if (type === 'dislike') {
+    let newLikes = optimisticLikes;
+    let newDislikes = optimisticDislikes;
+    let newLikedBy = [...optimisticLikedBy];
+    let newDislikedBy = [...optimisticDislikedBy];
+
+    if (type === 'like') {
+      if (hasLiked) {
+        // Double click / click again to RESET like (like Facebook)
+        newLikes = Math.max(0, newLikes - 1);
+        newLikedBy = newLikedBy.filter(uid => uid !== user.uid);
+      } else {
+        newLikes += 1;
+        newLikedBy.push(user.uid);
         if (hasDisliked) {
           newDislikes = Math.max(0, newDislikes - 1);
           newDislikedBy = newDislikedBy.filter(uid => uid !== user.uid);
-        } else {
-          newDislikes += 1;
-          newDislikedBy.push(user.uid);
-          if (hasLiked) {
-            newLikes = Math.max(0, newLikes - 1);
-            newLikedBy = newLikedBy.filter(uid => uid !== user.uid);
-          }
         }
       }
+    } else if (type === 'dislike') {
+      if (hasDisliked) {
+        // Double click / click again to RESET dislike (like Facebook)
+        newDislikes = Math.max(0, newDislikes - 1);
+        newDislikedBy = newDislikedBy.filter(uid => uid !== user.uid);
+      } else {
+        newDislikes += 1;
+        newDislikedBy.push(user.uid);
+        if (hasLiked) {
+          newLikes = Math.max(0, newLikes - 1);
+          newLikedBy = newLikedBy.filter(uid => uid !== user.uid);
+        }
+      }
+    }
 
+    // Apply optimistic state immediately so rapid clicks/double-clicks react instantly
+    setOptimisticLikes(newLikes);
+    setOptimisticDislikes(newDislikes);
+    setOptimisticLikedBy(newLikedBy);
+    setOptimisticDislikedBy(newDislikedBy);
+
+    try {
+      const fileRef = doc(db, 'files', file.id);
       const updates: any = {
         likes: newLikes,
         dislikes: newDislikes,
@@ -116,11 +152,18 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
         updates.needsReplacement = true;
         updates.isApproved = false;
         updates.rejectionReason = "Auto-rejected: 20+ dislikes reached with fewer than 3 likes. File replacement required.";
+      } else if (file.needsReplacement && !(newDislikes >= 20 && newLikes < 3)) {
+        updates.needsReplacement = false;
       }
 
       await updateDoc(fileRef, updates);
     } catch (err) {
       console.error("Failed to update reaction:", err);
+      // Rollback optimistic state on failure
+      setOptimisticLikes(file.likes || 0);
+      setOptimisticDislikes(file.dislikes || 0);
+      setOptimisticLikedBy(Array.isArray(file.likedBy) ? file.likedBy : []);
+      setOptimisticDislikedBy(Array.isArray(file.dislikedBy) ? file.dislikedBy : []);
     }
   };
 
@@ -378,6 +421,13 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
             >
               <MessageSquare className="w-3.5 h-3.5 text-brand-500 shrink-0" />
               <span>{t("Comments")}</span>
+              <span className={`px-1.5 py-0.5 text-[10px] font-extrabold rounded-full ${
+                commentCount > 0 
+                  ? 'bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300' 
+                  : 'bg-gray-200/70 dark:bg-slate-700/60 text-gray-600 dark:text-gray-400'
+              }`}>
+                {commentCount}
+              </span>
             </button>
 
             {/* View Details Toggle */}
@@ -640,7 +690,14 @@ export default function FileCard({ file, user, onDownload, onPreview, onApprove,
       {/* File Comments Modal */}
       {showCommentsModal && (
         <FileCommentsModal
-          file={file}
+          file={{
+            ...file,
+            likes: optimisticLikes,
+            dislikes: optimisticDislikes,
+            likedBy: optimisticLikedBy,
+            dislikedBy: optimisticDislikedBy,
+            commentCount: commentCount
+          }}
           isOpen={showCommentsModal}
           onClose={() => setShowCommentsModal(false)}
           currentUser={user}

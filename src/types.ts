@@ -93,6 +93,7 @@ export interface FileArchive {
   dislikes?: number;
   likedBy?: string[];
   dislikedBy?: string[];
+  commentCount?: number;
   needsReplacement?: boolean;
   rejectionReason?: string;
   createdAt: any; // Firestore Timestamp

@@ -9,7 +9,8 @@ import {
   updateDoc, 
   doc, 
   serverTimestamp, 
-  deleteDoc 
+  deleteDoc,
+  increment 
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { FileArchive, FileComment, UserProfile } from '../types';
@@ -71,6 +72,37 @@ export default function FileCommentsModal({
   const [editingText, setEditingText] = useState('');
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
+  const [currentFile, setCurrentFile] = useState<FileArchive | null>(file);
+
+  // Sync currentFile with file prop
+  useEffect(() => {
+    setCurrentFile(file);
+  }, [file]);
+
+  // Real-time document listener for the file so like/dislike & status updates reflect instantly
+  useEffect(() => {
+    if (!isOpen || !file?.id) return;
+    const fileRef = doc(db, 'files', file.id);
+    const unsub = onSnapshot(fileRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setCurrentFile(prev => prev ? ({
+          ...prev,
+          likes: data.likes || 0,
+          dislikes: data.dislikes || 0,
+          likedBy: Array.isArray(data.likedBy) ? data.likedBy : [],
+          dislikedBy: Array.isArray(data.dislikedBy) ? data.dislikedBy : [],
+          commentCount: typeof data.commentCount === 'number' ? data.commentCount : prev.commentCount,
+          needsReplacement: data.needsReplacement || false,
+          rejectionReason: data.rejectionReason || ''
+        }) : null);
+      }
+    }, (err) => {
+      console.warn("Failed to listen to file doc in modal:", err);
+    });
+    return () => unsub();
+  }, [isOpen, file?.id]);
+
   // Real-time comments listener for the current file
   useEffect(() => {
     if (!isOpen || !file?.id) {
@@ -98,19 +130,100 @@ export default function FileCommentsModal({
     return () => unsubscribe();
   }, [isOpen, file?.id]);
 
-  if (!isOpen || !file) return null;
+  if (!isOpen || !file || !currentFile) return null;
 
-  const likesCount = file.likes || 0;
-  const dislikesCount = file.dislikes || 0;
-  const userHasLiked = currentUser ? (file.likedBy || []).includes(currentUser.uid) : false;
-  const userHasDisliked = currentUser ? (file.dislikedBy || []).includes(currentUser.uid) : false;
+  const likesCount = currentFile.likes || 0;
+  const dislikesCount = currentFile.dislikes || 0;
+  const userHasLiked = currentUser ? (currentFile.likedBy || []).includes(currentUser.uid) : false;
+  const userHasDisliked = currentUser ? (currentFile.dislikedBy || []).includes(currentUser.uid) : false;
 
   // Auto-rejection condition: 20+ dislikes AND under 3 likes
-  const isAutoRejected = dislikesCount >= 20 && likesCount < 3;
-  const isFileOwner = currentUser?.uid === file.uploadedBy;
+  const isAutoRejected = (currentFile.needsReplacement === true) || (dislikesCount >= 20 && likesCount < 3);
+  const isFileOwner = currentUser?.uid === currentFile.uploadedBy;
   const isMasterOrAdmin = currentUser?.role === 'master_admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
   const canComment = !!currentUser && (currentUser.role === 'teacher' || isMasterOrAdmin);
   const canOwnerReply = isFileOwner || isMasterOrAdmin;
+
+  // Reaction handler with double-click / toggle reset (Facebook-style)
+  const handleModalReaction = async (type: 'like' | 'dislike') => {
+    if (onReactionToggle) {
+      await onReactionToggle(currentFile.id, type);
+      return;
+    }
+    if (!currentUser) {
+      alert(t("Please sign in to rate study materials."));
+      return;
+    }
+
+    const currentLikedBy = currentFile.likedBy || [];
+    const currentDislikedBy = currentFile.dislikedBy || [];
+    const hasLiked = currentLikedBy.includes(currentUser.uid);
+    const hasDisliked = currentDislikedBy.includes(currentUser.uid);
+
+    let newLikes = currentFile.likes || 0;
+    let newDislikes = currentFile.dislikes || 0;
+    let newLikedBy = [...currentLikedBy];
+    let newDislikedBy = [...currentDislikedBy];
+
+    if (type === 'like') {
+      if (hasLiked) {
+        // Double-click / click again to RESET like
+        newLikes = Math.max(0, newLikes - 1);
+        newLikedBy = newLikedBy.filter(uid => uid !== currentUser.uid);
+      } else {
+        newLikes += 1;
+        newLikedBy.push(currentUser.uid);
+        if (hasDisliked) {
+          newDislikes = Math.max(0, newDislikes - 1);
+          newDislikedBy = newDislikedBy.filter(uid => uid !== currentUser.uid);
+        }
+      }
+    } else if (type === 'dislike') {
+      if (hasDisliked) {
+        // Double-click / click again to RESET dislike
+        newDislikes = Math.max(0, newDislikes - 1);
+        newDislikedBy = newDislikedBy.filter(uid => uid !== currentUser.uid);
+      } else {
+        newDislikes += 1;
+        newDislikedBy.push(currentUser.uid);
+        if (hasLiked) {
+          newLikes = Math.max(0, newLikes - 1);
+          newLikedBy = newLikedBy.filter(uid => uid !== currentUser.uid);
+        }
+      }
+    }
+
+    // Apply optimistic updates immediately
+    setCurrentFile(prev => prev ? ({
+      ...prev,
+      likes: newLikes,
+      dislikes: newDislikes,
+      likedBy: newLikedBy,
+      dislikedBy: newDislikedBy
+    }) : null);
+
+    try {
+      const fileRef = doc(db, 'files', currentFile.id);
+      const updates: any = {
+        likes: newLikes,
+        dislikes: newDislikes,
+        likedBy: newLikedBy,
+        dislikedBy: newDislikedBy
+      };
+
+      if (newDislikes >= 20 && newLikes < 3) {
+        updates.needsReplacement = true;
+        updates.isApproved = false;
+        updates.rejectionReason = "Auto-rejected: 20+ dislikes reached with fewer than 3 likes. File replacement required.";
+      } else if (currentFile.needsReplacement && !(newDislikes >= 20 && newLikes < 3)) {
+        updates.needsReplacement = false;
+      }
+
+      await updateDoc(fileRef, updates);
+    } catch (err) {
+      console.error("Failed to update reaction:", err);
+    }
+  };
 
   // Check if current user already has a comment on this file
   const existingUserComment = currentUser ? comments.find(c => c.authorId === currentUser.uid) : null;
@@ -175,6 +288,15 @@ export default function FileCommentsModal({
           replies: []
         });
 
+        // Update comment count on file document
+        try {
+          await updateDoc(doc(db, 'files', file.id), {
+            commentCount: increment(1)
+          });
+        } catch (cntErr) {
+          console.warn("Failed to increment commentCount on file doc:", cntErr);
+        }
+
         setActionMessage(t("Comment posted successfully!"));
       }
 
@@ -226,6 +348,13 @@ export default function FileCommentsModal({
     if (!window.confirm(t("Are you sure you want to delete this comment?"))) return;
     try {
       await deleteDoc(doc(db, 'files', file.id, 'comments', commentId));
+      try {
+        await updateDoc(doc(db, 'files', file.id), {
+          commentCount: increment(-1)
+        });
+      } catch (cntErr) {
+        console.warn("Failed to decrement commentCount on file doc:", cntErr);
+      }
     } catch (err) {
       console.error("Failed to delete comment:", err);
     }
@@ -387,14 +516,14 @@ export default function FileCommentsModal({
               </span>
               <button
                 type="button"
-                onClick={() => onReactionToggle && onReactionToggle(file.id, 'like')}
+                onClick={() => handleModalReaction('like')}
                 className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer select-none active:scale-95 ${
                   userHasLiked
                     ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 shadow-xs'
                     : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:text-emerald-700'
                 }`}
                 id="comment-modal-like-btn"
-                title={t("Helpful / High Quality Note")}
+                title={userHasLiked ? t("Click again to remove like") : t("Helpful / High Quality Note")}
               >
                 <ThumbsUp className="w-3.5 h-3.5" />
                 <span>{likesCount}</span>
@@ -402,14 +531,14 @@ export default function FileCommentsModal({
 
               <button
                 type="button"
-                onClick={() => onReactionToggle && onReactionToggle(file.id, 'dislike')}
+                onClick={() => handleModalReaction('dislike')}
                 className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer select-none active:scale-95 ${
                   userHasDisliked
                     ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 dark:border-rose-800 shadow-xs'
                     : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-700'
                 }`}
                 id="comment-modal-dislike-btn"
-                title={t("Needs Improvement / Outdated")}
+                title={userHasDisliked ? t("Click again to remove dislike") : t("Needs Improvement / Outdated")}
               >
                 <ThumbsDown className="w-3.5 h-3.5" />
                 <span>{dislikesCount}</span>

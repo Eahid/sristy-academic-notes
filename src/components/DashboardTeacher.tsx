@@ -1292,7 +1292,12 @@ export default function DashboardTeacher({
                                   {['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes((file.fileType || '').toLowerCase()) && (
                                     <button onClick={() => onPreview ? onPreview(file) : onDownload(file)} className="p-1.5 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-750 text-gray-600 dark:text-gray-300 rounded border border-gray-150 dark:border-slate-700 cursor-pointer" title={t("Preview")}><Eye className="w-3.5 h-3.5 text-brand-500" /></button>
                                   )}
-                                  <button onClick={() => setActiveCommentFile(file)} className="p-1.5 bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded border border-blue-100 dark:border-blue-900/30 cursor-pointer" title={t("Comments")}><MessageSquare className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => setActiveCommentFile(file)} className="flex items-center gap-1 p-1.5 bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded border border-blue-100 dark:border-blue-900/30 cursor-pointer" title={t("Comments")}>
+                                    <MessageSquare className="w-3.5 h-3.5" />
+                                    {(file.commentCount || 0) > 0 && (
+                                      <span className="text-[10px] font-extrabold">{file.commentCount}</span>
+                                    )}
+                                  </button>
                                   <button onClick={() => onDownload(file)} className="p-1.5 bg-emerald-50 dark:bg-emerald-955/20 hover:bg-emerald-100/50 dark:hover:bg-emerald-955/40 text-emerald-600 dark:text-[#22c55e] rounded border border-emerald-100 dark:border-emerald-900/40 cursor-pointer" title={t("Download")}><Download className="w-3.5 h-3.5" /></button>
                                   {file.uploadedBy === user.uid && (
                                     <>

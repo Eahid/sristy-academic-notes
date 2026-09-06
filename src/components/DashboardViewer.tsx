@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { FileArchive, UserProfile } from '../types';
 import { useBranchSubject } from './BranchSubjectContext';
-import { Search, SlidersHorizontal, BookOpen, School, FileCheck, CheckCircle2, ChevronDown, List, Grid, FileText, FileImage, Download, Eye, ArrowUpDown, User } from 'lucide-react';
+import { Search, SlidersHorizontal, BookOpen, School, FileCheck, CheckCircle2, ChevronDown, List, Grid, FileText, FileImage, Download, Eye, ArrowUpDown, User, MessageSquare } from 'lucide-react';
 import FileCard from './FileCard';
 import BatchDownloadBar from './BatchDownloadBar';
+import FileCommentsModal from './FileCommentsModal';
 import { useThemeLanguage } from './ThemeLanguageContext';
 import { CLASS_LEVELS } from '../constants';
 import { isSubjectMatching, isClassMatching } from '../utils';
@@ -19,6 +20,7 @@ interface DashboardViewerProps {
 export default function DashboardViewer({ user, files, onDownload, onPreview, onViewTeacherDetails }: DashboardViewerProps) {
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [activeCommentFile, setActiveCommentFile] = useState<FileArchive | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
@@ -498,6 +500,16 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
                             </button>
                           )}
                           <button
+                            onClick={() => setActiveCommentFile(file)}
+                            className="flex items-center gap-1 p-1.5 bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded border border-blue-100 dark:border-blue-900/30 cursor-pointer"
+                            title={t("Comments")}
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            {(file.commentCount || 0) > 0 && (
+                              <span className="text-[10px] font-extrabold">{file.commentCount}</span>
+                            )}
+                          </button>
+                          <button
                             onClick={() => onDownload(file)}
                             className="p-1.5 bg-emerald-50 dark:bg-emerald-955/20 hover:bg-emerald-100/50 dark:hover:bg-emerald-955/40 text-emerald-600 dark:text-[#22c55e] rounded border border-emerald-100 dark:border-emerald-900/40 cursor-pointer"
                             title={t("Download")}
@@ -516,6 +528,17 @@ export default function DashboardViewer({ user, files, onDownload, onPreview, on
       </>
     )}
   </div>
+
+  {/* File Comments Modal for List View */}
+  {activeCommentFile && (
+    <FileCommentsModal
+      isOpen={!!activeCommentFile}
+      onClose={() => setActiveCommentFile(null)}
+      file={activeCommentFile}
+      currentUser={user}
+      onViewTeacherDetails={onViewTeacherDetails}
+    />
+  )}
 </div>
   );
 }
